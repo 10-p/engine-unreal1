@@ -1570,7 +1570,16 @@ void FObjectManager::SafeLoadError( DWORD LoadFlags, const char* Error, const ch
 
 	guard(FObjectManager::SafeLoadError);
 	debugf( NAME_Warning, TempStr );
+#ifndef __EMSCRIPTEN__
 	if( LoadFlags & LOAD_Throw     ) appThrowf( "%s", Error   );
+#else
+	// step 2.6f: do NOT re-throw on LOAD_Throw. Exception catching is disabled in the web build and a
+	// throw cannot unwind across Asyncify-transformed frames, so a re-thrown load error escapes every
+	// caller's catch and aborts the WASM module. Each loader already reported/handled locally before
+	// calling us; not re-throwing lets the load resolve to NULL, which callers turn into a graceful
+	// failure. Mirrors engine-ut2004's Emscripten fix.
+	(void)Error;
+#endif
 	if( LoadFlags & LOAD_NoFail    ) appErrorf( "%s", TempStr );
 	if( !(LoadFlags & LOAD_NoWarn) ) GSystem->Warnf ( "%s", TempStr );
 	unguard;
@@ -1607,20 +1616,32 @@ ULinkerLoad* FObjectManager::GetPackageLinker
 		{
 			// Resolve filename from package name.
 			if( !InParent )
+#ifdef __EMSCRIPTEN__
+				return NULL; // step 2.6f: fail soft (catching off — a throw aborts across Asyncify frames)
+#else
 				appThrowf( LocalizeError("PackageResolveFailed") );
+#endif
 			if( !appFindPackageFile( InParent->GetName(), CompatibleGuid, NewFilename ) )
 			{
 				// See about looking in the dll.
 				if( (LoadFlags & LOAD_AllowDll) && InParent->IsA(UPackage::StaticClass) && ((UPackage*)InParent)->DllHandle )
 					return NULL;
+#ifdef __EMSCRIPTEN__
+				return NULL; // step 2.6f: package not found -> NULL (callers handle it), not a hard abort
+#else
 				appThrowf( LocalizeError("PackageNotFound"), InParent->GetName() );
+#endif
 			}
 		}
 		else
 		{
 			// Verify that file exists.
 			if( !appFindPackageFile( InFilename, CompatibleGuid, NewFilename ) )
+#ifdef __EMSCRIPTEN__
+				return NULL; // step 2.6f: missing map/package file -> NULL (graceful), not a hard abort
+#else
 				appThrowf( LocalizeError("FileNotFound"), InFilename );
+#endif
 
 			// Resolve package name from filename.
 			char Tmp[256], *T=Tmp;
@@ -1782,8 +1803,20 @@ UObject* FObjectManager::LoadObject( UClass* ObjectClass, UObject* InParent, con
 			Result = Linker->Create( ObjectClass, InName, LoadFlags, 0 );
 		if( !Result )
 			Result = FindObject( ObjectClass, InParent, InName );
+#ifdef __EMSCRIPTEN__
+		if( !Result )
+		{
+			// step 2.6f: don't throw — catching is disabled and a throw can't unwind across Asyncify
+			// frames, so it would escape the catch below and abort the module. Return NULL, which is
+			// exactly what the native local-catch path yields here; callers already handle a NULL load
+			// (e.g. an absent/None skin texture on a bot mesh). Mirrors engine-ut2004.
+			EndLoad();
+			return NULL;
+		}
+#else
 		if( !Result )
 			appThrowf( LocalizeError("ObjectNotFound"), ObjectClass->GetName(), InParent ? InParent->GetPathName() : "None", InName );
+#endif
 		EndLoad();
 	}
 	catch( char* Error )

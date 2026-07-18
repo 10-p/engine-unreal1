@@ -18,9 +18,17 @@
 #define GIsMMX false
 #endif
 
-// Maximum supported sizes. 
-#define MaximumYScreenSize  1200   
-#define MaximumXScreenSize  2048
+// Maximum supported sizes.
+// ufront 2.12: was 1200 x 2048. The software rasterizer's per-scanline arrays (DrawPoly Setup/MMXSetup/
+// SpanIndex, DrawTile SpanIndex) are indexed by Viewport->SizeY, and DrawTile had NO guard, so at SizeY>1200
+// (1440p/4K — reachable since the 2.12 dynamic-resolution work) it overran the span table into a self-
+// referential FSpan -> the tile blitter's for(Span;Span;Span=Span->Next) walk hung the main thread (the web
+// tab-freeze; music stopped, WebAudio ambient kept looping). Raised to cover 4K in any orientation; DrawTile
+// now also clamps its fill to this. (fgsfdsfgs/UE1 dropped UT99's SoftDrv::SetRes SizeY clamp; this restores
+// a safe ceiling.) Above the ceiling the software path fail-soft skips (no hang). X bump also fixes the
+// DrawSurf Photon "crashes above 1600" note.
+#define MaximumYScreenSize  4096
+#define MaximumXScreenSize  4096
 
 
 // Coarse fast square root approximation
@@ -41,11 +49,13 @@ void SetupFastSqrt();
 inline unsigned int _rotl( unsigned int a, int s )
 {
 	s &= 31;
+	if( s == 0 ) return a;
 	return (a << s) | (a >> (32 - s));
 }
 inline unsigned int _rotr( unsigned int a, int s )
 {
 	s &= 31;
+	if( s == 0 ) return a;
 	return (a >> s) | (a << (32 - s));
 }
 #endif

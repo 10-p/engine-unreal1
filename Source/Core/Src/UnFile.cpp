@@ -1067,6 +1067,14 @@ CORE_API void VARARGS appThrowf( const char* Fmt, ... )
 {
 	static char TempStr[4096];
 	GET_VARARGS(TempStr,Fmt);
+#ifdef __EMSCRIPTEN__
+	// step 2.6f: exception CATCHING is disabled in the web build (-fexceptions overflows V8's stack on
+	// UnrealI.u's deep loader; -fwasm-exceptions is incompatible with ASYNCIFY). So every appThrowf — even
+	// ones UE1's guard/unguard would normally catch + recover from — propagates uncaught and aborts. Log the
+	// message first (Module.print -> console) so a web abort is diagnosable instead of a bare "Aborted()".
+	fprintf( stdout, "[appThrowf] %s\n", TempStr );
+	fflush( stdout );
+#endif
 	throw( TempStr );
 }
 

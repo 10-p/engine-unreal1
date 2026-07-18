@@ -1,11 +1,23 @@
 #include <stdlib.h>
 
-#define AL_ALEXT_PROTOTYPES
+// ufront (web audio, step 2.12): Emscripten's built-in OpenAL implements only the OpenAL 1.1 core over
+// Web Audio — no EFX (reverb), no ALC_SOFT_HRTF, no AL_METERS_PER_UNIT — and its libc has no <AL/alext.h>/
+// <AL/efx.h>. The web build is also single-threaded (no -pthread). So under Emscripten (NOPENAL_WEB) we
+// compile out the EFX/HRTF paths and pump the libxmp music decoder from Update() (the per-frame audio tick)
+// instead of a background thread. Native (openal-soft) keeps the full feature set + music thread unchanged.
+// The same pattern is intended to be reused for UT99's web audio driver.
+#ifdef __EMSCRIPTEN__
+#define NOPENAL_WEB 1
+#endif
+
 #include "AL/al.h"
 #include "AL/alc.h"
+#ifndef NOPENAL_WEB
+#define AL_ALEXT_PROTOTYPES
 #include "AL/alext.h"
 #include "AL/efx.h"
 #include "AL/efx-presets.h"
+#endif
 #include "xmp.h"
 
 #include "NOpenALDrvPrivate.h"
@@ -80,7 +92,9 @@ UBOOL UNOpenALAudioSubsystem::Init()
 
 	const ALint AttrList[] = {
 		ALC_FREQUENCY, OutputRate,
+#ifndef NOPENAL_WEB
 		ALC_SOFT_HRTF, UseHRTF,
+#endif
 		0
 	};
 
@@ -97,7 +111,9 @@ UBOOL UNOpenALAudioSubsystem::Init()
 
 	alDistanceModel( AL_LINEAR_DISTANCE_CLAMPED );
 	alDopplerFactor( Max( 0.f, DopplerFactor ) );
+#ifndef NOPENAL_WEB
 	alListenerf( AL_METERS_PER_UNIT, DISTANCE_SCALE );
+#endif
 	alListenerf( AL_GAIN, MasterVolume / 255.f );
 
 	alGenSources( MAX_SOURCES, Sources );
@@ -116,6 +132,7 @@ UBOOL UNOpenALAudioSubsystem::Init()
 	}
 	NumFreeMusicBuffers = NUM_MUSIC_BUFFERS;
 
+#ifndef NOPENAL_WEB
 	if( UseReverb )
 	{
 		alGenEffects( 1, &ReverbEffect );
@@ -124,6 +141,7 @@ UBOOL UNOpenALAudioSubsystem::Init()
 		alAuxiliaryEffectSloti( ReverbSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL );
 		ReverbOn = false;
 	}
+#endif
 
 	for( INT i = 0; i < MAX_SOURCES; ++i )
 		Voices[i].Buffer = INVALID_BUFFER;
@@ -159,11 +177,13 @@ void UNOpenALAudioSubsystem::Destroy()
 		MusicCtx = NULL;
 	}
 
+#ifndef NOPENAL_WEB
 	if (UseReverb)
 	{
 		alDeleteAuxiliaryEffectSlots(1, &ReverbSlot);
 		alDeleteEffects(1, &ReverbEffect);
 	}
+#endif
 
 	if( Ctx )
 	{
@@ -207,11 +227,13 @@ void UNOpenALAudioSubsystem::ShutdownAfterError()
 		MusicCtx = NULL;
 		Music = NULL;
 	}
+#ifndef NOPENAL_WEB
 	if (UseReverb)
 	{
 		alDeleteAuxiliaryEffectSlots(1, &ReverbSlot);
 		alDeleteEffects(1, &ReverbEffect);
 	}
+#endif
 	if( Ctx )
 	{
 		alcMakeContextCurrent( NULL );
@@ -469,8 +491,10 @@ void UNOpenALAudioSubsystem::UpdateVoice( INT Num, const ENVoiceOp Op )
 		}
 	}
 
+#ifndef NOPENAL_WEB
 	if( UseReverb && Op == NVOP_Play )
 		alSource3i( Source, AL_AUXILIARY_SEND_FILTER, (ALint)ReverbSlot, 0, AL_FILTER_NULL );
+#endif
 
 	// Play or stop if needed.
 	switch( Op )
@@ -631,6 +655,12 @@ void UNOpenALAudioSubsystem::Update( FPointRegion Region, FCoords& Listener )
 {
 	guard(UNOpenALAudioSubsystem::Update)
 
+#ifdef NOPENAL_WEB
+	// Single-threaded web build: pump the music stream here (replaces the native MusicThreadProc). Done
+	// before the realtime early-return so menu/title music keeps streaming when there's no live viewport.
+	UpdateMusicBuffers();
+#endif
+
 	if( !Viewport || !Viewport->IsRealtime() )
 		return;
 
@@ -659,8 +689,10 @@ void UNOpenALAudioSubsystem::Update( FPointRegion Region, FCoords& Listener )
 	alListenerfv( AL_ORIENTATION, ALOrientation );
 	ListenerCoords = Listener;
 
+#ifndef NOPENAL_WEB
 	if( UseReverb )
 		UpdateReverb( Region );
+#endif
 
 	// Start new ambient sounds if needed.
 	if( Viewport->Actor && Viewport->Actor->XLevel )
@@ -894,6 +926,7 @@ void UNOpenALAudioSubsystem::ClearMusicBuffers()
 void UNOpenALAudioSubsystem::UpdateReverb( FPointRegion& Region )
 {
 	guard(UNOpenALAudioSubsystem::UpdateReverb)
+#ifndef NOPENAL_WEB
 
 	const UBOOL bNewReverb = ( Viewport->Actor && Viewport->Actor->Region.Zone && Viewport->Actor->Region.Zone->bReverbZone );
 
@@ -923,6 +956,7 @@ void UNOpenALAudioSubsystem::UpdateReverb( FPointRegion& Region )
 			alAuxiliaryEffectSloti( ReverbSlot, AL_EFFECTSLOT_EFFECT, ReverbEffect );
 		}
 	}
+#endif
 
 	unguard;
 }
@@ -930,6 +964,7 @@ void UNOpenALAudioSubsystem::UpdateReverb( FPointRegion& Region )
 void UNOpenALAudioSubsystem::InitReverbEffect()
 {
 	guard(UNOpenALAudioSubsystem::InitReverbEffect)
+#ifndef NOPENAL_WEB
 
 	EFXEAXREVERBPROPERTIES Reverb = EFX_REVERB_PRESET_GENERIC;
 	alEffecti( ReverbEffect, AL_EFFECT_TYPE, AL_EFFECT_EAXREVERB );
@@ -956,6 +991,7 @@ void UNOpenALAudioSubsystem::InitReverbEffect()
 	alEffectf( ReverbEffect, AL_EAXREVERB_LFREFERENCE, Reverb.flLFReference );
 	alEffectf( ReverbEffect, AL_EAXREVERB_ROOM_ROLLOFF_FACTOR, Reverb.flRoomRolloffFactor );
 	alEffecti( ReverbEffect, AL_EAXREVERB_DECAY_HFLIMIT, Reverb.iDecayHFLimit );
+#endif
 
 	unguard;
 }
@@ -994,11 +1030,18 @@ void UNOpenALAudioSubsystem::StartMusicThread()
 {
 	guard(UNOpenALAudioSubsystem::StartMusicThread)
 
+#ifdef NOPENAL_WEB
+	// Single-threaded web build: no background decoder thread — music is pumped from Update() via
+	// UpdateMusicBuffers() each frame instead. StopMusicThread() then no-ops (MusicThread stays null).
+	MusicThreadRunning = false;
+	MusicThread = nullptr;
+#else
 	// This isn't an atomic because we only set it before the thread starts and before we wait on it to join.
 	MusicThreadRunning = true;
 
 	MusicThread = appThreadSpawn( MusicThreadProc, (void*)this, "MusicThread", true, nullptr );
 	check(MusicThread);
+#endif
 
 	unguard;
 }

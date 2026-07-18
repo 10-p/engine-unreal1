@@ -20,6 +20,10 @@ typedef struct linger LINGER;
 typedef struct sockaddr* LPSOCKADDR;
 typedef struct hostent* LPHOSTENT;
 typedef char* LPSTR;
+#ifdef __EMSCRIPTEN__
+// ufront 2.6a (web port): musl/Emscripten doesn't expose the BSD `u_long` alias by default.
+typedef unsigned long u_long;
+#endif
 #endif
 
 #ifdef PLATFORM_WIN32

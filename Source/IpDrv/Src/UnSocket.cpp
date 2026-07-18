@@ -161,7 +161,9 @@ const char* SocketError( INT Code )
 		case EDQUOT:				return "EDQUOT";
 		case ESTALE:				return "ESTALE";
 		case EREMOTE:				return "EREMOTE";
-#ifndef PLATFORM_PSVITA
+// ufront 2.6a (web port): under musl/Emscripten the netdb h_errno codes (HOST_NOT_FOUND=1, TRY_AGAIN=2,
+// NO_RECOVERY=3) collide with errno values already cased above -> duplicate-case error. Exclude them like PSVita.
+#if !defined(PLATFORM_PSVITA) && !defined(__EMSCRIPTEN__)
 		case HOST_NOT_FOUND:		return "HOST_NOT_FOUND";
 		case TRY_AGAIN:				return "TRY_AGAIN";
 		case NO_RECOVERY:			return "NO_RECOVERY";

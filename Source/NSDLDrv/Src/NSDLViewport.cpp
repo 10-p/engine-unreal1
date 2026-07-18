@@ -316,7 +316,11 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		}
 		else
 		{
-			Flags = SDL_WINDOW_HIDDEN;
+			// ufront 2.12 (dynamic resolution): resizable so the OS window / browser canvas can be
+			// resized and the viewport follows. The WINDOWEVENT_RESIZED handler in TickInput() syncs the
+			// engine viewport + framebuffer; on the web SDL2's Emscripten backend maps the window to the
+			// CSS 100vw/100vh canvas and emits those events automatically. Mirrors engine-ut2004 SDL2Drv.
+			Flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
 		}
 		if( DoOpenGL )
 		{
@@ -427,6 +431,26 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		{
 			DisplaySize.w = DisplayMode.w;
 			DisplaySize.h = DisplayMode.h;
+		}
+
+		// ufront 2.12 (dynamic resolution): adopt the real drawable size instead of the ini size. On the
+		// web SDL2's Emscripten backend maps the window to the CSS-sized (100vw/100vh) canvas, so this is
+		// the browser viewport; natively it is the created size. Match the drawing buffer (canvas
+		// width/height) + software framebuffer to it; WINDOWEVENT_RESIZED (TickInput) keeps it in sync.
+		int RealW = 0, RealH = 0;
+		SDL_GetWindowSize( hWnd, &RealW, &RealH );
+		if( RealW > 0 && RealH > 0 && ( Align( RealW, 4 ) != NewX || RealH != NewY ) )
+		{
+			NewX = Align( RealW, 4 );
+			NewY = RealH;
+			SDL_SetWindowSize( hWnd, NewX, NewY );
+			if( SDLRen && SDLTex )
+			{
+				SDL_DestroyTexture( SDLTex );
+				SDLTex = SDL_CreateTexture( SDLRen, SDLTexFormat, SDL_TEXTUREACCESS_STREAMING, NewX, NewY );
+				if( !SDLTex )
+					appErrorf( "Could not create framebuffer texture: %s", SDL_GetError() );
+			}
 		}
 	}
 
@@ -708,9 +732,17 @@ void UNSDLViewport::SetMouseCapture( UBOOL Capture, UBOOL Clip, UBOOL OnlyFocus 
 	guard(UNSDLViewport::SetMouseCapture);
 
 	// If only focus, reject.
+#ifndef __EMSCRIPTEN__
 	if( OnlyFocus )
 		if( hWnd != SDL_GetMouseFocus() )
 			return;
+#else
+	// ufront 2.12 (web mouse): skip the focus gate on the web. The canvas fills the window and SDL2's
+	// Emscripten port defers the pointer lock to the next click anyway, so gating the menu->game capture
+	// transition on SDL_GetMouseFocus() (which can be stale on the transition frame) would drop the lock
+	// intent. UT2004's SetMouseCapture is likewise focus-agnostic.
+	(void)OnlyFocus;
+#endif
 
 	// If capturing, windows requires clipping in order to keep focus.
 	Clip |= Capture;
@@ -846,6 +878,22 @@ UBOOL UNSDLViewport::TickInput()
 						if( Ev.motion.xrel ) CauseInputEvent( IK_MouseX, IST_Axis, Ev.motion.xrel );
 						if( Ev.motion.yrel ) CauseInputEvent( IK_MouseY, IST_Axis, -Ev.motion.yrel );
 					}
+				}
+				break;
+			case SDL_WINDOWEVENT:
+				// ufront 2.12 (dynamic resolution): follow OS window / browser canvas resizes. SDL2's
+				// Emscripten backend fires this when the CSS 100vw/100vh canvas changes size (and once
+				// after creation, correcting the initial size); native window managers fire it on user
+				// resize. SetClientSize re-syncs the SDL window + software framebuffer + SizeX/SizeY; the
+				// GL render device re-issues glViewport from Viewport->SizeX/SizeY on the next frame. The
+				// no-op guard makes the SDL_SetWindowSize inside SetClientSize non-recursive. (engine-ut2004
+				// SDL2Drv parity.)
+				if( ( Ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || Ev.window.event == SDL_WINDOWEVENT_RESIZED )
+					&& Ev.window.data1 > 0 && Ev.window.data2 > 0 )
+				{
+					const INT NewX = Align( Ev.window.data1, 4 ), NewY = Ev.window.data2;
+					if( NewX != SizeX || NewY != SizeY )
+						SetClientSize( NewX, NewY, false );
 				}
 				break;
 			default:

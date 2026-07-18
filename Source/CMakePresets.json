@@ -1,0 +1,48 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 15, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "native",
+      "displayName": "Native (SDL2 + GLES2/Software, OpenAL audio) -- the WASM twin",
+      "description": "32-bit native build (needs libsdl2-dev:i386, libopenal-dev:i386). Mirrors the web renderer set + real OpenAL audio (2.12.0 sensible default). Builds in build-native/.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../build-native",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_FLAGS": "-m32 -DASM=0",
+        "CMAKE_CXX_FLAGS": "-m32 -DASM=0",
+        "BUILD_STATIC": "OFF",
+        "BUILD_EDITOR": "OFF",
+        "BUILD_WINDRV": "OFF",
+        "BUILD_NOPENGLDRV": "OFF",
+        "BUILD_NOPENGLESDRV": "ON",
+        "BUILD_SOFTDRV": "ON",
+        "BUILD_NULLSOUNDDRV": "ON",
+        "BUILD_NOPENALDRV": "ON"
+      }
+    },
+    {
+      "name": "wasm",
+      "displayName": "Web (Emscripten/WASM) -- dev",
+      "description": "Emscripten web build (assertions + exceptions + debug). Builds in build-wasm/. Run `source ~/emsdk/emsdk_env.sh` first (sets EMSDK).",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../build-wasm",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo", "UT_WEB_PERF": "OFF" }
+    },
+    {
+      "name": "wasm-perf",
+      "inherits": "wasm",
+      "displayName": "Web (Emscripten/WASM) -- max performance",
+      "description": "Emscripten web build (-O3, no debug/assertions -> smaller/faster). Builds in build-wasm-perf/.",
+      "binaryDir": "${sourceDir}/../build-wasm-perf",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "UT_WEB_PERF": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "native", "configurePreset": "native" },
+    { "name": "wasm", "configurePreset": "wasm" },
+    { "name": "wasm-perf", "configurePreset": "wasm-perf" }
+  ]
+}

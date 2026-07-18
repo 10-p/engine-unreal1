@@ -18,12 +18,46 @@ endif()
 option(USE_SDL "Use NSDLDrv instead of WinDrv" ON)
 option(BUILD_EDITOR "Build Editor (GUI support requires Windows)" ON)
 option(BUILD_SOFTDRV "Build SoftDrv (x86/MSVC only)" OFF)
+option(BUILD_NULLDRV "Build NullDrv (GPU-free no-op render device; -NULLRENDERER). No GL context -> headless / dedicated-server run." OFF)
 option(BUILD_NOPENGLDRV "Build NOpenGLDrv" OFF)
 option(BUILD_NOPENGLESDRV "Build NOpenGLESDrv" ON)
 option(BUILD_NULLSOUNDDRV "Build SoundDrv (Null driver)" ON)
 option(BUILD_NOPENALDRV "Build NOpenALDrv" ON)
 option(BUILD_WINDRV "Build WinDrv" OFF)
 option(BUILD_STATIC "Link everything into a single binary" OFF)
+
+# ufront step 2.6a — Emscripten / WebAssembly build (the web port). Emscripten can't load UE1's
+# .so/.dll packages, has no x86 inline asm, and gets SDL2/GLES2 from its own ports. Force the web-safe
+# configuration here so `emcmake cmake` (or the wasm/wasm-perf presets) needs no extra -D flags.
+if(EMSCRIPTEN)
+  set(BUILD_STATIC ON)            # single binary via UNREAL_STATIC + --whole-archive (like PSVita)
+  set(USE_SDL ON)                 # NSDLDrv (SDL2 window/GL context -> WebGL)
+  set(BUILD_EDITOR ON)            # step 2.6f: the stripped (NullEdHook, no-GUI) Editor package — links only
+                                  # Engine+Core. UE1 loads some game content (bot/character meshes+skins,
+                                  # e.g. Male3Skins) through classes that live in the Editor package; without
+                                  # it, spawning DM bots aborts on package load. This is the known UE1-funkey
+                                  # "Included the Editor package. Without it Dug can't load." fix (owner-confirmed).
+  set(BUILD_WINDRV OFF)
+  set(BUILD_NOPENGLDRV OFF)       # desktop GL — not used on the web
+  set(BUILD_NOPENGLESDRV ON)      # GLES2 -> WebGL: the default web renderer (D3)
+  set(BUILD_SOFTDRV ON)           # software renderer (portable non-x86 C path) (D3)
+  set(BUILD_NULLDRV ON)           # null render device (GPU-free, no GL context) — -NULLRENDERER
+  set(BUILD_NULLSOUNDDRV ON)      # keep the null AudioDevice as a selectable fallback
+  set(BUILD_NOPENALDRV ON)        # ufront 2.12 (web audio): Emscripten's built-in OpenAL (SFX) + a
+                                  # FetchContent'd libxmp (tracker music) — see NOpenALDrv/CMakeLists.txt
+                                  # and NOpenALDrv.cpp NOPENAL_WEB. Reused for UT99's web audio port.
+  add_definitions(-DASM=0)        # Core/SoftDrv use their portable (non-x86) code paths
+  # clang (Emscripten) makes passing a non-POD FString through variadic debugf/appErrorf a hard error;
+  # GCC/MSVC tolerate it. Downgrade to a warning (these are mostly script-export/debug paths).
+  add_compile_options(-Wno-error=non-pod-varargs -Wno-non-pod-varargs)
+  # Exceptions: rely on Emscripten's default (exception CATCHING disabled). UE1 guards functions with
+  # try/catch (DO_GUARD) and its error handler catches, but -fexceptions is unusable here — its JS invoke_
+  # trampolines nest through the deeply-recursive package/object loader (UnrealI.u ~37 MB) until V8's
+  # call-stack limit ("Maximum call stack size exceeded"), and -fwasm-exceptions is incompatible with
+  # ASYNCIFY (which we need for the main-loop yield). With catching disabled there are no invoke_
+  # trampolines: normal boot never throws, so it proceeds; error paths (appError) abort loudly instead of
+  # being caught — acceptable for the web build. (This is why the 2.6a build compiled+ran before -fexceptions.)
+endif()
 
 if(VITA)
   set(BUILD_STATIC ON)
@@ -230,6 +264,12 @@ add_subdirectory(Render)
 add_subdirectory(IpDrv)
 add_subdirectory(Fire)
 
+# ufront step 2.6c — the WebRTC net driver is a WEB-ONLY package (its transport is the glue webrtc_* ABI).
+if(EMSCRIPTEN)
+  add_subdirectory(WebRTCDrv)
+  list(APPEND INSTALL_TARGETS WebRTCDrv)
+endif()
+
 if(USE_SDL)
   # SDL2
   add_subdirectory(NSDLDrv)
@@ -251,6 +291,13 @@ endif()
 if(BUILD_SOFTDRV)
   add_subdirectory(SoftDrv)
   list(APPEND INSTALL_TARGETS SoftDrv)
+endif()
+
+# ufront (null render device): NullDrv (no-op URenderDevice) — GPU-free, no GL context. Selected via
+# -NULLRENDERER for a headless / "poor-man's dedicated server" run. Additive like SoftDrv.
+if(BUILD_NULLDRV)
+  add_subdirectory(NullDrv)
+  list(APPEND INSTALL_TARGETS NullDrv)
 endif()
 
 if(BUILD_NOPENGLDRV)

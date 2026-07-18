@@ -130,7 +130,18 @@ void UGameEngine::Init()
 
 	// Handle failure.
 	if( !Success )
+#ifdef __EMSCRIPTEN__
+	{
+		// step 2.6f: a bad startup map must not be fatal — appErrorf throws to unwind, which cannot cross
+		// Asyncify frames (uncaught abort). Entry is already loaded; fall back to the menu and let the user
+		// pick a valid map / host from the UI instead of crashing. Mirrors engine-ut2004.
+		debugf( NAME_Warning, "Startup map '%s' failed to load (%s) — falling back to the menu", AutoURL, Error256 );
+		if( !GLevel )
+			GLevel = GEntry;
+	}
+#else
 		appErrorf( LocalizeError("FailedBrowse"), AutoURL, Error256 );
+#endif
 
 	// Open initial Viewport.
 	if( Client )
@@ -179,7 +190,11 @@ void UGameEngine::Destroy()
 void UGameEngine::SetProgress( const char* Str1, const char* Str2, FLOAT Seconds )
 {
 	guard(UGameEngine::SetProgress);
-	if( Client && Client->Viewports.Num() )
+	// 2.12 hardening (parity with engine-ut99): the viewport can exist with a NULL Actor — e.g. after
+	// DissociateViewports tears the pawn down during a failed travel. SetProgress dereferences Actor below, so
+	// without this null-check that becomes a NULL/garbage-heap deref → "memory access out of bounds" abort on
+	// the web build (catching is off; wasm has no unmapped NULL page). Only message a live actor.
+	if( Client && Client->Viewports.Num() && Client->Viewports(0)->Actor )
 	{
 		APlayerPawn* Actor = Client->Viewports(0)->Actor;
 		if( Seconds==-1.0 )
@@ -318,6 +333,19 @@ UBOOL UGameEngine::Browse( FURL URL, char* Error256 )
 	StringURL = *UrlStr;
 	debugf( "Browse: %s", StringURL );
 	unguard;
+
+#ifdef __EMSCRIPTEN__
+	// ufront 2.6c: the web frontend forms a client-connect URL as "<host>?connect" — the host lands in
+	// URL.Map with no URL.Host, which UE1 would treat as a LOCAL map load (IsLocalInternal) and fail. When
+	// the "connect" option is present with no Host, promote the map token to Host so Browse takes the
+	// network path (IsInternal + Host -> UPendingLevel -> WebRTCNetDriver connect). Web-only + guarded on
+	// the connect option, so local map browsing is unaffected.
+	if( URL.HasOption("connect") && URL.Host.Length()<=0 && URL.Map.Length()>0 )
+	{
+		URL.Host = URL.Map;
+		debugf( "[ufront] connect URL: promoted map '%s' to host", *URL.Host );
+	}
+#endif
 	if( !URL.Valid )
 	{
 		// Unknown URL.
@@ -485,7 +513,20 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, char* Err
 				Guid = &Connection->Driver->Map(0).Guid;
 			}
 		}
-		LoadObject<ULevel>( MapParent, "MyLevel", PATH(*URL.Map), LOAD_Verify | LOAD_Throw | LOAD_KeepImports | LOAD_NoWarn, NULL );
+		ULevel* Verified = LoadObject<ULevel>( MapParent, "MyLevel", PATH(*URL.Map), LOAD_Verify | LOAD_Throw | LOAD_KeepImports | LOAD_NoWarn, NULL );
+#ifdef __EMSCRIPTEN__
+		// step 2.6f: SafeLoadError no longer re-throws on Emscripten, so a failed verify arrives as NULL
+		// (not an exception — the catch below is dead). Report + return NULL (caller falls back to the menu)
+		// instead of falling through to LoadLevel where check(!GLevel->NetDriver) would NULL-deref. (ut2004 pattern)
+		if( !Verified )
+		{
+			appStrcpy( Error256, "Could not load map" );
+			SetProgress( "Failed To Load Map", *URL.Map, 6.0 );
+			return NULL;
+		}
+#else
+		(void)Verified;
+#endif
 	}
 	catch( char* Error )
 	{

@@ -28,7 +28,12 @@ target_include_directories(${PROJECT_NAME}
 )
 
 if(USE_SDL)
-  target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY} NSDLDrv)
+  # ufront 2.6a (web): under Emscripten, SDL2 comes from the -sUSE_SDL=2 port (link flags below) and
+  # NSDLDrv is pulled in via the --whole-archive static set — linking it again here double-defines every
+  # NSDLDrv symbol (GNU ld tolerates it; wasm-ld does not).
+  if(NOT EMSCRIPTEN)
+    target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY} NSDLDrv)
+  endif()
   target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIR})
 elseif(TARGET_IS_WINDOWS)
   target_link_libraries(${PROJECT_NAME} Window)
@@ -42,6 +47,71 @@ if(BUILD_STATIC)
   target_link_libraries(${PROJECT_NAME} -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive)
 else()
   target_link_libraries(${PROJECT_NAME} Engine Core)
+endif()
+
+if(EMSCRIPTEN)
+  # ufront step 2.6a/2.6b (web port) — emit a BARE LOADER (SDLLaunch.{js,wasm,data}); no --shell-file. The
+  # monorepo owns the host page and injects the heavy glue (FetchFS/IDB/WebRTC) at runtime; only the thin
+  # webrtc_* shim is baked (vendor/glue/webrtc-shim.js). Renderer = NOpenGLESDrv (GLES2->WebGL) + SoftDrv
+  # (both in the --whole-archive static set). SDL2 comes from the Emscripten port, not system libs.
+  set(UNREAL_ASSETS_DIR "/home/ion/unreal-assets" CACHE PATH
+      "Unreal v200 assets (System/*.ini preloaded into MEMFS; the rest streams via FetchFS)")
+  target_link_options(${PROJECT_NAME} PRIVATE
+    -sASYNCIFY
+    -sASYNCIFY_STACK_SIZE=262144
+    # emscripten_sleep/set_main_loop = main-loop inversion (the live Asyncify use). __syscall_openat is
+    # listed for FetchFS on-demand open (kept ABI-consistent with engine-ut2004; the open is sync-XHR).
+    "-sASYNCIFY_IMPORTS=['emscripten_sleep','emscripten_set_main_loop','__syscall_openat']"
+    -sFULL_ES2=1
+    -sUSE_SDL=2
+    -sALLOW_MEMORY_GROWTH=1
+    -sINITIAL_MEMORY=268435456
+    -sSTACK_SIZE=2097152
+    -sFORCE_FILESYSTEM
+    "-sEXPORTED_RUNTIME_METHODS=['callMain','stringToUTF8','UTF8ToString','HEAPU8','stackSave','stackAlloc','stackRestore']"
+    # The thin webrtc_* shim (step 2.6b): defines the ABI's C-imported symbols, forwarding to the
+    # host-injected Module.UE.net.*. Heavy glue is NOT baked. Unreferenced until the WebRTC net driver
+    # lands (2.6c), so it's dead-stripped now — harmless.
+    "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
+  )
+  if(UT_WEB_PERF)
+    target_link_options(${PROJECT_NAME} PRIVATE -O3 -g0 -sASSERTIONS=0)
+  else()
+    target_link_options(${PROJECT_NAME} PRIVATE -g -sASSERTIONS=1)
+  endif()
+  # Preload the boot INI so appInit has config before FetchFS streams the rest.
+  if(EXISTS "${UNREAL_ASSETS_DIR}/System/Default.ini")
+    set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS
+      " --preload-file ${UNREAL_ASSETS_DIR}/System/Default.ini@/System/Default.ini")
+  endif()
+  # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html. Output into a build-<cfg>/SDLLaunch/ subdir so the
+  # artifact path matches engine-ut2004's convention (engine-<target>/build-wasm-perf/SDLLaunch/), which is
+  # what the monorepo's packages/build derives per target.
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+    OUTPUT_NAME SDLLaunch
+    SUFFIX ".js"
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/SDLLaunch)
+
+  # Emit the artifact descriptor meta.json (docs/05 §4) — packages/build validates it (schema + abiVersion
+  # === glue ABI_VERSION + checksums + loaderStyle) before assembling serve-web. abiVersion is read from the
+  # vendored frozen ABI header (single source); provenance/toolchain are best-effort.
+  file(STRINGS ${CMAKE_SOURCE_DIR}/../vendor/glue/ue_abi.h _ue_abi_line REGEX "define[ \t]+UE_ABI_VERSION")
+  string(REGEX MATCH "([0-9]+)" UE_ABI_VERSION "${_ue_abi_line}")
+  execute_process(COMMAND git -C ${CMAKE_SOURCE_DIR}/.. rev-parse --short HEAD
+    OUTPUT_VARIABLE META_GIT_SHA OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  string(TIMESTAMP META_BUILT_AT "%Y-%m-%dT%H:%M:%SZ" UTC)
+  execute_process(COMMAND emcc --version
+    OUTPUT_VARIABLE _emcc_ver OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" META_EMCC "${_emcc_ver}")
+  find_program(NODE_EXECUTABLE node REQUIRED)
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs
+      --out=$<TARGET_FILE_DIR:${PROJECT_NAME}>
+      --target=unreal1 --abi=${UE_ABI_VERSION}
+      --gitSha=${META_GIT_SHA} --builtAt=${META_BUILT_AT} --emcc=${META_EMCC}
+    COMMENT "Emitting artifact meta.json (docs/05 §4)"
+    VERBATIM
+  )
 endif()
 
 if(VITA)

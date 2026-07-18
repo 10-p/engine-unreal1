@@ -16,6 +16,10 @@
 #error "Unsupported platform."
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>  // ufront 2.12: EM_ASM for the return-to-launcher reload on normal exit (appRequestExit)
+#endif
+
 #ifdef PLATFORM_WIN32
 #include <windows.h>
 #include <commctrl.h>
@@ -200,6 +204,21 @@ CORE_API void appRequestExit()
 	SDL_PushEvent( &Ev );
 #endif
 	GIsRequestingExit=1;
+#ifdef __EMSCRIPTEN__
+	// ufront 2.12 (web): a NORMAL exit (the Exit menu / `exit` console command / RELAUNCH route here; the
+	// crash path uses the error device's exit(1) + GIsCriticalError, NOT appRequestExit) returns the page
+	// to the launcher instead of leaving a dead canvas. Navigate to location.pathname, which strips any
+	// autostart query (?map=…) so the shared frontend shows the launcher (its autostart gate keys off
+	// location.search). Deferred via setTimeout(0) so it fires after the blocking ASYNCIFY main loop
+	// unwinds. Crashes never reach here, so their console/error stays on screen. Mirrors engine-ut2004.
+	EM_ASM({
+		if( typeof window !== 'undefined' )
+		{
+			console.log('[SHELL] Engine exit requested, returning to launcher');
+			setTimeout(function(){ window.location.href = window.location.pathname; }, 0);
+		}
+	});
+#endif
 	unguard;
 }
 
@@ -1056,6 +1075,18 @@ void FGlobalPlatform::WriteBinary( const void* Data, INT Length, EName Event )
 				fwrite( Data, strlen((char*)Data), 1, GLogFile );
 				fwrite( "\n", 1, 1, GLogFile );
 			}
+#ifdef __EMSCRIPTEN__
+			// Web build: mirror every (non-suppressed) log line to stdout so the browser
+			// console receives it (the host's Module.print forwards stdout -> console.log).
+			// UE1 otherwise logs only to the MEMFS Unreal.log; the ufront E2E harness reads
+			// engine milestones from the console, matching engine-ut2004. Same RF_Suppress
+			// filter as the file write above, so console == Unreal.log. The trailing '\n'
+			// flushes Emscripten's line-buffered stdout (one Module.print call per line).
+			fputs( *EventName, stdout );
+			fputs( ": ", stdout );
+			fputs( (const char*)Data, stdout );
+			fputc( '\n', stdout );
+#endif
 			if( GLogHook )
 			{
 				GLogHook->WriteBinary( Data, Length, Event );
@@ -1571,6 +1602,12 @@ CORE_API const char* appBaseDir()
 				break;
 		BaseDir[i] = 0;
 #elif defined(PLATFORM_PSVITA)
+		if ( getcwd( BaseDir, sizeof(BaseDir) ) )
+			appStrncat( BaseDir, "/", sizeof(BaseDir) - 1 );
+#elif defined(__EMSCRIPTEN__)
+		// ufront 2.6b (web port): SDL_GetBasePath() returns "/" under Emscripten, but Unreal runs from its
+		// System/ dir (the host chdir's there before main). Use getcwd so config + the package-search Paths
+		// (../System, ../Maps, ...) resolve from /System, matching a native install.
 		if ( getcwd( BaseDir, sizeof(BaseDir) ) )
 			appStrncat( BaseDir, "/", sizeof(BaseDir) - 1 );
 #elif defined(PLATFORM_SDL)

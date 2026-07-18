@@ -21451,7 +21451,7 @@ void USoftwareRenderDevice::DrawComplexSurface( FSceneNode* Frame, FSurfaceInfo&
 						SetupWalker.PtrFTexSetup->InitTexPentium( EndX-X, Mip, DU, DV );
 
 						if( Surface.LightMap )
-							SetupWalker.PtrFTexSetup->InitLightPentiumDelta( (DUF*LightMip.UScale), (DVF*LightMip.VScale) );
+							SetupWalker.PtrFTexSetup->InitLightPentiumDelta( appRound(DUF*LightMip.UScale), appRound(DVF*LightMip.VScale) );
 
 						SetupWalker.PtrFTexSetup++;
 						*SetupWalker.PtrINT++ = 0;
