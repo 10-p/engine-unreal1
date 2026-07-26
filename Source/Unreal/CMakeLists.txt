@@ -79,11 +79,20 @@ if(EMSCRIPTEN)
   else()
     target_link_options(${PROJECT_NAME} PRIVATE -g -sASSERTIONS=1)
   endif()
-  # Preload the boot INI so appInit has config before FetchFS streams the rest.
-  if(EXISTS "${UNREAL_ASSETS_DIR}/System/Default.ini")
+  # Preload the boot INI so appInit has config before FetchFS streams the rest. It comes from the
+  # TRACKED, WEB-SPECIFIC set in this repo (Engine/Config/web) — NOT the out-of-tree asset dir, whose
+  # inis belong to an untracked game install and silently revert when that image is rebuilt (they also
+  # lack the web-only [WebRTCDrv.WebRTCNetDriver] section). Engine/Config/*.ini (no subdir) stays the
+  # platform-agnostic / native reference set. appInit derives Unreal.ini from this, and that derived
+  # name is excluded from the ufront asset manifest so a stale install copy cannot shadow it.
+  if(EXISTS "${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini")
     set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS
-      " --preload-file ${UNREAL_ASSETS_DIR}/System/Default.ini@/System/Default.ini")
+      " --preload-file ${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini@/System/Default.ini")
   endif()
+  # The preloaded inis are INPUTS to the link: without LINK_DEPENDS, editing the web config leaves a
+  # stale .data baked (cmake sees no source change and skips the relink) — a silent trap.
+  set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
+    "${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini")
   # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html. Output into a build-<cfg>/SDLLaunch/ subdir so the
   # artifact path matches engine-ut2004's convention (engine-<target>/build-wasm-perf/SDLLaunch/), which is
   # what the monorepo's packages/build derives per target.
