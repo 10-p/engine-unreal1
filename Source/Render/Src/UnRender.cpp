@@ -2295,7 +2295,31 @@ void URender::DrawWorld( FSceneNode* Frame )
 		Actor->Weapon->eventInvCalcView();
 		Actor->Weapon->bHidden = 0;
 		Actor->XLevel->SetActorZone( Actor->Weapon, 1, 0 );
+
+		// AutoFOV, viewmodel pass (step 2.16). The weapon shares the world's scene node, so by default it
+		// already rides the corrected FOV — which is exactly what preserves its reference-aspect
+		// proportions, and ufrontWeaponFov returns the world value so this costs nothing. Only when the
+		// player has dialled AutoFOVWeapon away from 1.0 do we redraw it at a different FOV: write the new
+		// value and refresh the frame, which is all the invalidation needed because every driver
+		// dirty-compares Viewport->Actor->FovAngle before rebuilding its projection and re-enters
+		// SetSceneNode at the top of each primitive. Do NOT "invalidate" with SetSceneNode(NULL) — only the
+		// N*Drv family null-checks the frame; XOpenGLDrv and UTGLR dereference it immediately and crash.
+		FLOAT SavedWeaponFov = Frame->Viewport->Actor->FovAngle;
+		FLOAT WeaponFov      = ufrontWeaponFov( GAutoFovFrameBase, SavedWeaponFov );
+		UBOOL bWeaponFovPass = Abs( WeaponFov - SavedWeaponFov ) > 0.01f;
+		if( bWeaponFovPass )
+		{
+			Frame->Viewport->Actor->FovAngle = WeaponFov;
+			Frame->ComputeRenderSize();
+		}
+
 		GRender->DrawActor( Frame, Actor->Weapon );
+
+		if( bWeaponFovPass )
+		{
+			Frame->Viewport->Actor->FovAngle = SavedWeaponFov;
+			Frame->ComputeRenderSize();
+		}
 		Actor->Weapon->bHidden = 1;
 	}
 

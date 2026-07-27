@@ -64,7 +64,6 @@ class DLL_EXPORT UNOpenGLESRenderDevice : public URenderDevice
 	UBOOL Overbright;
 	UBOOL DetailTextures;
 	UBOOL UseVAO;
-	UBOOL AutoFOV;
 	INT SwapInterval;
 
 	// All currently cached textures.

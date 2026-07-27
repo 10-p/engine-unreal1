@@ -897,6 +897,33 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, char* Err
 //
 // Draw a global view.
 //
+//
+// Scoped AutoFOV override (step 2.16). Everything that consumes the FOV during a frame reads it from
+// Viewport->Actor->FovAngle: the engine's own clip planes via FSceneNode::ComputeRenderSize, and EVERY
+// render device independently (they each re-derive their frustum from it — NOpenGLDrv, NOpenGLESDrv,
+// SoftDrv, XOpenGL, UTGLR, PVR). Overriding it for the duration of the draw is therefore the ONLY lever
+// that keeps culling and the drawn projection in agreement across all of them, and it needs no
+// per-driver change at all. It is restored on every exit path, so the value script sees is untouched —
+// which matters: PlayerPawn.uc derives MouseScale from DesiredFOV, so writing the actor's FOV
+// permanently (as the driver-level AutoFOV this replaces did) silently rescales the player's aim.
+//
+struct FScopedAutoFov
+{
+	APlayerPawn* Actor;   // UViewport::Actor (UnPlayer.h) — FovAngle lives on APawn, not AActor
+	FLOAT        Saved;
+	FScopedAutoFov( UViewport* Viewport )
+	:	Actor ( Viewport->Actor )
+	,	Saved ( Viewport->Actor->FovAngle )
+	{
+		GAutoFovFrameBase = Saved;
+		Actor->FovAngle = ufrontEffectiveFov( Saved, Viewport->SizeX, Viewport->SizeY );
+	}
+	~FScopedAutoFov()
+	{
+		Actor->FovAngle = Saved;
+	}
+};
+
 void UGameEngine::Draw( UViewport* Viewport, BYTE* HitData, INT* HitSize )
 {
 	guard(UGameEngine::Draw);
@@ -907,6 +934,10 @@ void UGameEngine::Draw( UViewport* Viewport, BYTE* HitData, INT* HitSize )
 	FRotator     ViewRotation = ViewActor->Rotation;
 	Viewport->Actor->eventPlayerCalcView( ViewActor, ViewLocation, ViewRotation );
 	check(ViewActor);
+
+	// AutoFOV: armed after script has calculated the view (so PlayerCalcView still sees the real FOV) but
+	// before Viewport->Lock, because a render device may latch the FOV during Lock.
+	FScopedAutoFov AutoFovScope( Viewport );
 
 	// See if viewer is inside world.
 	DWORD LockFlags=0;

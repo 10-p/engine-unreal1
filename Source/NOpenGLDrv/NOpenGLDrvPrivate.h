@@ -25,7 +25,6 @@ class DLL_EXPORT UNOpenGLRenderDevice : public URenderDevice
 	UBOOL UseBGRA;
 	UBOOL DetailTextures;
 	UBOOL UseMultiTexture;
-	UBOOL AutoFOV;
 	UBOOL UseWindowBrightness;
 	INT SwapInterval;
 
