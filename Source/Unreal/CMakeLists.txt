@@ -86,6 +86,10 @@ if(EMSCRIPTEN)
     # deferred-connect pair (see WebRTCDrv.cpp); it is a ut2004 thing. Listing an undefined symbol is a
     # hard wasm-ld error: 'symbol exported via --export not found'.
     -sWASMFS
+    # The worker-side bootstrap in wasmfs-shim.js hangs off a __postset, and a postset is only EMITTED if
+    # its $symbol is referenced. Nothing references it (it is pure side effect), so without this it is
+    # dead-stripped SILENTLY — no error, no warning, and the engine dies on its first asset read.
+    "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$ueWorkerBoot']"
     # ufront 2.13.2 — run the engine on a WORKER (threaded-only, decision D2).
     #
     # WHY: synchronous per-file restore-on-read from OPFS (2.13.4, the actual point of stage 2.13) needs
@@ -108,7 +112,9 @@ if(EMSCRIPTEN)
     # NOPENAL_WEB-guarded off), so a small pool avoids paying for workers nothing will use.
     -sPTHREAD_POOL_SIZE=2
     "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_close','_ue_exec_command','_wasmfs_create_jsimpl_backend','_wasmfs_create_file','_ufront_wasmfs_register','_ufront_wasmfs_set_pending']"
-    "-sEXPORTED_RUNTIME_METHODS=['callMain','stringToUTF8','UTF8ToString','HEAPU8','stackSave','stackAlloc','stackRestore','lengthBytesUTF8']"
+    # PThread (2.13.2): the host needs the worker list to hand the FS sync channel to the engine thread.
+    # Runtime methods are NOT on Module unless exported — omitting it makes the host silently no-op.
+    "-sEXPORTED_RUNTIME_METHODS=['callMain','stringToUTF8','UTF8ToString','HEAPU8','stackSave','stackAlloc','stackRestore','lengthBytesUTF8','PThread']"
     # The thin webrtc_* shim (step 2.6b): defines the ABI's C-imported symbols, forwarding to the
     # host-injected Module.UE.net.*. Heavy glue is NOT baked. Unreferenced until the WebRTC net driver
     # lands (2.6c), so it's dead-stripped now — harmless.

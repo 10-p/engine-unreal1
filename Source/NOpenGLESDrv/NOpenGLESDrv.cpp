@@ -5,6 +5,10 @@
 
 #include "NOpenGLESDrvPrivate.h"
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+#include <emscripten/html5_webgl.h>
+#endif
+
 /*-----------------------------------------------------------------------------
 	GLSL shaders.
 -----------------------------------------------------------------------------*/
@@ -87,11 +91,23 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 {
 	guard(UNOpenGLESRenderDevice::Init)
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+	// ufront 2.13.2 hatch (c): the context was created with emscripten_webgl_create_context, NOT through
+	// SDL, so SDL_GL_GetProcAddress has no context to resolve against and hands back nulls — glad then
+	// fails and the device never initializes (RenDev stays NULL and the viewport asserts). Emscripten's
+	// own resolver is context-aware and works on the worker.
+	if( !gladLoadGLES2Loader( (GLADloadproc)&emscripten_webgl_get_proc_address ) )
+	{
+		debugf( NAME_Warning, "Could not load GLES2 via emscripten_webgl_get_proc_address" );
+		return false;
+	}
+#else
 	if( !gladLoadGLES2Loader( &SDL_GL_GetProcAddress ) )
 	{
 		debugf( NAME_Warning, "Could not load GLES2: %s", SDL_GetError() );
 		return false;
 	}
+#endif
 
 	debugf( NAME_Log, "Got OpenGL %s", glGetString( GL_VERSION ) );
 
@@ -1019,7 +1035,13 @@ void UNOpenGLESRenderDevice::UpdateSwapInterval()
 		SwapInterval = -1;
 	}
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+	// Presentation is ours (explicitSwapControl + emscripten_webgl_commit_frame), so SDL's swap interval
+	// is meaningless here and would only log a failure against a context SDL does not own.
+	if( 0 )
+#else
 	if( SDL_GL_SetSwapInterval( SwapInterval ) < 0 )
+#endif
 	{
 		debugf( NAME_Warning, "Failed to set swap interval %d: %s", SwapInterval, SDL_GetError() );
 		if( SwapInterval < 0 )

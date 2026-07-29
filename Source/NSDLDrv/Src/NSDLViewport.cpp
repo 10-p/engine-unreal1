@@ -6,6 +6,7 @@
 
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
 // ufront 2.13.2 — the worker creates and presents its own WebGL context (hatch (c)); see ResizeViewport.
+#include <stdint.h>
 #include <emscripten/html5.h>
 #include <emscripten/html5_webgl.h>
 #endif
@@ -330,7 +331,15 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		}
 		if( DoOpenGL )
 		{
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+			// ufront 2.13.2 hatch (c): do NOT ask SDL for a GL window. SDL_WINDOW_OPENGL makes SDL bring
+			// up its EGL path, Emscripten proxies EGL to the browser main thread, and the canvas has been
+			// transferred to this worker — so the main thread's getContext() throws InvalidStateError
+			// (Emscripten #24792). We create the WebGL context ourselves further down; SDL is here for the
+			// window and input only, which need no GL flag.
+#else
 			Flags |= SDL_WINDOW_OPENGL;
+#endif
 		}
 
 		// Set OpenGL attributes if needed.
@@ -430,7 +439,7 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 					appErrorf( "Could not make the worker WebGL context current" );
 				}
 				// Stash it where the rest of the viewport already tests for "do we have GL".
-				GLCtx = (SDL_GLContext)(PTRINT)WebGLCtx;
+				GLCtx = (SDL_GLContext)(intptr_t)WebGLCtx;
 				debugf( NAME_Init, "Created WebGL context on the worker (handle %i)", (INT)WebGLCtx );
 #else
 				GLCtx = SDL_GL_CreateContext( hWnd );
@@ -441,7 +450,7 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 #endif
 			}
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-			emscripten_webgl_make_context_current( (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE)(PTRINT)GLCtx );
+			emscripten_webgl_make_context_current( (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE)(intptr_t)GLCtx );
 #else
 			SDL_GL_MakeCurrent( hWnd, GLCtx );
 #endif

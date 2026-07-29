@@ -46,6 +46,13 @@ if(EMSCRIPTEN)
   set(BUILD_NOPENALDRV ON)        # ufront 2.12 (web audio): Emscripten's built-in OpenAL (SFX) + a
                                   # FetchContent'd libxmp (tracker music) — see NOpenALDrv/CMakeLists.txt
                                   # and NOpenALDrv.cpp NOPENAL_WEB. Reused for UT99's web audio port.
+  # ufront 2.13.2 — -pthread must be a COMPILE option, not just a link option. It defines
+  # __EMSCRIPTEN_PTHREADS__, which is what the threaded code paths (e.g. NSDLViewport's direct WebGL
+  # context creation) are guarded on; with it only at link time those guards silently compile their
+  # SINGLE-THREADED branch, SDL creates a GL context after all, and Emscripten proxies eglCreateContext to
+  # a main thread whose canvas has been transferred away -> InvalidStateError (Emscripten #24792). It also
+  # gives every object the atomics/bulk-memory features a shared-memory link expects.
+  add_compile_options(-pthread)
   add_definitions(-DASM=0)        # Core/SoftDrv use their portable (non-x86) code paths
   # clang (Emscripten) makes passing a non-POD FString through variadic debugf/appErrorf a hard error;
   # GCC/MSVC tolerate it. Downgrade to a warning (these are mostly script-export/debug paths).
