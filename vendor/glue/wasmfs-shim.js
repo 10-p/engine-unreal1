@@ -91,9 +91,27 @@ mergeInto(LibraryManager.library, {
     if (typeof ENVIRONMENT_IS_PTHREAD === 'undefined' || !ENVIRONMENT_IS_PTHREAD) return;
 
     addEventListener('message', function(e) {
-      if (e && e.data && e.data.ufrontChannel) {
+      if (!e || !e.data) return;
+      if (e.data.ufrontChannel) {
         ueWorker.sab = e.data.ufrontChannel;
         ueWorker.budget = e.data.ufrontBudget;
+      }
+      // step 2.13.2 — ue_exec_command must run ON THIS THREAD. The frozen ABI is unchanged; what changes
+      // is routing: the host used to call Module._ue_exec_command directly, but under PROXY_TO_PTHREAD
+      // that executes engine code on the browser main thread, where there is no GL context and no engine
+      // state — it dies in glClearColor. Main posts the command instead and we run it here, between
+      // frames, on the thread that owns the engine.
+      if (typeof e.data.ufrontExec === 'string' && Module['_ue_exec_command']) {
+        var cmd = e.data.ufrontExec;
+        var len = lengthBytesUTF8(cmd) + 1;
+        var saved = stackSave();
+        try {
+          var ptr = stackAlloc(len);
+          stringToUTF8(cmd, ptr, len);
+          Module['_ue_exec_command'](ptr);
+        } finally {
+          stackRestore(saved);
+        }
       }
     });
 
