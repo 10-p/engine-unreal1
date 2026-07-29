@@ -140,6 +140,13 @@ if(EMSCRIPTEN)
   # stale .data baked (cmake sees no source change and skips the relink) — a silent trap.
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini")
+  # The --js-library shims are link INPUTS too, and CMake does not infer that from a link option: editing
+  # a shim left a STALE .js baked while the build reported success, so the change appeared to have no
+  # effect (2.13.2: the worker never received the target descriptor and silently cached nothing). Same
+  # class of trap as the preloaded ini above, same fix.
+  set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
+    "${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
+    "${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js")
   # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html. Output into a build-<cfg>/SDLLaunch/ subdir so the
   # artifact path matches engine-ut2004's convention (engine-<target>/build-wasm-perf/SDLLaunch/), which is
   # what the monorepo's packages/build derives per target.

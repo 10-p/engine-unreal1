@@ -103,6 +103,10 @@ mergeInto(LibraryManager.library, {
       // that executes engine code on the browser main thread, where there is no GL context and no engine
       // state — it dies in glClearColor. Main posts the command instead and we run it here, between
       // frames, on the thread that owns the engine.
+      if (typeof e.data.ufrontExec === 'string') {
+        console.log('[ufront/worker] exec received: ' + e.data.ufrontExec +
+          ' (export=' + (typeof Module['_ue_exec_command']) + ')');
+      }
       if (typeof e.data.ufrontExec === 'string' && Module['_ue_exec_command']) {
         var cmd = e.data.ufrontExec;
         var len = lengthBytesUTF8(cmd) + 1;

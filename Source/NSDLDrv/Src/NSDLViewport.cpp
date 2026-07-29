@@ -177,6 +177,11 @@ UNSDLViewport::UNSDLViewport( ULevel* InLevel, UNSDLClient* InClient )
 {
 	guard(UNSDLViewport::UNSDLViewport);
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+	SoftFB = NULL;
+	SoftFBBytes = 0;
+#endif
+
 	// Set color bytes based on screen resolution.
 	SDL_DisplayMode Mode;
 	SDL_GetDesktopDisplayMode( InClient->DefaultDisplay, &Mode );
@@ -455,6 +460,38 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 			SDL_GL_MakeCurrent( hWnd, GLCtx );
 #endif
 		}
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+		else
+		{
+			// ufront 2.13.2: SDL's Emscripten renderer is GLES-backed, so SDL_CreateRenderer goes through
+			// eglCreateContext, which Emscripten proxies to the browser main thread — where the canvas has
+			// been transferred to this worker and getContext() throws. The proxied call never completes and
+			// THE ENGINE THREAD BLOCKS FOREVER: measured, the engine stopped logging right after "Opened
+			// viewport" and stopped servicing even a posted `exit` (Null renderer, DM+bots).
+			//
+			// A null device draws nothing, so having no SDL renderer costs it nothing. SoftDrv is a
+			// different matter: it blits its framebuffer through this renderer, so on a threaded build it
+			// currently has NO PRESENTATION PATH. That is a known 2.13.2 gap, not a silent one — it needs
+			// its own worker-side blit (an OffscreenCanvas 2D context, or a textured quad on the WebGL
+			// context we already create).
+			// SoftDrv renders into our own buffer; Unlock blits it to the canvas. A null device simply
+			// never locks, so it pays nothing for this.
+			SDLTexFormat = SDL_PIXELFORMAT_ARGB8888;
+			ColorBytes   = SDL_BYTESPERPIXEL( SDLTexFormat );
+			Caps         = 0;
+			INT Needed   = NewX * NewY * ColorBytes;
+			if( SoftFB && SoftFBBytes < Needed )
+			{
+				appFree( SoftFB );
+				SoftFB = NULL;
+			}
+			if( !SoftFB )
+			{
+				SoftFB = (BYTE*)appMalloc( Needed, "ufrontSoftFB" );
+				SoftFBBytes = Needed;
+			}
+		}
+#else
 		else
 		{
 			SDL_SetHint( SDL_HINT_RENDER_SCALE_QUALITY, "nearest" );
@@ -479,6 +516,7 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				appErrorf( "Could not create framebuffer texture: %s", SDL_GetError() );
 			}
 		}
+#endif
 
 		SDL_ShowWindow( hWnd );
 
@@ -587,6 +625,14 @@ UBOOL UNSDLViewport::Lock( FPlane FlashScale, FPlane FlashFog, FPlane ScreenClea
 		return 0;
 	}
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+	if( SoftFB )
+	{
+		// No SDL texture to lock on a worker — the engine draws straight into our framebuffer.
+		ScreenPointer = SoftFB;
+		Stride = SizeX;
+	}
+#else
 	if( SDLRen && SDLTex )
 	{
 		// Obtain pointer to screen.
@@ -596,6 +642,7 @@ UBOOL UNSDLViewport::Lock( FPlane FlashScale, FPlane FlashFog, FPlane ScreenClea
 		Stride /= ColorBytes;
 		check(ScreenPointer);
 	}
+#endif
 
 	// Success.
 	uunclock(Client->DrawCycles);
@@ -632,6 +679,45 @@ void UNSDLViewport::Unlock( UBOOL Blit )
 			SDL_GL_SwapWindow( hWnd );
 #endif
 		}
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+		else if( SoftFB )
+		{
+			// Present the software framebuffer on the worker's own OffscreenCanvas. Emscripten sets
+			// Module.canvas to the transferred canvas on the thread it was given to, and a 2D context is
+			// available there because SoftDrv never creates a WebGL one (a canvas has only one context).
+			// SDL_PIXELFORMAT_ARGB8888 is B,G,R,A in memory; ImageData wants R,G,B,A — hence the swizzle,
+			// done 32 bits at a time rather than per channel.
+			EM_ASM({
+				var cv = Module['canvas'];
+				if( !cv ) return;
+				var ctx = Module.__ufrontSoftCtx;
+				if( !ctx )
+				{
+					ctx = Module.__ufrontSoftCtx = cv.getContext('2d');
+					if( !ctx ) return;
+				}
+				// One declaration per statement: EM_ASM is a macro and the preprocessor splits on
+				// top-level commas — braces do not protect them, only parentheses do.
+				var w = $1;
+				var h = $2;
+				var n = w * h;
+				if( !Module.__ufrontSoftImg || Module.__ufrontSoftImg.width !== w || Module.__ufrontSoftImg.height !== h )
+				{
+					if( cv.width !== w ) cv.width = w;
+					if( cv.height !== h ) cv.height = h;
+					Module.__ufrontSoftImg = ctx.createImageData(w, h);
+				}
+				var src = new Uint32Array(HEAPU8.buffer, $0, n);
+				var dst = new Uint32Array(Module.__ufrontSoftImg.data.buffer);
+				for( var i = 0; i < n; i++ )
+				{
+					var v = src[i];
+					dst[i] = (v & 0xff00ff00) | ((v & 0xff) << 16) | ((v >> 16) & 0xff) | 0xff000000;
+				}
+				ctx.putImageData(Module.__ufrontSoftImg, 0, 0);
+			}, SoftFB, SizeX, SizeY);
+		}
+#else
 		else if( SDLRen && SDLTex )
 		{
 			// Blitting with SDLRenderer.
@@ -639,6 +725,7 @@ void UNSDLViewport::Unlock( UBOOL Blit )
 			SDL_RenderCopy( SDLRen, SDLTex, NULL, NULL );
 			SDL_RenderPresent( SDLRen );
 		}
+#endif
 	}
 
 	uunclock(Client->DrawCycles);
