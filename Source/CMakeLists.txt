@@ -46,6 +46,13 @@ if(EMSCRIPTEN)
   set(BUILD_NOPENALDRV ON)        # ufront 2.12 (web audio): Emscripten's built-in OpenAL (SFX) + a
                                   # FetchContent'd libxmp (tracker music) — see NOpenALDrv/CMakeLists.txt
                                   # and NOpenALDrv.cpp NOPENAL_WEB. Reused for UT99's web audio port.
+  # ufront 2.13.2 — -pthread must be a COMPILE option, not just a link option. It defines
+  # __EMSCRIPTEN_PTHREADS__, which is what the threaded code paths (e.g. NSDLViewport's direct WebGL
+  # context creation) are guarded on; with it only at link time those guards silently compile their
+  # SINGLE-THREADED branch, SDL creates a GL context after all, and Emscripten proxies eglCreateContext to
+  # a main thread whose canvas has been transferred away -> InvalidStateError (Emscripten #24792). It also
+  # gives every object the atomics/bulk-memory features a shared-memory link expects.
+  add_compile_options(-pthread)
   add_definitions(-DASM=0)        # Core/SoftDrv use their portable (non-x86) code paths
   # clang (Emscripten) makes passing a non-POD FString through variadic debugf/appErrorf a hard error;
   # GCC/MSVC tolerate it. Downgrade to a warning (these are mostly script-export/debug paths).
@@ -216,7 +223,16 @@ if(USE_SDL)
       set(SDL2_INCLUDE_DIR )
     endif()
     if(NOT DEFINED SDL2_LIBRARY)
-      set(SDL2_LIBRARY "-lSDL2")
+      if(EMSCRIPTEN)
+        # ufront 2.13.2 — the -sUSE_SDL=2 PORT supplies SDL2 (and picks the right variant per build:
+        # libSDL2.a normally, libSDL2-mt.a under -pthread). An explicit -lSDL2 on top of that resolves to
+        # the NON-threaded archive, and the threaded link then dies with
+        #   "--shared-memory is disallowed by SDL_atomic.c.o because it was not compiled with 'atomics'"
+        # because the two archives disagree about features. Leave it to the port.
+        set(SDL2_LIBRARY )
+      else()
+        set(SDL2_LIBRARY "-lSDL2")
+      endif()
     endif()
   endif()
 endif()
