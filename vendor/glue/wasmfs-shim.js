@@ -82,6 +82,7 @@ mergeInto(LibraryManager.library, {
   $ueWorker: {
     sab: null,
     budget: undefined,
+    target: null,
     table: null,
   },
 
@@ -95,6 +96,7 @@ mergeInto(LibraryManager.library, {
       if (e.data.ufrontChannel) {
         ueWorker.sab = e.data.ufrontChannel;
         ueWorker.budget = e.data.ufrontBudget;
+        ueWorker.target = e.data.ufrontTarget;
       }
       // step 2.13.2 — ue_exec_command must run ON THIS THREAD. The frozen ABI is unchanged; what changes
       // is routing: the host used to call Module._ue_exec_command directly, but under PROXY_TO_PTHREAD
@@ -131,6 +133,7 @@ mergeInto(LibraryManager.library, {
               Module: Module,
               sab: ueWorker.sab,
               budget: ueWorker.budget,
+              target: ueWorker.target,
             });
           }
           target[key] = ueWorker.table;
