@@ -592,7 +592,13 @@ void UNSDLViewport::CloseWindow()
 		}
 		if( GLCtx )
 		{
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+			// GLCtx is an Emscripten WebGL handle here, not an SDL context (hatch (c)) — SDL never made it
+			// and must not be asked to destroy it.
+			emscripten_webgl_destroy_context( (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE)(intptr_t)GLCtx );
+#else
 			SDL_GL_DeleteContext( GLCtx );
+#endif
 			GLCtx = NULL;
 		}
 		SDL_DestroyWindow( hWnd );
