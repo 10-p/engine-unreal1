@@ -216,7 +216,16 @@ if(USE_SDL)
       set(SDL2_INCLUDE_DIR )
     endif()
     if(NOT DEFINED SDL2_LIBRARY)
-      set(SDL2_LIBRARY "-lSDL2")
+      if(EMSCRIPTEN)
+        # ufront 2.13.2 — the -sUSE_SDL=2 PORT supplies SDL2 (and picks the right variant per build:
+        # libSDL2.a normally, libSDL2-mt.a under -pthread). An explicit -lSDL2 on top of that resolves to
+        # the NON-threaded archive, and the threaded link then dies with
+        #   "--shared-memory is disallowed by SDL_atomic.c.o because it was not compiled with 'atomics'"
+        # because the two archives disagree about features. Leave it to the port.
+        set(SDL2_LIBRARY )
+      else()
+        set(SDL2_LIBRARY "-lSDL2")
+      endif()
     endif()
   endif()
 endif()

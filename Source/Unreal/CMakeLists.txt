@@ -86,6 +86,27 @@ if(EMSCRIPTEN)
     # deferred-connect pair (see WebRTCDrv.cpp); it is a ut2004 thing. Listing an undefined symbol is a
     # hard wasm-ld error: 'symbol exported via --export not found'.
     -sWASMFS
+    # ufront 2.13.2 — run the engine on a WORKER (threaded-only, decision D2).
+    #
+    # WHY: synchronous per-file restore-on-read from OPFS (2.13.4, the actual point of stage 2.13) needs
+    # FileSystemSyncAccessHandle, which browsers expose ONLY on a worker; and a thread blocking on
+    # Atomics.wait cannot do so on the browser main thread. So main() has to leave the main thread.
+    #
+    # -sOFFSCREENCANVASES_TO_PTHREAD transfers #canvas to that worker, which is what makes the direct
+    # emscripten_webgl_create_context in NSDLViewport.cpp legal there. SDL2 keeps window + input; only
+    # GL-context creation and the frame present are taken off SDL (its GL path is EGL, and Emscripten
+    # proxies EGL to a main thread that can no longer see the transferred canvas — Emscripten #24792).
+    #
+    # -sASYNCIFY deliberately STAYS this step: dropping it is 2.13.3, after the worker move is proven.
+    -pthread
+    -sPROXY_TO_PTHREAD
+    -sOFFSCREENCANVAS_SUPPORT
+    # QUOTED: CMake treats an unquoted '#' as a comment, which silently truncated this to
+    # "OFFSCREENCANVASES_TO_PTHREAD=" and failed the link with "string index out of range".
+    "-sOFFSCREENCANVASES_TO_PTHREAD=#canvas"
+    # main() itself is one of these; the engine spawns no others on the web (UnThread's music thread is
+    # NOPENAL_WEB-guarded off), so a small pool avoids paying for workers nothing will use.
+    -sPTHREAD_POOL_SIZE=2
     "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_close','_ue_exec_command','_wasmfs_create_jsimpl_backend','_wasmfs_create_file','_ufront_wasmfs_register','_ufront_wasmfs_set_pending']"
     "-sEXPORTED_RUNTIME_METHODS=['callMain','stringToUTF8','UTF8ToString','HEAPU8','stackSave','stackAlloc','stackRestore','lengthBytesUTF8']"
     # The thin webrtc_* shim (step 2.6b): defines the ABI's C-imported symbols, forwarding to the

@@ -4,6 +4,12 @@
 #include "NSDLDrv.h"
 #include "UnRender.h"
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+// ufront 2.13.2 — the worker creates and presents its own WebGL context (hatch (c)); see ResizeViewport.
+#include <emscripten/html5.h>
+#include <emscripten/html5_webgl.h>
+#endif
+
 IMPLEMENT_CLASS( UNSDLViewport );
 
 /*-----------------------------------------------------------------------------
@@ -389,13 +395,56 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		{
 			if( !GLCtx )
 			{
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+				// ufront 2.13.2 — hatch (c): create the WebGL context DIRECTLY, not through SDL2.
+				//
+				// SDL2's emscripten GL path is 100% EGL (SDL_EGL_CreateContext_impl), and Emscripten's EGL
+				// emulation always proxies to the browser main thread. Under -sPROXY_TO_PTHREAD the canvas
+				// has been transferred to this worker, so the main thread can no longer getContext() on it
+				// and SDL_GL_CreateContext fails with InvalidStateError (Emscripten #24792). The 2.13.0
+				// spike measured all three escape hatches; this is the one that works, and it renders on
+				// the worker's OWN context — no per-GL-call proxying, so no per-call penalty.
+				//
+				// SDL2 still owns the window and ALL input; the only SDL call replaced is context creation.
+				EmscriptenWebGLContextAttributes Attrs;
+				emscripten_webgl_init_context_attributes( &Attrs );
+				// v200 is a GLES2/WebGL1 engine (NOpenGLESDrv); majorVersion 1 == WebGL 1.0.
+				Attrs.majorVersion              = 1;
+				Attrs.minorVersion              = 0;
+				Attrs.alpha                     = 0;
+				Attrs.depth                     = 1;
+				Attrs.stencil                   = 1;
+				Attrs.antialias                 = 0;
+				// explicitSwapControl + renderViaOffscreenBackBuffer are what make the frame OURS to
+				// present: without them the browser composites at its own cadence and commit_frame() is
+				// meaningless on a worker.
+				Attrs.explicitSwapControl       = 1;
+				Attrs.renderViaOffscreenBackBuffer = 1;
+				EMSCRIPTEN_WEBGL_CONTEXT_HANDLE WebGLCtx = emscripten_webgl_create_context( "#canvas", &Attrs );
+				if( WebGLCtx <= 0 )
+				{
+					appErrorf( "Could not create WebGL context on the worker (handle %i)", (INT)WebGLCtx );
+				}
+				if( emscripten_webgl_make_context_current( WebGLCtx ) != EMSCRIPTEN_RESULT_SUCCESS )
+				{
+					appErrorf( "Could not make the worker WebGL context current" );
+				}
+				// Stash it where the rest of the viewport already tests for "do we have GL".
+				GLCtx = (SDL_GLContext)(PTRINT)WebGLCtx;
+				debugf( NAME_Init, "Created WebGL context on the worker (handle %i)", (INT)WebGLCtx );
+#else
 				GLCtx = SDL_GL_CreateContext( hWnd );
 				if( !GLCtx )
 				{
 					appErrorf( "Could not create GL context: %s", SDL_GetError() );
 				}
+#endif
 			}
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+			emscripten_webgl_make_context_current( (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE)(PTRINT)GLCtx );
+#else
 			SDL_GL_MakeCurrent( hWnd, GLCtx );
+#endif
 		}
 		else
 		{
@@ -566,7 +615,13 @@ void UNSDLViewport::Unlock( UBOOL Blit )
 		if( GLCtx )
 		{
 			// Flip OpenGL buffers.
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+			// The context was created with explicitSwapControl, so THIS is the present (2.13.2 hatch (c)).
+			// SDL_GL_SwapWindow would go through the EGL emulation that cannot see our worker context.
+			emscripten_webgl_commit_frame();
+#else
 			SDL_GL_SwapWindow( hWnd );
+#endif
 		}
 		else if( SDLRen && SDLTex )
 		{
