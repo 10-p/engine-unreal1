@@ -5,8 +5,10 @@
 // travel together across the public/private seam). The monorepo's packages/build VALIDATES this against
 // the glue ABI_VERSION + the host loader contract before assembling serve-web.
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const args = Object.fromEntries(
     process.argv.slice(2).map((a) => {
@@ -15,6 +17,26 @@ const args = Object.fromEntries(
     }),
 );
 const dir = args.out;
+
+// ufront 2.19: resolve provenance HERE, at BUILD time, rather than trusting the values baked into the
+// POST_BUILD command line. CMakeLists computes them with execute_process()/string(TIMESTAMP), which run
+// once per CONFIGURE — so a plain `cmake --build` re-stamped the SHA the build tree was CONFIGURED at,
+// indefinitely. An artifact rebuilt from new commits kept advertising an old one, which is precisely the
+// check the monorepo uses to catch a stale artifact (and which has already cost this project days). The
+// passed values remain the fallback for a build from an exported tree with no git.
+const _here = dirname(fileURLToPath(import.meta.url));
+const gitSha = (() => {
+    try {
+        return execFileSync('git', ['-C', _here, 'rev-parse', '--short', 'HEAD'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+    } catch {
+        return args.gitSha || 'unknown';
+    }
+})();
+const builtAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+
 const sha = (f) =>
     existsSync(join(dir, f)) ? 'sha256-' + createHash('sha256').update(readFileSync(join(dir, f))).digest('hex') : null;
 
@@ -28,7 +50,7 @@ const meta = {
     buildConfig: 'wasm-integrated',
     abiVersion: Number(args.abi), // from the vendored frozen ue_abi.h UE_ABI_VERSION
     loaderStyle: 'global-module', // classic <script> + bare globals (like engine-ut2004)
-    provenance: { repo: 'engine-unreal1', gitSha: args.gitSha || 'unknown', builtAt: args.builtAt || 'unknown' },
+    provenance: { repo: 'engine-unreal1', gitSha, builtAt },
     toolchain: { emscripten: args.emcc || 'unknown', base: 'fgsfdsfgs/UE1 (Unreal v200)' },
     buildFlags: [
     // Descriptive, hand-maintained: keep it in step with the linker block or the descriptor
