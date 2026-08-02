@@ -466,6 +466,33 @@ void MainLoop( UEngine* Engine )
 
 		// Enforce optional maximum tick rate.
 		INT MaxTickRate = Engine->GetMaxTickRate();
+
+		// ufront 2.19: enforce a client frame-rate cap. UGameEngine::GetMaxTickRate() returns 0 for
+		// standalone play (no net driver), so this loop otherwise runs at whatever the hardware allows.
+		// ULevel::Tick then FLOORS DeltaSeconds at 0.001s (UnLevTic.cpp) -> above 1000 fps the world
+		// advances MORE time than really elapsed and the whole game runs fast. On this box the web client
+		// is nowhere near vsync-bound since 2.13.7's unclamped MessagePort yield, so the ceiling is real
+		// hardware, not the browser. A net/demo cap (GetMaxTickRate>0) still wins; otherwise the launcher's
+		// Advanced "Frame rate limit" (-FRAMERATECAP=<n>) wins over [Engine.Engine] FrameRateCap in the ini,
+		// and the default is 120. <=0 means uncapped, restoring the old behaviour.
+		FLOAT Cap = (FLOAT)MaxTickRate;
+		if( Cap <= 0.f )
+		{
+			static FLOAT ClientCap = -1.f;
+			if( ClientCap < -0.5f )
+			{
+				FLOAT V = 0.f;
+				char Buf[64];
+				if( Parse( appCmdLine(), "FRAMERATECAP=", V ) )
+					ClientCap = V;
+				else if( GetConfigString( "Engine.Engine", "FrameRateCap", Buf, ARRAY_COUNT(Buf) ) )
+					ClientCap = appAtof( Buf );
+				else
+					ClientCap = 120.f;
+				debugf( NAME_Init, "ufront: client frame rate cap %.0f fps%s", ClientCap, ClientCap > 0.f ? "" : " (uncapped)" );
+			}
+			Cap = ClientCap;
+		}
 #ifdef __EMSCRIPTEN__
 		// ufront 2.6b — main-loop inversion (docs/10 §2), matching engine-ut2004: a browser can't block its
 		// main thread, so each frame we yield via emscripten_sleep, which ASYNCIFY-suspends the wasm and lets
@@ -473,19 +500,20 @@ void MainLoop( UEngine* Engine )
 		// its simulate_infinite_loop unwind exception collides with UE1 main()'s C++ try/catch.
 		//
 		// ufront 2.13.7: the ">= 1 ms always" floor is gone. When there is real budget left we still sleep it
-		// (that is the frame-rate cap, and emscripten_sleep is the right tool). When there is not — which is
-		// EVERY frame for a standalone client, since GetMaxTickRate() is 0 with no net driver — we want only
-		// a task boundary, and the old `: 1` bought a browser-clamped >= 1 ms timer on every one of them.
-		DOUBLE Budget = MaxTickRate ? (1.0 / MaxTickRate) : 0.0;
+		// (that is the frame-rate cap, and emscripten_sleep is the right tool). When there is not — a frame
+		// that already overran its budget — we want only a task boundary, and the old `: 1` bought a
+		// browser-clamped >= 1 ms timer on every one of them. The cap only ever converts spare time into
+		// sleep; it never adds a timer to a frame that had none.
+		DOUBLE Budget = Cap > 0.f ? (1.0 / Cap) : 0.0;
 		INT SleepMs = (INT)((Budget - (appSeconds() - OldTime)) * 1000.0);
 		if( SleepMs > 1 )
 			emscripten_sleep( SleepMs );
 		else
 			ufront_yield_frame();
 #else
-		if( MaxTickRate )
+		if( Cap > 0.f )
 		{
-			DOUBLE Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
+			DOUBLE Delta = (1.0/Cap) - (appSeconds()-OldTime);
 			if( Delta > 0.0 )
 				appSleep( Delta );
 		}
