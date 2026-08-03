@@ -392,19 +392,36 @@ CORE_API void appDumpAllocs( class FOutputDevice* Out );
 //
 // C++ style memory allocation.
 //
+// UT_REPLACEMENT_ALLOC -- ufront 2.19d. `operator new(size_t)` and `operator delete(void*)` are the
+// REPLACEABLE global forms, and a replacement operator new/delete may not be `inline` (clang says so:
+// -Winline-new-delete). Declared this way they are emitted OUT-OF-LINE as weak symbols whenever the
+// compiler does not inline them -- which at -O0 is always, in every object that allocates. wasm-ld then
+// resolves the PROGRAM-WIDE operator new to one of those, so Emscripten's own WasmFS static initializer
+// (priority 100, long before appInit) allocates through GMalloc, which at that moment is still the
+// pre-init error allocator and returns NULL -- make_shared builds its control block on nothing,
+// `weak_this` is never set, and OpenFileState::create dies in shared_from_this() with bad_weak_ptr.
+//
+// At -O2 and above the same definitions are inlined everywhere and never emitted, so system code keeps
+// libc++'s operator new. Forcing the inline makes -O0 behave EXACTLY as the optimised builds already did
+// -- engine allocations to appMalloc, system allocations to libc++ -- rather than inventing a third
+// behaviour. Diagnosed on engine-ut2004 (110 objects emitted it at -O0, 0 at -O3); this engine carries
+// the same pattern and the same -sWASMFS, so it would fail identically the moment anything built it at
+// -O0. The placement form `operator new(size_t, const char*)` is NOT a replacement and is left alone.
+//
+#define UT_REPLACEMENT_ALLOC __attribute__((always_inline))
 inline void* operator new( size_t Size, const char* Tag )
 {
 	guard( "operator new" );
 	return appMalloc( Size, Tag );
 	unguard;
 }
-inline void* operator new(size_t Size )
+UT_REPLACEMENT_ALLOC inline void* operator new(size_t Size )
 {
 	guard( "operator new" );
 	return appMalloc( Size, "new" );
 	unguard;
 }
-inline void operator delete( void* Ptr )
+UT_REPLACEMENT_ALLOC inline void operator delete( void* Ptr )
 {
 	guard( "operator delete" );
 	appFree( Ptr );
