@@ -60,6 +60,13 @@ class DLL_EXPORT UNOpenGLESRenderDevice : public URenderDevice
 
 	// Options.
 	UBOOL NoFiltering;
+	// ufront 2.19 — image-quality knobs, mirroring engine-ut99's NOpenGLESDrv.
+	//   MaxAnisotropy is a REAL numeric control (EXT_texture_filter_anisotropic); clamped at Init to the
+	//     level the driver actually advertises.
+	//   NumAASamples is nominal on the web: WebGL picks MSAA via a BOOLEAN context attribute at creation
+	//     time, so the count cannot be chosen here. Kept numeric for parity and for native.
+	FLOAT MaxAnisotropy;
+	INT NumAASamples;
 	UBOOL UseBGRA;
 	UBOOL Overbright;
 	UBOOL DetailTextures;

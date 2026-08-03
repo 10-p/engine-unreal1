@@ -72,6 +72,8 @@ void UNOpenGLESRenderDevice::InternalClassInitializer( UClass* Class )
 	new(Class, "DetailTextures", RF_Public)UBoolProperty( CPP_PROPERTY(DetailTextures), "Options", CPF_Config );
 	new(Class, "UseVAO",         RF_Public)UBoolProperty( CPP_PROPERTY(UseVAO),         "Options", CPF_Config );
 	new(Class, "UseBGRA",        RF_Public)UBoolProperty( CPP_PROPERTY(UseBGRA),        "Options", CPF_Config );
+	new(Class, "MaxAnisotropy",  RF_Public)UFloatProperty( CPP_PROPERTY(MaxAnisotropy),  "Options", CPF_Config );
+	new(Class, "NumAASamples",   RF_Public)UIntProperty( CPP_PROPERTY(NumAASamples),     "Options", CPF_Config );
 	new(Class, "SwapInterval",   RF_Public)UIntProperty ( CPP_PROPERTY(SwapInterval),   "Options", CPF_Config );
 	unguardSlow;
 }
@@ -83,9 +85,45 @@ UNOpenGLESRenderDevice::UNOpenGLESRenderDevice()
 	NoFiltering = false;
 	UseVAO = false;
 	UseBGRA = true;
+	MaxAnisotropy = 16.f;   // clamped at Init to whatever the driver actually reports
+	NumAASamples = 4;
 	CurrentBrightness = -1.f;
 	SwapInterval = 1;
 }
+
+// ufront 2.19: this driver's vendored glad_es has NO anisotropic entry, so its GLAD_GL_* table cannot
+// answer here. Ask the live context's extension string instead — correct on native and web alike, and the
+// same lesson as XOpenGL's S3TC bug: query the context you actually render into.
+#include <string.h>
+static UBOOL NOpenGLESHasExtension( const char* Name )
+{
+	const char* Exts = (const char*)glGetString( GL_EXTENSIONS );
+	if( !Exts || !Name || !*Name )
+		return 0;
+	const size_t Len = strlen( Name );
+	for( const char* P = Exts; ( P = strstr( P, Name ) ) != NULL; P += Len )
+	{
+		const char Before = ( P == Exts ) ? ' ' : P[-1];
+		const char After  = P[Len];
+		if( Before == ' ' && ( After == ' ' || After == '\0' ) )
+			return 1;
+	}
+	return 0;
+}
+// WebGL spells extensions without the "GL_" prefix, so try both.
+static UBOOL NOpenGLESHasAniso()
+{
+	return NOpenGLESHasExtension( "GL_EXT_texture_filter_anisotropic" )
+		|| NOpenGLESHasExtension( "EXT_texture_filter_anisotropic" );
+}
+
+// ufront 2.19: EXT_texture_filter_anisotropic tokens — optional extension, so define defensively.
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
+#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#endif
 
 UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 {
@@ -140,6 +178,33 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 		glBindBuffer( GL_ARRAY_BUFFER, GLBuf );
 		glBufferData( GL_ARRAY_BUFFER, VtxDataSize, (void*)VtxData, GL_DYNAMIC_DRAW );
 	}
+
+	// ufront 2.19: anisotropic filtering — a real numeric control. Clamp to what the driver advertises
+	// instead of trusting the ini; 1.0 is isotropic (the GL default) so "off" needs no special case.
+	if( MaxAnisotropy > 1.f )
+	{
+		if( NOpenGLESHasAniso() )
+		{
+			GLfloat DriverMax = 1.f;
+			glGetFloatv( GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &DriverMax );
+			if( DriverMax < 1.f )
+				DriverMax = 1.f;
+			if( MaxAnisotropy > DriverMax )
+				MaxAnisotropy = DriverMax;
+			debugf( "GLES2: anisotropic filtering %.0fx (driver max %.0fx)", MaxAnisotropy, DriverMax );
+		}
+		else
+		{
+			debugf( "GLES2: anisotropic filtering requested but unsupported; disabling" );
+			MaxAnisotropy = 1.f;
+		}
+	}
+
+	// NumAASamples is nominal on the web: WebGL selects MSAA with a boolean `antialias` context attribute at
+	// CREATION time, and the viewport made the context before this driver ran. Say so rather than implying a
+	// sample count we cannot honour.
+	if( NumAASamples > 0 )
+		debugf( "GLES2: AA requested (%d samples nominal; WebGL decides the count at context creation)", NumAASamples );
 
 	if( UseBGRA )
 	{
@@ -847,6 +912,9 @@ void UNOpenGLESRenderDevice::UpdateTextureFilter( const FTextureInfo& Info, DWOR
 	{
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( Info.NumMips > 1 ) ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR );
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		// ufront 2.19: anisotropy only applies on the smooth path, and only with mips to sample across.
+		if( MaxAnisotropy > 1.f && Info.NumMips > 1 )
+			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, MaxAnisotropy );
 	}
 
 	// This is a light/fog map.
