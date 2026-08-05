@@ -33,6 +33,7 @@ class ENGINE_API URenderDevice : public USubsystem
 	UBOOL		SupportsFogMaps;
 	UBOOL		SupportsDistanceFog;
 	UBOOL		VolumetricLighting;
+	UBOOL		VolumetricLightingMeshes;
 	UBOOL		ShinySurfaces;
 	UBOOL		Coronas;
 	UBOOL		HighDetailActors;

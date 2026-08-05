@@ -553,6 +553,38 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 	SizeX = NewX;
 	SizeY = NewY;
 
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+	// ufront 2.19f: grow the software framebuffer to the size we ACTUALLY adopted.
+	//
+	// SoftFB is allocated further up from the ini resolution, and the dynamic-resolution block above
+	// then REPLACES NewX/NewY with the real canvas size — but only ever re-created the SDL texture,
+	// never this buffer, despite its own comment promising to match "the software framebuffer" to the
+	// drawable size. So on any browser window larger than the ini resolution, SoftDrv rasterised
+	// SizeX*SizeY*ColorBytes bytes into a buffer sized for something smaller: a straight heap overrun,
+	// every frame.
+	//
+	// Measured before the fix, on all three UE1 engines: every viewport whose framebuffer exceeded
+	// 4 MB died (1600x720, 1280x1080, 1600x900, 1920x1080) and every one under it survived (1024x768,
+	// 1280x720) — 4 MB being where the allocator stops handing out room the overrun could quietly
+	// scribble on. It surfaced as "memory access out of bounds", "table index is out of bounds" or
+	// "null function" depending on what the write happened to land on, and it did NOT reproduce in the
+	// -O2 build, whose different heap layout absorbed it. Corruption, not a bounds check.
+	//
+	// Sized here rather than at the allocation site because this is the one place SizeX/SizeY are
+	// final, so every path that can change them — first open, the adopt-drawable-size block, and the
+	// WINDOWEVENT_RESIZED re-entry from TickInput — is covered by construction.
+	if( SoftFB )
+	{
+		const INT Needed = SizeX * SizeY * ColorBytes;
+		if( SoftFBBytes < Needed )
+		{
+			appFree( SoftFB );
+			SoftFB      = (BYTE*)appMalloc( Needed, "ufrontSoftFB" );
+			SoftFBBytes = Needed;
+		}
+	}
+#endif
+
 	if( !RenDev && Temporary )
 		Client->TryRenderDevice( this, "SoftDrv.SoftwareRenderDevice", 0 );
 	if( !RenDev && !GIsEditor && !NoHard )

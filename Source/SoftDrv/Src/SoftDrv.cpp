@@ -23,6 +23,7 @@ void USoftwareRenderDevice::InternalClassInitializer( UClass* Class )
 	{
 		new(Class,"HighResTextureSmooth",RF_Public)UBoolProperty (CPP_PROPERTY(HighResTextureSmooth), "Options", CPF_Config );
 		new(Class,"LowResTextureSmooth", RF_Public)UBoolProperty (CPP_PROPERTY(LowResTextureSmooth ), "Options", CPF_Config );
+		new(Class,"BilinearFiltering",   RF_Public)UBoolProperty (CPP_PROPERTY(BilinearFiltering   ), "Options", CPF_Config );
 		new(Class,"FastTranslucency",    RF_Public)UBoolProperty (CPP_PROPERTY(FastTranslucency    ), "Options", CPF_Config );
 		new(Class,"DetailBias",			 RF_Public)UFloatProperty(CPP_PROPERTY(DetailBias          ), "Options", CPF_Config );
 		//new(Class,"RAM32Mode",		 RF_Public)UBoolProperty (CPP_PROPERTY(RAM32Mode           ), "Options", CPF_Config );
@@ -44,7 +45,11 @@ UBOOL USoftwareRenderDevice::Init( UViewport* InViewport )
 	// Driver flags.
 	SpanBased			= 1;
 	FrameBuffered		= 1;
-	SupportsFogMaps		= GIsMMX;
+	// ufront: fog maps used to be gated on GIsMMX, because volumetric fog existed only in the MMX
+	// kernels. The portable path now has it (LightPassPentiumFog + the fog merge passes in
+	// DrawSurf.cpp), so advertise it unconditionally -- URender only builds fog maps at all when
+	// the device claims support (UnRender.cpp, IsVolumetric).
+	SupportsFogMaps		= 1;
 	SupportsDistanceFog	= 0;
 
 	//InitPowerTables();

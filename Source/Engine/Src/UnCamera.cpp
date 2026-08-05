@@ -20,6 +20,7 @@ void URenderDevice::InternalClassInitializer( UClass* Class )
 	if( appStricmp( Class->GetName(), "RenderDevice" )==0 )
 	{
 		new(Class,"VolumetricLighting",RF_Public)UBoolProperty(CPP_PROPERTY(VolumetricLighting), "Client", CPF_Config );
+		new(Class,"VolumetricLightingMeshes",RF_Public)UBoolProperty(CPP_PROPERTY(VolumetricLightingMeshes), "Client", CPF_Config );
 		new(Class,"ShinySurfaces",     RF_Public)UBoolProperty(CPP_PROPERTY(ShinySurfaces     ), "Client", CPF_Config );
 		new(Class,"Coronas",           RF_Public)UBoolProperty(CPP_PROPERTY(Coronas           ), "Client", CPF_Config );
 		new(Class,"HighDetailActors",  RF_Public)UBoolProperty(CPP_PROPERTY(HighDetailActors  ), "Client", CPF_Config );
