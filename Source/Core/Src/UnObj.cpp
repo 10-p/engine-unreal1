@@ -805,6 +805,21 @@ void UObject::SaveConfig( DWORD Flags, const char* Filename )
 		for( TObjectIterator<UClass> It; It; ++It )
 			if( It->IsChildOf(BaseClass) )
 				It->GetDefaultObject()->LoadConfig( NAME_Config );
+
+	// ufront 2.28: WRITE THROUGH, like every later engine in the family.
+	//
+	// v200's SaveConfig stopped at SetConfigString, i.e. at the IN-MEMORY cache; the bytes reached disk
+	// only when FConfigCache::Exit() ran at shutdown. On a desktop that is invisible — the process exits
+	// and the ini is written. In a browser tab there is no such exit, so EVERY setting the engine saved
+	// (video options, key binds, player name) was lost, while the call reported success.
+	//
+	// MEASURED before the fix: `brightness` answered "Brightness level 7/10" — so UClient::Exec ran and
+	// SaveConfig() with it — and a full walk of the filesystem showed NOT ONE byte changed anywhere.
+	//
+	// v400 (ut99) and UE2 (ut2004) both end SaveConfig with GConfig->Flush(0); this is the v200 spelling
+	// of the same thing, so all four engines now persist a saved setting at the moment it is saved. It
+	// costs one write per SaveConfig call, not per property — the loop above has already finished.
+	GConfigCache.SaveAllConfigs();
 	unguard;
 }
 
