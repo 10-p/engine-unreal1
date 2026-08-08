@@ -95,7 +95,11 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDICON_MAINFRAME        ICON    DISCARDABLE     "..\\res\\Unreal.ico"
+// ufront 2.33: was "..\\res\\Unreal.ico". The icon sits right here in Src/Res, and that path only ever
+// resolved because Windows filesystems are case-insensitive (`res` vs `Res`). Cross-compiling from Linux
+// it is a hard windres error. Same-directory + a windres -I for this dir (Unreal/CMakeLists.txt) works
+// for both rc.exe and windres.
+IDICON_MAINFRAME        ICON    DISCARDABLE     "Unreal.ico"
 #endif    // English (U.S.) resources
 /////////////////////////////////////////////////////////////////////////////
 

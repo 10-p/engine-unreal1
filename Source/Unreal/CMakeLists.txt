@@ -16,6 +16,9 @@ endif()
 if(TARGET_IS_WINDOWS)
   list(APPEND SRC_FILES "Src/Res/LaunchRes.rc")
   add_executable(${PROJECT_NAME} WIN32 ${SRC_FILES})
+  # ufront 2.33 — the .rc names its icon relative to itself; give the resource compiler that directory.
+  set_source_files_properties("Src/Res/LaunchRes.rc" PROPERTIES
+    COMPILE_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}/Src/Res")
 else()
   add_executable(${PROJECT_NAME} ${SRC_FILES})
 endif()

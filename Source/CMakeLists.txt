@@ -174,6 +174,13 @@ if(TARGET_IS_WINDOWS)
   add_definitions(-DPLATFORM_WIN32)
   add_definitions(-DWIN32)
   add_definitions(-DWINDOWS_IGNORE_PACKING_MISMATCH)
+  if(MINGW)
+    # ufront 2.33 — link GCC's runtime statically. Without this the .exe imports libgcc_s_dw2-1.dll and
+    # libstdc++-6.dll, which live in the toolchain (or MSYS2's /mingw32/bin), NOT in a Windows install:
+    # the binary runs on the build machine and dies with "not found" everywhere else. With it, the only
+    # imports left are stock system DLLs, so the static build really is a single self-contained file.
+    add_link_options(-static-libgcc -static-libstdc++)
+  endif()
 else()
   # TODO
   add_definitions(-DPLATFORM_POSIX)
@@ -261,6 +268,11 @@ if(USE_SDL)
         #   "--shared-memory is disallowed by SDL_atomic.c.o because it was not compiled with 'atomics'"
         # because the two archives disagree about features. Leave it to the port.
         set(SDL2_LIBRARY )
+      elseif(MINGW AND CMAKE_CROSSCOMPILING)
+        # ufront 2.33 — cross-building for Windows from Linux: no system SDL2 to link against, so fetch
+        # SDL2's official prebuilt MinGW binaries. Under MSYS2 on real Windows this branch is skipped
+        # (not cross-compiling) and pacman's mingw-w64-i686-SDL2 answers -lSDL2 as usual.
+        include(SDL2Mingw)
       else()
         set(SDL2_LIBRARY "-lSDL2")
       endif()

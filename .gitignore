@@ -10,6 +10,7 @@ Source/UnrealED/obj
 /build-wasm-perf/
 /build-wasm-debug/
 /build-native/
+/build-windows/
 __smoke.html__pycache__/
 /build-soft/
 tools/asmport/oracle/oracle

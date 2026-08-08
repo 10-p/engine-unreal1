@@ -16,12 +16,16 @@ in the monorepo** (`docs/migration/STATE.md`), not here.
 | `wasm` | `build-wasm/SDLLaunch/SDLLaunch.{js,wasm,data}` + `meta.json` | Emscripten **dev** (assertions + DWARF) |
 | `wasm-perf` | `build-wasm-perf/SDLLaunch/…` | Emscripten **product** (`-O3`, no debug) — what `ufront` consumes |
 | `native` | `build-native/Unreal/Unreal.bin` | 32-bit native GLES/software twin (needs `libsdl2-dev:i386`) |
+| `windows` | `build-windows/Unreal/Unreal.exe` | 32-bit **Windows** binary via MinGW-w64 (§ *Windows builds*) |
 
 ```bash
 source ~/emsdk/emsdk_env.sh            # emsdk 5.0.x; sets $EMSDK for the toolchain file
 cmake --preset wasm-perf && cmake --build --preset wasm-perf -j"$(nproc)"   # the web build
 cmake --preset native    && cmake --build --preset native    -j"$(nproc)"   # the native twin
+cmake --preset windows   && cmake --build --preset windows   -j"$(nproc)"   # the Windows binary
 ```
+
+⚠ Presets live in `Source/`, so run `cmake --preset …` from `Source/`, not the repo root.
 
 The web build emits a **bare loader** (`SUFFIX .js`, no `--shell-file`) + `meta.json` (`engineFamily:UE1`,
 `abiVersion:1`, `loaderStyle:global-module`); `ufront`'s `packages/build` validates it. Assets: only
@@ -78,6 +82,64 @@ A baked `EMSCRIPTEN` branch in `Source/CMakeLists.txt` forces the web-safe confi
   Mirrors engine-ut2004's map-load fix.
 - **Small POSIX fixes** (`docs/10` §7, guarded): `pthread_setname_np` no-op; IpDrv socket headers
   (`<sys/select.h>`/`<sys/time.h>`, `u_long`, musl `h_errno`-vs-`errno`).
+
+## Windows builds (MinGW-w64) — ufront step 2.33
+
+**Nearly free here**, because upstream (fgsfdsfgs/UE1) already did the GCC/Windows work: this tree carries
+the unified `PLATFORM_WIN32`-aware platform layer (`Core/Src/UnPlat.cpp`, `UnFile.cpp`, `UnThread.cpp`)
+rather than UE1's original `UnUnix.cpp`/`UnVcWin32.cpp` split. Every engine library cross-compiled clean
+with **zero source changes**; only three build-side things were missing.
+
+```bash
+cd Source
+cmake --preset windows && cmake --build --preset windows -j"$(nproc)"   # -> build-windows/Unreal/Unreal.exe
+```
+
+⚠ **32-bit only.** `Source/CMakeLists.txt` demotes an x86_64 compiler to `-m32` and `FATAL_ERROR`s if it
+cannot; upstream's README says the same ("**Do not** use the `MINGW64` or `MSYS` prompts"). The toolchain
+file targets `i686-w64-mingw32`.
+
+**Cross-compiling (Linux) vs MSYS2 (Windows).** `Source/cmake/toolchain-mingw-w64.cmake` supplies only
+what a *cross* build cannot infer — the compilers and a find-root. It is the same MinGW-w64 GCC that
+MSYS2's `mingw32` environment ships, so from an MSYS2 `MINGW32` prompt the preset works with pacman's
+`mingw-w64-i686-toolchain` / `mingw-w64-i686-SDL2` and the SDL2 fetch below is skipped.
+
+What the port actually needed:
+
+- **SDL2** — a cross build has no system SDL2, so `Source/cmake/SDL2Mingw.cmake` FetchContents SDL2's
+  official prebuilt MinGW binaries (hash-pinned, version matched to this box's Linux SDL2 so the Windows
+  build and the native twin are the same library). ⚠ Link order: `-lmingw32 -lSDL2main` **before**
+  `-lSDL2` — SDL.h renames the launcher's `main()` to `SDL_main` and SDL2main provides the `WinMain` that
+  calls it, which is why the launcher needs no source change.
+- **`-static-libgcc -static-libstdc++`** — otherwise the `.exe` imports `libgcc_s_dw2-1.dll` and
+  `libstdc++-6.dll`, which exist on the build machine and nowhere else. With them the only imports left
+  are stock system DLLs, so `BUILD_STATIC` really does yield **one self-contained file**.
+- **`Unreal/Src/Res/LaunchRes.rc`** — its icon path (`..\res\Unreal.ico`) only ever resolved because
+  Windows filesystems are case-insensitive; cross-compiling from Linux it is a hard `windres` error.
+- **`SoftDrv/Src/SoftDrvPrivate.h`** — the Win32 headers define `IN`/`OUT` as empty annotation macros,
+  which deletes DrawSurf.cpp's local `IN`. Undefined rather than renamed, so the Linux/web builds stay
+  textually identical (verified: the web wasm sha256 is unchanged).
+
+`BUILD_STATIC=ON` means `appGetDllHandle` resolves through the internal registry, so there is **no
+`LoadLibrary`, no `Core.dll`/`Engine.dll`** — the same mechanism the web and PSVita builds use.
+
+**Verifying without Windows.** `wine` + `Xvfb` (needs `wine32`; the renderers below are CPU-only, so no
+GPU is involved):
+
+```bash
+Xvfb :99 -screen 0 1024x768x24 &
+DISPLAY=:99 WINEPREFIX=~/.wine-u1 wine Unreal.exe -SOFTWARERENDERER   # or -NULLRENDERER
+WINEPREFIX=~/.wine-u1 wineserver -k          # ⚠ always; wine leaves processes behind
+```
+
+Assert on **milestones in `System/Unreal.log`** (`Game class is 'Intro'`, `Opened viewport`,
+`Init: Game engine initialized`), not on a window appearing. Two traps when building the run tree: copy
+the `.exe` in (the engine derives its base dir from the real binary path), and dereference asset symlinks
+(`cp -rL`) or every package silently becomes a `FileNotFound`. ⚠ wine is not Windows — this is a
+regression net, not a substitute for a real-hardware pass.
+
+**Out of scope for now:** hardware renderers on Windows (`NOpenGLESDrv`), and `-mwindows` means no console
+— read the log file.
 
 ## GL4ES / future renderers
 
