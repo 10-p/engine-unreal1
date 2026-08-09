@@ -172,6 +172,11 @@ void HandleError()
 struct FRenderSwitch { const char* Param; const char* Device; };
 static const FRenderSwitch GRenderSwitches[] =
 {
+#ifdef UT_HAS_NOPENGLDRV
+	// ufront 2.34: desktop GL (NOpenGLDrv), built for the native + Windows targets only — the web forces
+	// BUILD_NOPENGLDRV OFF, so this entry does not exist there and the wasm is unchanged.
+	{ "NOPENGLRENDERER",   "NOpenGLDrv.NOpenGLRenderDevice" },     // desktop OpenGL 1.4 compatibility
+#endif
 	{ "NOPENGLESRENDERER", "NOpenGLESDrv.NOpenGLESRenderDevice" }, // GLES2 -> WebGL (the hardware default)
 	{ "SOFTWARERENDERER",  "SoftDrv.SoftwareRenderDevice" },       // CPU rasterizer (GPU-free)
 	{ "NULLRENDERER",      "NullDrv.NullRenderDevice" },           // no-op device (GPU-free; headless/dedicated)
@@ -179,7 +184,22 @@ static const FRenderSwitch GRenderSwitches[] =
 // Default when nothing is chosen: best HW first (unreal1 ships only NOpenGLES on web).
 static const char* GRenderPreference[] =
 {
+#if defined(UT_HAS_NOPENGLDRV) && defined(PLATFORM_WIN32)
+	// ufront 2.34 — on Windows desktop GL leads. A GLES2 context there needs either a driver that exposes
+	// ES contexts through WGL or ANGLE's libEGL/libGLESv2 beside the exe, whereas opengl32 is always
+	// present; preferring NOpenGLES would make the out-of-the-box default a hard "Failed3D" on a machine
+	// with a perfectly good GPU. The shipped ini's SoftDrv is not hardware-eligible, so this list is what
+	// a fresh Windows install actually lands on.
+	"NOpenGLDrv.NOpenGLRenderDevice",
 	"NOpenGLESDrv.NOpenGLESRenderDevice",
+#else
+	// Web + Linux: GLES2 first — it is the renderer the web port is validated against, so the native twin
+	// exercises the same code path unless asked otherwise.
+	"NOpenGLESDrv.NOpenGLESRenderDevice",
+#ifdef UT_HAS_NOPENGLDRV
+	"NOpenGLDrv.NOpenGLRenderDevice",
+#endif
+#endif
 };
 // The class a -*RENDERER switch requested (empty if none) — persisted after a successful Init().
 static char GRequestedRenderDevice[256] = "";
@@ -194,7 +214,7 @@ static const char* RenderClassName( const char* Device )
 }
 
 // True iff the render-device class is compiled into / loadable by this build.
-static UBOOL IsRenderDeviceAvailable( const char* Device )
+static UBOOL IsPackageClassAvailable( const char* Device )
 {
 #ifdef __EMSCRIPTEN__
 	// web (single static binary): FindObject inspects only ALREADY-registered objects (a statically-linked
@@ -222,6 +242,42 @@ static UBOOL IsHardwareDefaultEligible( const char* Device )
 	return 0;
 }
 
+#ifndef __EMSCRIPTEN__
+// ★ ufront 2.34 — "if we have the wrong driver, select a NON-NULL driver" (owner's rule; it applies to
+// sound and networking as much as to graphics). Mirrors engine-ut99's NormalizeSubsystem.
+//
+// Every ini this engine can meet may name subsystems it does not contain — the retail 1998 one says
+// `AudioDevice=Galaxy.GalaxyAudioSubsystem`, this repo's web-configured asset tree says NOpenALDrv, and a
+// Windows build without audio has neither. The engine loads them with LOAD_NoFail, so a missing one is
+// not a degraded mode: it is an appError before the first frame. Nor can a user fix it by editing the ini
+// on a BUILD_STATIC target, where packages resolve through the internal registry.
+//
+// If what the ini names is absent, substitute the best REAL driver this build has. Null drivers stay
+// explicit opt-ins, never fallbacks. A configured driver that IS present is left alone, so a deliberate
+// choice is never overridden. Excluded on Emscripten, where the web block sets everything outright — which
+// also keeps the web preprocessor output, and the wasm, unchanged.
+static void NormalizeSubsystem( const char* Section, const char* Key, const char* const* Preference, INT Num )
+{
+	char Configured[256] = "";
+	if( GetConfigString( Section, Key, Configured, ARRAY_COUNT(Configured) ) && Configured[0]
+	    && IsPackageClassAvailable( Configured ) )
+		return;	// what the user asked for is here — do not touch it
+
+	for( INT i=0; i<Num; i++ )
+	{
+		if( IsPackageClassAvailable( Preference[i] ) )
+		{
+			debugf( "ufront 2.34: [%s] %s=%s is not in this build -> %s",
+				Section, Key, Configured[0] ? Configured : "(unset)", Preference[i] );
+			SetConfigString( Section, Key, Preference[i] );
+			return;
+		}
+	}
+	debugf( NAME_Warning, "ufront 2.34: [%s] %s=%s is not in this build and no replacement is either",
+		Section, Key, Configured[0] ? Configured : "(unset)" );
+}
+#endif
+
 static void SetRenderDeviceConfig( const char* Device )
 {
 	SetConfigString( "Engine.Engine", "GameRenderDevice",     Device );
@@ -238,7 +294,7 @@ static void SelectRenderDevice()
 		if( ParseParam( appCmdLine(), GRenderSwitches[i].Param ) )
 		{
 			const char* Device = GRenderSwitches[i].Device;
-			if( IsRenderDeviceAvailable( Device ) )
+			if( IsPackageClassAvailable( Device ) )
 			{
 				debugf( "ufront: -%s selects render device %s", GRenderSwitches[i].Param, Device );
 				SetRenderDeviceConfig( Device );
@@ -261,7 +317,7 @@ static void SelectRenderDevice()
 		const UBOOL bUserSelected =
 			GetConfigString( "Engine.Engine", "ufrontUserRenderDevice", UserSel, ARRAY_COUNT(UserSel) )
 			&& UserSel[0] && appStricmp( Persisted, UserSel )==0;
-		if( IsRenderDeviceAvailable( Persisted ) && ( IsHardwareDefaultEligible( Persisted ) || bUserSelected ) )
+		if( IsPackageClassAvailable( Persisted ) && ( IsHardwareDefaultEligible( Persisted ) || bUserSelected ) )
 		{
 			debugf( "ufront 2.12: using the persisted %s render device %s", bUserSelected ? "user-selected" : "hardware", Persisted );
 			SetRenderDeviceConfig( Persisted );
@@ -273,7 +329,7 @@ static void SelectRenderDevice()
 	// 3) Preference order — first compiled-in device wins.
 	for( INT i=0; i<ARRAY_COUNT(GRenderPreference); i++ )
 	{
-		if( IsRenderDeviceAvailable( GRenderPreference[i] ) )
+		if( IsPackageClassAvailable( GRenderPreference[i] ) )
 		{
 			debugf( "ufront: default render device %s (preference order)", GRenderPreference[i] );
 			SetRenderDeviceConfig( GRenderPreference[i] );
@@ -358,6 +414,22 @@ UEngine* InitEngine()
 	// (unreal1's model). Forced here so it holds regardless of the retail asset ini (which ships False).
 	// Excluded on Emscripten (web set this in the __EMSCRIPTEN__ block above) -> web wasm byte-identical.
 	SetConfigString( "NSDLDrv.NSDLClient", "CaptureMouse", "True" );
+#endif
+
+#ifndef __EMSCRIPTEN__
+	// ufront 2.34 — replace any subsystem this build cannot load with the best REAL one it has (see
+	// NormalizeSubsystem). Lists are best-first and contain no null driver: SoundDrv's silent subsystem is
+	// an opt-out, not a fallback. This is what lets the SAME binary boot from a retail 1998 ini, from this
+	// repo's web-configured asset tree, or from a user's own — on Linux and on Windows alike.
+	{
+		static const char* const ViewportPreference[] = { "NSDLDrv.NSDLClient" };
+		static const char* const AudioPreference[]    = { "NOpenALDrv.NOpenALAudioSubsystem",
+		                                                  "SoundDrv.NullAudioSubsystem" };
+		static const char* const NetPreference[]      = { "IpDrv.TcpNetDriver" };
+		NormalizeSubsystem( "Engine.Engine", "ViewportManager", ViewportPreference, ARRAY_COUNT(ViewportPreference) );
+		NormalizeSubsystem( "Engine.Engine", "AudioDevice",     AudioPreference,    ARRAY_COUNT(AudioPreference) );
+		NormalizeSubsystem( "Engine.Engine", "NetworkDevice",   NetPreference,      ARRAY_COUNT(NetPreference) );
+	}
 #endif
 
 	// ufront 2.12: unified render-device selection — SHARED native+web, run BEFORE Engine->Init() (which loads

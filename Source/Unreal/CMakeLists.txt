@@ -223,6 +223,28 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE UNREAL_EXPORTS UPACKAGE_NAME=${PROJECT_NAME})
 
+# ufront 2.34 — tell the launcher which OPTIONAL render devices this build actually contains, so its
+# -*RENDERER switch table only offers what is linked. Keyed off the CMake option rather than the platform:
+# the web forces BUILD_NOPENGLDRV OFF (desktop GL), so the web preprocessor output — and the wasm — is
+# byte-for-byte what it was before desktop GL existed.
+if(BUILD_NOPENGLDRV)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UT_HAS_NOPENGLDRV=1)
+endif()
+if(BUILD_NOPENALDRV)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UT_HAS_NOPENALDRV=1)
+endif()
+
+# ufront 2.34 — OpenAL Soft is the one library the Windows build loads rather than links (see
+# cmake/OpenALMingw.cmake for why). Put it beside the .exe as part of the build, so the output directory
+# IS the runnable set and nobody has to know this.
+if(OPENAL_MINGW_RUNTIME_DLL)
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${OPENAL_MINGW_RUNTIME_DLL}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${OPENAL_MINGW_RUNTIME_DLL_NAME}"
+    COMMENT "Copying ${OPENAL_MINGW_RUNTIME_DLL_NAME} (OpenAL Soft) next to the executable")
+endif()
+
 if(VITA)
   vita_create_self(eboot.bin ${PROJECT_NAME} UNSAFE)
   vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} eboot.bin

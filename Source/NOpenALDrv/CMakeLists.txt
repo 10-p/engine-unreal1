@@ -16,7 +16,9 @@ set(SRC_FILES "NOpenALDrv.cpp")
 # ufront 2.12 Task B (native audio parity): this box ships no system libxmp (-lxmp fails), so build it
 # from source via cmake on NATIVE Linux too (portable C -> compiles fine at -m32). OpenAL stays the
 # system libopenal on native (the parent's -lopenal); only the FetchContent'd xmp_static differs from web.
-if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+# ufront 2.34 — Windows (MinGW) joins the from-source list for the same reason Linux did: there is no
+# system libxmp to link against. libxmp is portable C, so it cross-compiles unchanged.
+if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOMPILING))
   include(FetchContent)
   set(LIBXMP_SOURCE_DIR "" CACHE PATH "Local libxmp checkout. Empty => fetch from git.")
   set(LIBXMP_GIT_REPOSITORY "https://github.com/libxmp/libxmp.git" CACHE STRING "Upstream libxmp git repo")
@@ -48,7 +50,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
   if(NOT TARGET xmp_static)
     message(FATAL_ERROR "libxmp: expected static target 'xmp_static' was not created.")
   endif()
-  # Web: Emscripten's built-in OpenAL. Native Linux: keep the parent's system -lopenal. Both: fetched libxmp.
+  # Web: Emscripten's built-in OpenAL. Native Linux: keep the parent's system -lopenal. Windows: the
+  # prebuilt OpenAL Soft import library the parent's OpenALMingw.cmake set. All three: fetched libxmp.
   if(EMSCRIPTEN)
     set(OPENAL_LIBRARY "-lopenal")
   endif()

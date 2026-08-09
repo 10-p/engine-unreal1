@@ -4,20 +4,21 @@
   "configurePresets": [
     {
       "name": "native",
-      "displayName": "Native (SDL2 + GLES2/Software, OpenAL audio) -- the WASM twin",
-      "description": "32-bit native build (needs libsdl2-dev:i386, libopenal-dev:i386). Mirrors the web renderer set + real OpenAL audio (2.12.0 sensible default). Builds in build-native/.",
+      "displayName": "Native (SDL2 + desktop GL/GLES2/Software, OpenAL audio) -- the WASM twin",
+      "description": "32-bit native build (needs libsdl2-dev:i386, libopenal-dev:i386). Mirrors the web renderer set + real OpenAL audio (2.12.0 sensible default) + the desktop-GL renderer the web can't have. BUILD_STATIC links every package into ONE Unreal.bin -- no Core.so/Engine.so beside it, and appGetDllHandle resolves through the internal UNREAL_STATIC registry instead of dlopen (ufront 2.34; system libs SDL2/OpenAL/libGL stay dynamic). Builds in build-native/.",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/../build-native",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_C_FLAGS": "-m32 -DASM=0",
         "CMAKE_CXX_FLAGS": "-m32 -DASM=0",
-        "BUILD_STATIC": "OFF",
+        "BUILD_STATIC": "ON",
         "BUILD_EDITOR": "OFF",
         "BUILD_WINDRV": "OFF",
-        "BUILD_NOPENGLDRV": "OFF",
+        "BUILD_NOPENGLDRV": "ON",
         "BUILD_NOPENGLESDRV": "ON",
         "BUILD_SOFTDRV": "ON",
+        "BUILD_NULLDRV": "ON",
         "BUILD_NULLSOUNDDRV": "ON",
         "BUILD_NOPENALDRV": "ON"
       }
@@ -50,7 +51,7 @@
     {
       "name": "windows",
       "displayName": "Windows x86 (MinGW-w64) -- one self-contained .exe",
-      "description": "32-bit Windows build. Cross-compiles from Linux via the toolchain file (i686-w64-mingw32 + a fetched SDL2); the SAME preset works from an MSYS2 MINGW32 prompt, where pacman's SDL2 answers instead. BUILD_STATIC links every package into the exe — no Core.dll/Engine.dll, and appGetDllHandle resolves through the internal registry, not LoadLibrary. Renderers are SoftDrv + NullDrv (CPU-only, so it verifies headless under wine+Xvfb); hardware GL is out of scope. Builds in build-windows/. [ufront 2.33]",
+      "description": "32-bit Windows build. Cross-compiles from Linux via the toolchain file (i686-w64-mingw32 + a fetched SDL2); the SAME preset works from an MSYS2 MINGW32 prompt, where pacman's SDL2 answers instead. BUILD_STATIC links every package into the exe — no Core.dll/Engine.dll, and appGetDllHandle resolves through the internal registry, not LoadLibrary. Renderers are NOpenGL (desktop GL via opengl32) + NOpenGLES (GLES2 — needs ANGLE's libEGL.dll/libGLESv2.dll beside the exe) + SoftDrv + NullDrv, the last two CPU-only so it still verifies headless under wine+Xvfb. Builds in build-windows/. [ufront 2.33, renderers 2.34]",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/../build-windows",
       "toolchainFile": "${sourceDir}/cmake/toolchain-mingw-w64.cmake",
@@ -61,12 +62,12 @@
         "BUILD_STATIC": "ON",
         "BUILD_EDITOR": "OFF",
         "BUILD_WINDRV": "OFF",
-        "BUILD_NOPENGLDRV": "OFF",
-        "BUILD_NOPENGLESDRV": "OFF",
+        "BUILD_NOPENGLDRV": "ON",
+        "BUILD_NOPENGLESDRV": "ON",
         "BUILD_SOFTDRV": "ON",
         "BUILD_NULLDRV": "ON",
         "BUILD_NULLSOUNDDRV": "ON",
-        "BUILD_NOPENALDRV": "OFF"
+        "BUILD_NOPENALDRV": "ON"
       }
     }
   ],

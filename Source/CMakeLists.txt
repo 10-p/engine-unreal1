@@ -300,7 +300,14 @@ if(BUILD_NOPENALDRV)
       set(OPENAL_INCLUDE_DIR )
     endif()
     if(NOT DEFINED OPENAL_LIBRARY)
-      set(OPENAL_LIBRARY "-lopenal")
+      if(MINGW AND CMAKE_CROSSCOMPILING)
+        # ufront 2.34 — cross-building for Windows: no system OpenAL to link against, so fetch OpenAL
+        # Soft's official prebuilt Windows binaries (same pattern as SDL2Mingw). Real audio, because a
+        # null audio subsystem is not a usable default.
+        include(OpenALMingw)
+      else()
+        set(OPENAL_LIBRARY "-lopenal")
+      endif()
     endif()
     if(NOT DEFINED LIBXMP_INCLUDE_DIR)
       set(LIBXMP_INCLUDE_DIR )
