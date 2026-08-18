@@ -78,6 +78,49 @@ void UNetDriver::Serialize( FArchive& Ar )
 void UNetDriver::Destroy()
 {
 	guard(UNetDriver::Destroy);
+
+	// ★★ ufront 2.39 — DESTROY OUR CONNECTIONS BEFORE OURSELVES. This function used to be a bare
+	// Super::Destroy(), and that is the coop map-travel crash the owner reported:
+	//
+	//     Critical: Assertion failed: Driver->ServerConnection==this
+	//                                 [File:.../Source/Engine/Src/UnConn.cpp] [Line: 317]
+	//
+	// ⚠ THE ASSERT IS NOT ABOUT ServerConnection. It fires because `Driver` is DANGLING by the time the
+	// connection is destroyed, so `Driver->ServerConnection` reads freed memory, comes back non-NULL, and
+	// takes the client branch of a check that only ever holds for a client.
+	//
+	// The ordering is visible in the owner's host log, with a whole map load between the two events:
+	//
+	//     Exit: [WebRTC] Destroy: room='default'      <- the driver goes here, at the START of the travel
+	//     Log: Loading: Package Vortex2                  (the new map loads fine)
+	//     Log: Purging garbage                        <- the connection is destroyed HERE, minutes of work later
+	//     Critical: Assertion failed: Driver->ServerConnection==this
+	//
+	// Why it can happen at all: UNetDriver::Serialize reports `Connections` and `ServerConnection` to the
+	// GC, so the driver keeps its connections ALIVE — but UNetConnection::Serialize does NOT report
+	// `Driver`, so nothing keeps the driver alive FOR them, and nothing orders the two. When the level is
+	// torn down both become garbage in the same pass and the purge is free to take the driver first.
+	//
+	// ★ NOT INVENTED HERE — taken from the later engines in this project. v400 (engine-ut99
+	// UnNetDrv.cpp:197) and UE2 (engine-ut2004 UnNetDrv.cpp:209) both open UNetDriver::Destroy with
+	// exactly this: delete the server connection, drain the client connections, then chain up. v200 has
+	// none of it, which is why Unreal 1 is the only one of the four engines that crashes here.
+	//
+	// ⚠ WHOSE fix it originally is, I cannot tell you. Both of those repos are SQUASHED initial imports
+	// (ut99 `cbdb054 "first blood"`, ut2004 `cfc7e09 "Initial import"`), so blame attributes every line to
+	// the import and no history survives behind it. It predates all of OUR work in those trees, and the
+	// nested guard(DestroyServerConnection)/unguard idiom is the engine's own house style — but it could
+	// as easily have come from Epic in 1999 as from a fork maintainer since. What is verifiable is that
+	// two independently-imported later codebases both have it and this one does not.
+	//
+	// Each `delete` runs UNetConnection::Destroy, which removes itself from `Connections` (see line ~317),
+	// so the drain terminates; the two lists are disjoint (a connection is EITHER ServerConnection OR in
+	// Connections — the same if/else asserts it), so nothing is deleted twice.
+	if( ServerConnection )
+		delete ServerConnection;
+	while( Connections.Num() )
+		delete Connections( 0 );
+
 	Super::Destroy();
 	unguard;
 }
