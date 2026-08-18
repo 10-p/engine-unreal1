@@ -361,6 +361,13 @@ CORE_API UBOOL ParseLine( const char** Stream, char* Result, INT MaxLen, UBOOL E
 // A `Key=Value` token is an option wherever it sits; a URL that carries options spells them after a
 // '?' (`DM-Deck?Game=X`), which is exactly what tells the two apart.
 CORE_API UBOOL appIsGlobalOptionToken( const char* Token );
+// ufront 2.38 — apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line.
+//
+// ★ The shipped launcher emits `-ini:User:[DefaultPlayer]:Name=<player>` for the Network panel's Player
+// Name box, and until 2.38 NOTHING in any of the four engines read it: the name only took effect via a
+// travel URL's `?Name=`, so hosting or joining from the game's OWN menus always logged you in as
+// "Player". The file part goes to the config cache, which appends ".ini". Call once, after it is init'd.
+CORE_API void appApplyIniOverrides();
 CORE_API UBOOL ParseToken( const char*& Str, char* Result, INT MaxLen, UBOOL UseEscape );
 CORE_API void ParseNext( const char** Stream );
 CORE_API UBOOL ParseParam( const char* Stream, const char* Param );

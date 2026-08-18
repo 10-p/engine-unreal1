@@ -290,8 +290,16 @@ void UWebRTCNetDriver::Tick()
 	for( INT i=0; i<Connections.Num(); i++ )
 	{
 		UWebRTCConnection* Conn = (UWebRTCConnection*)Connections(i);
+		// ★ ufront 2.38 — SAY SO. Dropping a peer used to be entirely silent on this engine (only
+		// Unreal 1 v200 logs "Destroying … because connection closed"), so "the host noticed the
+		// guest left" had no evidence anywhere in a log — the glue's reap line was the last word on
+		// the subject and it only proves the TRANSPORT gave up, not that the engine acted. Matches
+		// what engine-ut2004's driver already prints, so one milestone covers every target.
 		if( webrtc_get_connection_state( Conn->WebRTCConnId ) == WEBRTC_STATE_CLOSED && Conn->State != USOCK_Closed )
+		{
+			debugf( NAME_DevNet, "[WebRTC] TickDispatch: Client connId=%i connection CLOSED by remote", Conn->WebRTCConnId );
 			Conn->State = USOCK_Closed;
+		}
 		if( Conn->State == USOCK_Open || Conn->State == USOCK_Pending )
 		{
 			INT Size;

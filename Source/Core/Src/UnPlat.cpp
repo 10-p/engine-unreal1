@@ -421,6 +421,7 @@ void appInit()
 
 	// Init config cache.
 	GConfigCache.Init( Ini );
+	appApplyIniOverrides();
 
 	// Language.
 	if( GetConfigString( "Engine.Engine", "Language", Temp, ARRAY_COUNT(Temp) ) )

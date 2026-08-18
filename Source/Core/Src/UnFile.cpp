@@ -1463,6 +1463,58 @@ CORE_API UBOOL appIsGlobalOptionToken( const char* Token )
 	unguard;
 }
 
+//
+// Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line. See UnFile.h.
+//
+// ★★ ufront 2.38 — the shipped launcher has been emitting `-ini:User:[DefaultPlayer]:Name=<player>` for
+// the Network panel's Player Name box, and NOTHING in any of the four engines read it. The name only
+// ever took effect through a travel URL's `?Name=`, so booting to the menu and then hosting or joining
+// from the game's own multiplayer menus always logged you in as "Player". Measured on the ut99 sibling:
+// argv carried the switch and the engine logged `ScriptLog: Login: Player`.
+//
+// The file part is passed through to the config cache, which appends ".ini" — so `User` resolves to this
+// game's User.ini and nothing hardcodes a path. Applied straight after the cache is initialised.
+//
+CORE_API void appApplyIniOverrides()
+{
+	guard(appApplyIniOverrides);
+	const char* Stream = appCmdLine();
+	char Token[1024];
+	while( ParseToken( Stream, Token, ARRAY_COUNT(Token), 0 ) )
+	{
+		if( appStrnicmp( Token, "-ini:", 5 )!=0 )
+			continue;
+		// -ini:<File>:[<Section>]:<Key>=<Value>
+		char* File = Token + 5;
+		char* Open = appStrstr( File, ":[" );
+		if( !Open )
+			continue;
+		char* Section = Open + 2;
+		char* Close = appStrstr( Section, "]:" );
+		if( !Close )
+			continue;
+		char* Key = Close + 2;
+		char* Eq = appStrstr( Key, "=" );
+		if( !Eq || Eq==Key )
+			continue;
+		char* Value = Eq + 1;
+		*Open = 0; *Close = 0; *Eq = 0;
+		if( !*File || !*Section )
+			continue;
+		// ⚠ v200 HAS ONE INI, and `[DefaultPlayer]` lives in it (Unreal.ini) — the User.ini sitting in a
+		// retail install is a later-engine convention this one never reads. The UT99/UE2 config caches
+		// translate the generic name `User` to a real second file; there is nothing here to translate it
+		// TO, so both generic names mean "the default ini". Measured 2.38: writing to a literal `User.ini`
+		// applied cleanly and changed nothing, because no class reads that file.
+		const char* Filename = File;
+		if( appStricmp( File, "User" )==0 || appStricmp( File, "System" )==0 )
+			Filename = NULL;
+		SetConfigString( Section, Key, Value, Filename );
+		debugf( NAME_Init, "Ini override: [%s] %s=%s (%s)", Section, Key, Value, Filename ? Filename : "default" );
+	}
+	unguard;
+}
+
 CORE_API UBOOL ParseToken( const char*& Str, char* Result, INT MaxLen, UBOOL UseEscape )
 {
 	guard(ParseToken);
