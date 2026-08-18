@@ -153,9 +153,23 @@ static void KickDiscovery()
 	debugf( NAME_DevNet, "[WebRTC-LAN] discovery started" );
 }
 
+// ★★ THROTTLED, AND THE THROTTLE IS NOT AN OPTIMISATION — IT IS THE DIFFERENCE BETWEEN RUNNING AND
+// ABORTING. Every webrtc_* call here is `__proxy: 'sync'`: a CROSS-THREAD round trip from the engine
+// pthread to the main thread, and this is reached from AUdpLink::Tick — once per link per FRAME.
+// ⚠ Under load that overflows Emscripten's proxy queue and the module dies with
+//     Aborted(… "emscripten_proxy_async failed" … _emscripten_run_callback_on_thread)
+// (measured on the ut99 sibling at 2.38). Ask four times a second instead.
+static DOUBLE GLastPumpAt = 0.0;
+
 static void PumpDiscovery()
 {
-	if( !GDiscoveryPending || !webrtc_is_discovery_done() )
+	if( !GDiscoveryPending )
+		return;
+	const DOUBLE PumpNow = appSeconds();
+	if( PumpNow - GLastPumpAt < 0.25 )
+		return;
+	GLastPumpAt = PumpNow;
+	if( !webrtc_is_discovery_done() )
 		return;
 	GDiscoveryPending = 0;
 
