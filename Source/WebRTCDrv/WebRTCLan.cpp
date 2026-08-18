@@ -90,6 +90,9 @@ struct FLanReply
 	DWORD       Addr;
 	INT         Port;
 	FString     Text;
+	FLanReply() : LinkId(NULL), Addr(0), Port(0) {}
+	FLanReply( const void* InLinkId, DWORD InAddr, INT InPort, const FString& InText )
+	: LinkId(InLinkId), Addr(InAddr), Port(InPort), Text(InText) {}
 };
 static TArray<FLanReply> GReplies;
 
@@ -114,12 +117,18 @@ static FLanLink& TouchLink( const void* Id )
 	return N;
 }
 
+/**
+ * Stable index for a room. Append-only — see GRooms.
+ *
+ * ⚠ `new( Array )T( Item )`, NOT `Array.AddItem( Item )` — see the note in PumpDiscovery.
+ */
 static INT RoomIndex( const FString& Room )
 {
 	for( INT i=0; i<GRooms.Num(); i++ )
 		if( appStricmp( *GRooms(i), *Room )==0 )
 			return i;
-	return GRooms.AddItem( Room );
+	new( GRooms )FString( Room );
+	return GRooms.Num() - 1;
 }
 
 static DWORD AddrForIndex( INT Index )
@@ -187,11 +196,19 @@ static void PumpDiscovery()
 		webrtc_get_server_map( i, mapBuf, sizeof(mapBuf) );
 		webrtc_get_server_gametype( i, gtBuf, sizeof(gtBuf) );
 
-		// ⚠ A LOCAL, THEN AddItem — see the ut99 sibling. Filling a reference returned by AddZeroed()
-		// is the UE1 idiom for a struct of PODs; FLanServer holds FStrings, so that combination zeroes
-		// an element, assigns strings into it, and holds a reference across a possible reallocation.
-		// On ut99 it crashed the module with `memory access out of bounds` on the tick discovery was
-		// drained — and then presented as an empty server list, because the module was gone.
+		// ⚠⚠ COPY-CONSTRUCTED IN PLACE. `TArray<T>` is a POD container: `AddItem` is
+		//     `INT Index=Add(); (*this)(Index)=Item;` and `FArray::Add` neither zeroes nor constructs, so
+		// assigning an FString into that slot reallocs whatever bit pattern the allocator left behind.
+		// FLanServer holds three FStrings, so one AddItem is three reallocs of three garbage pointers.
+		//
+		// ★ It is HEAP LUCK, which is why it reads as flakiness: fresh dlmalloc pages come back zeroed and
+		// a zeroed FString survives the assignment. Measured 2.38 — the ut99 sibling (identical code, busier
+		// heap) died here 3 runs out of 3 with `memory access out of bounds`, while THIS engine drained 4
+		// for 4 and looked healthy. The tell is that the per-server line below prints and "discovery done"
+		// never does. Placement new is the only spelling that copy-constructs; `TArray::operator=` uses it.
+		//
+		// ⚠ v200 makes it worse than the ut99 case: FString's default ctor allocates a 1-byte "" here, so a
+		// ZEROED FString is not even a valid empty one — its Length() is ArrayNum-1 = -1.
 		FLanServer S;
 		S.Room       = Room;
 		S.Name       = nameBuf[0] ? FString(nameBuf) : Room;
@@ -202,7 +219,7 @@ static void PumpDiscovery()
 			S.MaxPlayers = 16;
 		const FString Host = WebRTCLan_HostForRoom( *S.Room );   // also reserves the room's index
 		debugf( NAME_DevNet, "[WebRTC-LAN] '%s' room=%s map=%s %i/%i -> %s", *S.Name, *S.Room, *S.Map, S.Players, S.MaxPlayers, *Host );
-		GServers.AddItem( S );
+		new( GServers )FLanServer( S );
 	}
 	debugf( NAME_DevNet, "[WebRTC-LAN] discovery done: %i server(s)", GServers.Num() );
 }
@@ -213,15 +230,16 @@ static void QueueBeacons( const void* LinkId )
 	for( INT i=0; i<GServers.Num(); i++ )
 	{
 		const FLanServer& S = GServers(i);
-		FLanReply& R = GReplies( GReplies.AddZeroed() );
-		R.LinkId = LinkId;
-		R.Addr   = AddrForIndex( RoomIndex( S.Room ) );
-		R.Port   = LAN_GAME_PORT;
 		// ⚠ The receiver splits on the FIRST space after the product: everything before it is the JOIN
 		// ADDRESS and the rest is the row label. So the address must contain no space, and the label
 		// must not be empty or the row is unselectable.
-		R.Text.Setf( "%s %s %s (%s) %i/%i",
+		FString Text;
+		Text.Setf( "%s %s %s (%s) %i/%i",
 			*Product, *WebRTCLan_HostForRoom( *S.Room ), *S.Name, *S.Map, S.Players, S.MaxPlayers );
+		// ⚠ Placement new, like every append in this file — see PumpDiscovery. A zeroed FString is not a
+		// valid empty one in v200 (its default ctor allocates a 1-byte ""), so AddZeroed-then-fill is a
+		// landmine here even where it happens to work.
+		new( GReplies )FLanReply( LinkId, AddrForIndex( RoomIndex( S.Room ) ), LAN_GAME_PORT, Text );
 	}
 }
 
