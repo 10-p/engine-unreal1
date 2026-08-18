@@ -15,6 +15,7 @@
 
 #include "Engine.h"
 #include "UnNet.h"
+#include "WebRTCLan.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -197,6 +198,18 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 		// Client. URL.Host carries the room (HostID); the server registered as "<prefix>-<room>-srv".
 		bIsListenServer = 0;
 		RoomName = URL.Host;
+		// ★ ufront 2.38 — a join FROM "Find Local Servers" arrives as a dotted address, not a room: the
+		// stock menu can only carry an IPv4 string through to the travel URL. The synthetic LAN handed
+		// that address out, so it can hand the room back. A real address that is not one of ours
+		// translates to "" and is left alone.
+		{
+			FString FromBrowser = WebRTCLan_RoomForHost( *RoomName );
+			if( FromBrowser.Length() )
+			{
+				debugf( NAME_DevNet, "[WebRTC] Init(connect): browser address %s -> room '%s'", *RoomName, *FromBrowser );
+				RoomName = FromBrowser;
+			}
+		}
 		if( RoomName.Length() <= 0 )
 			RoomName = "default";
 		FString ServerPeerId;
@@ -217,6 +230,9 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 		RoomName   = URL.GetOption( "room=", "default" );
 		ServerName = URL.GetOption( "ServerName=", "" );
 		debugf( NAME_DevNet, "[WebRTC] Init(listen): room='%s' name='%s'", *RoomName, *ServerName );
+		// ufront 2.38 — tell the synthetic LAN which room is OURS, so a host browsing its own server
+		// list does not find itself and try to connect a peer to itself.
+		WebRTCLan_SetLocalRoom( *RoomName );
 		webrtc_init_listen( *RoomName );
 	}
 
@@ -294,8 +310,17 @@ void UWebRTCNetDriver::Tick()
 		Connections(i)->Tick();
 
 #ifdef __EMSCRIPTEN__
-	// Listen server: publish status for browser discovery (~1s throttle). Minimal for now — name + room;
-	// full GameInfo introspection (players/gametype) is a discovery follow-up.
+	// Listen server: publish current status for browser discovery (~1s throttle).
+	//
+	// ★ ufront 2.38 — this used to push `(Name, RoomName, 0, 0, "")`: it advertised the ROOM as the MAP and
+	// hard-coded zero players, with the original comment calling full introspection "a discovery follow-up".
+	// This IS that follow-up: the synthetic LAN responder feeds these fields straight into the beacon text
+	// the stock UnrealListenMenu lists, so a wrong map here is a wrong map in the player's server browser.
+	//
+	// ⚠ Players comes from the TRANSPORT (connections + the local listen player), not the GameInfo: Unreal 1
+	// v200's native AGameInfo exports neither NumPlayers nor MaxPlayers (they are script-side properties, so
+	// there is no C++ field to read), and "how many people are in there right now" is what a browser wants
+	// anyway. MaxPlayers has no native source at all here, so the row shows the engine's own default.
 	if( bIsListenServer )
 	{
 		static DOUBLE LastPush = 0.0;
@@ -303,8 +328,24 @@ void UWebRTCNetDriver::Tick()
 		if( Now - LastPush > 1.0 )
 		{
 			LastPush = Now;
-			const char* Name = ServerName.Length() > 0 ? *ServerName : "Unreal Server";
-			webrtc_set_listen_status( Name, *RoomName, 0, 0, "" );
+			FString SName = ServerName, MapName = "?", GType = "";
+			INT Players = 1 + Connections.Num();   // the listen host counts
+			const INT MaxPl = 16;
+			UGameEngine* GE = Cast<UGameEngine>( GWebRTCEngine );
+			if( GE && GE->GLevel )
+			{
+				if( GE->GLevel->URL.Map.Length() )
+					MapName = GE->GLevel->URL.Map;
+				ALevelInfo* LI = GE->GLevel->GetLevelInfo();
+				AGameInfo* GI = LI ? LI->Game : NULL;
+				if( GI )
+					GType = GI->GetClass()->GetName();
+			}
+			if( !SName.Length() )
+				SName = "Unreal Server";
+			// TCHAR is char on v200, so these are already ANSI — no conversion, and no shared static
+			// buffer to clobber (the UT99 sibling has to copy; see its ToAnsiBuf).
+			webrtc_set_listen_status( *SName, *MapName, Players, MaxPl, *GType );
 		}
 	}
 

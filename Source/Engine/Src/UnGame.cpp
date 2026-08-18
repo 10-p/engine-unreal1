@@ -117,7 +117,10 @@ void UGameEngine::Init()
 	const char* Tmp = appCmdLine();
 	if
 	(	!ParseToken( Tmp, AutoURL, ARRAY_COUNT(AutoURL), 0 )
-	||	AutoURL[0]=='-' )
+	||	AutoURL[0]=='-'
+	// ufront 2.38: …and a global option is not a map either. See appIsGlobalOptionToken — one launcher
+	// dropping its leading flag turned `CPUSPEED=3000` into "the map" and cost the main menu entirely.
+	||	appIsGlobalOptionToken(AutoURL) )
 		appStrcpy( AutoURL, *FURL::DefaultLocalMap );
 	FURL URL( &DefaultURL, AutoURL, TRAVEL_Partial );
 	if( !URL.Valid )

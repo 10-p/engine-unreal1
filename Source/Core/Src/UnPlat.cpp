@@ -1234,15 +1234,32 @@ void VARARGS appErrorf( const char* Fmt, ... )
 
 CORE_API void VARARGS appUnwindf( const char* Fmt, ... )
 {
-	GIsCriticalError = 1;
+	// ★★ ufront 2.38 — this used to begin `GIsCriticalError = 1;`, unconditionally, and NOTHING in the
+	// engine ever cleared it again. (Same bug, same fix, as engine-ut2004 2.37c and engine-ut99 2.38.)
+	//
+	// unguard calls this for EVERY exception through a guarded scope, and most are NOT fatal: appThrowf is
+	// how a failed load unwinds and the loaders catch it -- a recoverable "Failed to load 'X'". So the first
+	// missing package of a session latched the engine into permanent-critical-error mode.
+	//
+	// ⚠ UObject::~UObject reads the flag (UnObj.cpp:351) and, when set, skips its cleanup entirely: the
+	// object stays in the object table as a dangling pointer and its index never returns to the free list.
+	// Anything that walks the table afterwards reads freed memory.
+	//
+	// A genuinely fatal error does not rely on this -- appError() sets GIsCriticalError itself before it
+	// throws (see above in this file) -- so setting it here only ever mislabelled the recoverable case.
 
 	char TempStr[4096];
 	GET_VARARGS( TempStr, Fmt );
 
-	static INT Count=0;
-	if( Count++ )
-		strncat( GErrorHist, " <- ", ARRAY_COUNT(GErrorHist) - 1 );
-	strncat( GErrorHist, TempStr, ARRAY_COUNT(GErrorHist) - 1 );
+	// History chain only for a REAL error: otherwise every recovered load failure in the session appends to
+	// GErrorHist forever and the eventual crash report is mostly noise from packages that loaded fine.
+	if( GIsCriticalError )
+	{
+		static INT Count=0;
+		if( Count++ )
+			strncat( GErrorHist, " <- ", ARRAY_COUNT(GErrorHist) - 1 );
+		strncat( GErrorHist, TempStr, ARRAY_COUNT(GErrorHist) - 1 );
+	}
 
 	debugf( NAME_Critical, TempStr );
 }

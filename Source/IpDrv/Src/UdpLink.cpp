@@ -7,6 +7,9 @@ Revision history:
 =============================================================================*/
 
 #include "IpDrvPrivate.h"
+// ufront 2.38 — the synthetic LAN (engine-local WebRTCDrv). Header only: the call is resolved at the
+// final --whole-archive link, so IpDrv does not link WebRTCDrv and there is no module cycle.
+#include "WebRTCLan.h"
 
 /*-----------------------------------------------------------------------------
 	AUdpLink implementation.
@@ -31,6 +34,9 @@ AUdpLink::AUdpLink()
 void AUdpLink::Destroy()
 {
 	guard(AUdpLink::Destroy);
+#ifdef __EMSCRIPTEN__
+	WebRTCLan_Unbind( this );   // ufront 2.38 — drop any queued synthetic packets for this link
+#endif
 	if( GetSocket() )
 		closesocket(GetSocket());
 	Super::Destroy();
@@ -61,6 +67,22 @@ void AUdpLink::execBindPort( FFrame& Stack, BYTE*& Result )
 	guard(AUdpLink::execBindPort);
 	P_GET_INT_OPT(Port,0);
 	P_FINISH;
+#ifdef __EMSCRIPTEN__
+	// ★ ufront 2.38 — a browser has no UDP, so there is no socket to bind and no point pretending
+	// otherwise halfway. Bind is answered by the synthetic LAN instead: report success and register the
+	// link, and Tick is served from WebRTCLan.
+	//
+	// ⚠ This REPLACES the bind rather than falling back after it, because ClientBeaconReceiver treats a
+	// zero return as fatal ("beacon port in use") and never starts — and under Emscripten's virtual
+	// socket layer the real result is not reliably one thing or the other.
+	{
+		static INT GNextSyntheticPort = 40000;
+		const INT Bound = Port ? Port : GNextSyntheticPort++;
+		WebRTCLan_Bind( this, Bound );
+		*(DWORD*)Result = 1;
+		return;
+	}
+#endif
 	if( GInitialized )
 	{
 		if( GetSocket() == 0 )
@@ -106,6 +128,13 @@ void AUdpLink::execSendText( FFrame& Stack, BYTE*& Result )
 	P_GET_STRUCT(FIpAddr,IpAddr);
 	P_GET_STRING(Str);
 	P_FINISH;
+#ifdef __EMSCRIPTEN__
+	// ufront 2.38 — hand the datagram to the synthetic LAN. ⚠ Success is ZERO here (v200 inverts the
+	// convention its UT99 descendant uses); returning 1 would make every send read as a failure.
+	WebRTCLan_Send( this, IpAddr.Addr, IpAddr.Port, Str );
+	*(DWORD*)Result = 0;
+	return;
+#endif
 	if( GetSocket() )
 	{
 		sockaddr_in Addr;
@@ -161,6 +190,26 @@ AUTOREGISTER_INTRINSIC( AUdpLink, INDEX_NONE, execSendBinary );
 UBOOL AUdpLink::Tick( FLOAT DeltaTime, enum ELevelTick TickType )
 {
 	guard(AUdpLink::Tick);
+
+#ifdef __EMSCRIPTEN__
+	// ufront 2.38 — deliver synthetic LAN packets through the STOCK receive path, so
+	// ClientBeaconReceiver's own handler, its beacon table and the menu that reads it all run
+	// unmodified. Outside the GetSocket() guard on purpose: on the web there is no socket at all
+	// (see execBindPort).
+	{
+		FIpAddr From;
+		FString Text;
+		DWORD Addr = 0;
+		INT   Port = 0;
+		while( WebRTCLan_NextReply( this, &Addr, &Port, Text ) )
+		{
+			From.Addr = Addr;
+			From.Port = Port;
+			if( UdpMode==UDP_Text )
+				eventReceivedText( From, *Text );
+		}
+	}
+#endif
 
 	// Dispatch received data.
 	if( GetSocket() )
