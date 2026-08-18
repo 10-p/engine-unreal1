@@ -66,6 +66,7 @@ struct FLanServer
 {
 	FString Room, Name, Map;
 	INT     Players, MaxPlayers;
+	FLanServer() : Players(0), MaxPlayers(0) {}
 };
 
 static TArray<FString>    GRooms;      // append-only: index -> room, stable for the session
@@ -186,7 +187,12 @@ static void PumpDiscovery()
 		webrtc_get_server_map( i, mapBuf, sizeof(mapBuf) );
 		webrtc_get_server_gametype( i, gtBuf, sizeof(gtBuf) );
 
-		FLanServer& S = GServers( GServers.AddZeroed() );
+		// ⚠ A LOCAL, THEN AddItem — see the ut99 sibling. Filling a reference returned by AddZeroed()
+		// is the UE1 idiom for a struct of PODs; FLanServer holds FStrings, so that combination zeroes
+		// an element, assigns strings into it, and holds a reference across a possible reallocation.
+		// On ut99 it crashed the module with `memory access out of bounds` on the tick discovery was
+		// drained — and then presented as an empty server list, because the module was gone.
+		FLanServer S;
 		S.Room       = Room;
 		S.Name       = nameBuf[0] ? FString(nameBuf) : Room;
 		S.Map        = mapBuf[0]  ? FString(mapBuf)  : FString("?");
@@ -194,8 +200,9 @@ static void PumpDiscovery()
 		S.MaxPlayers = webrtc_get_server_maxplayers( i );
 		if( S.MaxPlayers <= 0 )
 			S.MaxPlayers = 16;
-		RoomIndex( S.Room );   // reserve the index now, so the address is stable from first sight
-		debugf( NAME_DevNet, "[WebRTC-LAN] '%s' room=%s map=%s %i/%i", *S.Name, *S.Room, *S.Map, S.Players, S.MaxPlayers );
+		const FString Host = WebRTCLan_HostForRoom( *S.Room );   // also reserves the room's index
+		debugf( NAME_DevNet, "[WebRTC-LAN] '%s' room=%s map=%s %i/%i -> %s", *S.Name, *S.Room, *S.Map, S.Players, S.MaxPlayers, *Host );
+		GServers.AddItem( S );
 	}
 	debugf( NAME_DevNet, "[WebRTC-LAN] discovery done: %i server(s)", GServers.Num() );
 }
