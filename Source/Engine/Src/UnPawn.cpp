@@ -95,7 +95,16 @@ void APlayerPawn::execUpdateURL( FFrame& Stack, BYTE*& Result )
 	if( Eq )
 	{
 		*Eq = 0;
+		// ufront 2.39d — say what happened. The ONLY route to SetName is the viewport console
+		// (ULevel::Exec forwards to the NetDriver and nothing else, so ue_exec_command cannot reach a
+		// PlayerPawn exec), which the test harness cannot feed — so this line is how a real play session
+		// answers whether the rename reached the config at all, and under which key.
+		debugf( NAME_Log, "[ufront/profile] UpdateURL '%s' -> [DefaultPlayer] %s (default ini)", NewOption, Key );
 		GameEngine->LastURL.SaveURLConfig( "DefaultPlayer", Key );
+	}
+	else
+	{
+		debugf( NAME_Log, "[ufront/profile] UpdateURL '%s' has no '=' — nothing persisted", NewOption );
 	}
 	unguard;
 }

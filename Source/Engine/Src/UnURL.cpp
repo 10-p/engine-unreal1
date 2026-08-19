@@ -408,7 +408,13 @@ void FURL::SaveURLConfig( const char* Section, const char* Item, const char* Fil
 			continue;
 		*Value++ = 0;
 		if( appStricmp( Temp, Item )==0 )
+		{
+			// ⚠ Filename NULL means the DEFAULT ini — FConfigCache::FindConfig substitutes DefaultIni,
+			// which on this engine is Unreal.ini. There is no User.ini to write to here, and the one a
+			// retail tree ships is never read.
+			debugf( NAME_Log, "[ufront/profile] persist [%s] %s=%s -> %s", Section, Temp, Value, Filename ? Filename : "the default ini" );
 			SetConfigString( Section, Temp, Value, Filename );
+		}
 	}
 	unguard;
 }
