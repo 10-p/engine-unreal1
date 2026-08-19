@@ -164,6 +164,8 @@ class DLL_EXPORT UWebRTCNetDriver : public UNetDriver
 	FString	RoomName;
 	FString	ServerName;      // ?ServerName= for browser discovery
 	UBOOL	bIsListenServer;
+	// Set when a NEWER client driver has taken the one client transport slot from us. See Init/Destroy.
+	UBOOL	bDetached;
 	// Pipes the level told us to IGNORE (not refuse) — re-offered on a later Tick. See Tick().
 	TArray<INT>	ParkedAccepts;
 
@@ -171,12 +173,20 @@ class DLL_EXPORT UWebRTCNetDriver : public UNetDriver
 	void Destroy()
 	{
 		guard(UWebRTCNetDriver::Destroy);
-		debugf( NAME_Exit, "[WebRTC] Destroy: room='%s'", *RoomName );
+		debugf( NAME_Exit, "[WebRTC] Destroy: room='%s'%s", *RoomName, bDetached ? " (detached — transport left alone)" : "" );
 		// The parked pipes are about to be closed wholesale by webrtc_destroy(); just drop our list.
 		ParkedAccepts.Empty();
 		if( GClientDriver==this )
 			GClientDriver = NULL;
-		webrtc_destroy();
+		// ★★ A DEPARTING DRIVER MUST NOT DESTROY THE ARRIVING DRIVER'S TRANSPORT. webrtc_destroy() is
+		// GLOBAL. On a CLIENT the two drivers overlap: Init(connect) for the pending level runs FIRST and
+		// the old level's driver is destroyed LATER, inside LoadMap — so the old driver's teardown killed
+		// conn 0, which by then belonged to the new pending connection. The guest loaded the new map and
+		// then sat on "CONNECTING…" forever, and a rejoin from the menu hit exactly the same thing (only
+		// a page reload cleared it, because then there is no old driver to do the killing).
+		// The host does not have this problem — there the old driver is destroyed BEFORE Init(listen).
+		if( !bDetached )
+			webrtc_destroy();
 		Super::Destroy();
 		unguard;
 	}
@@ -213,6 +223,7 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 	{
 		// Client. URL.Host carries the room (HostID); the server registered as "<prefix>-<room>-srv".
 		bIsListenServer = 0;
+		bDetached       = 0;
 		RoomName = URL.Host;
 		// ★ ufront 2.38 — a join FROM "Find Local Servers" arrives as a dotted address, not a room: the
 		// stock menu can only carry an IPv4 string through to the travel URL. The synthetic LAN handed
@@ -245,6 +256,9 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 			// Index.unr?failed instead of the new map). It must simply go quiet: no sends, no receives,
 			// no transport polling — the level change destroys it a moment later anyway.
 			GClientDriver->GetServerConnection()->WebRTCConnId = -1;
+			// …and when that destroy comes, it must NOT call webrtc_destroy(): the transport it would
+			// tear down is now OURS. See Destroy().
+			GClientDriver->bDetached = 1;
 		}
 		GClientDriver = this;
 		webrtc_connect( *ServerPeerId );
@@ -259,6 +273,7 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 	{
 		// Listen server. Room + display name come from the travel URL options.
 		bIsListenServer = 1;
+		bDetached       = 0;
 		RoomName   = URL.GetOption( "room=", "default" );
 		ServerName = URL.GetOption( "ServerName=", "" );
 		debugf( NAME_DevNet, "[WebRTC] Init(listen): room='%s' name='%s'", *RoomName, *ServerName );

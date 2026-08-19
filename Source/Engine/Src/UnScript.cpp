@@ -910,14 +910,21 @@ void APlayerPawn::execClientTravel( FFrame& Stack, BYTE*& Result )
 	// server, and only for a LOCAL player. A listen host's ordinary local travels — `ClientTravel("?restart")`
 	// from GameInfo/PlayerPawn — still work, which a blanket "servers never client-travel locally" would
 	// have broken.
+	//
+	// ★★ AND IT SUPPRESSES THE URL, NOT THE TRAVEL. SetClientTravel does TWO independent jobs:
+	//     bItems -> EXPORT the pawn and its inventory into Player->TravelItems  (how items cross a map)
+	//     bURL   -> set Viewport->TravelURL/TravelType                          (the browse — the race)
+	// Skipping the whole call, as the first version of this fix did, silently threw the host's inventory
+	// away: the owner arrived on the new map with no weapons, armour or health. Only `bURL` may be
+	// dropped here; the item export is the other half of the SAME call and a coop level exit depends on it.
 	if( Player )
 	{
 		ALevelInfo* Info = XLevel ? XLevel->GetLevelInfo() : NULL;
 		const UBOOL bServer = Info && ( Info->NetMode==NM_ListenServer || Info->NetMode==NM_DedicatedServer );
-		if( bServer && *Info->NextURL && !Cast<UNetConnection>(Player) )
-			debugf( NAME_DevNet, "[ufront] suppressing local ClientTravel('%s') during server travel to '%s'", URL, Info->NextURL );
-		else
-			XLevel->Engine->SetClientTravel( Player, URL, 1, bItems, (ETravelType)TravelType );
+		const UBOOL bLocalDuringServerTravel = bServer && *Info->NextURL && !Cast<UNetConnection>(Player);
+		if( bLocalDuringServerTravel )
+			debugf( NAME_DevNet, "[ufront] local ClientTravel('%s') during server travel to '%s': carrying items, suppressing the browse", URL, Info->NextURL );
+		XLevel->Engine->SetClientTravel( Player, URL, !bLocalDuringServerTravel, bItems, (ETravelType)TravelType );
 	}
 
 	unguardexecSlow;
