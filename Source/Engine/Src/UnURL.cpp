@@ -387,6 +387,33 @@ void FURL::GetConfigOptions( const char* Section, const char* Filename )
 }
 
 //
+// Persist ONE of this URL's options into a config section — the WRITE counterpart of GetConfigOptions.
+//
+// ★★ ufront 2.39d — v200 SHIPPED ONLY THE READ HALF. `UGameEngine::Init` pulls `[DefaultPlayer]` into
+// DefaultURL and nothing ever writes back, so a player who renamed themselves in game kept the name for
+// that session and lost it on the next launch — and the launcher, which reads the engine's own ini to
+// show the current name, could never see it at all. v400 has exactly this call and its `UpdateURL` uses
+// it (`SaveURLConfig(TEXT("DefaultPlayer"), *NewOption, TEXT("User"))`), so the same shape is provided
+// here and the two engines behave the same way.
+//
+void FURL::SaveURLConfig( const char* Section, const char* Item, const char* Filename ) const
+{
+	guard(FURL::SaveURLConfig);
+	for( INT i=0; i<Op.Num(); i++ )
+	{
+		char Temp[1024];
+		appStrncpy( Temp, *Op(i), ARRAY_COUNT(Temp) );
+		char* Value = appStrstr( Temp, "=" );
+		if( !Value )
+			continue;
+		*Value++ = 0;
+		if( appStricmp( Temp, Item )==0 )
+			SetConfigString( Section, Temp, Value, Filename );
+	}
+	unguard;
+}
+
+//
 // See if the URL contains an option string.
 //
 UBOOL FURL::HasOption( const char* Test ) const

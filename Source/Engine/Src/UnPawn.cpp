@@ -77,7 +77,26 @@ void APlayerPawn::execUpdateURL( FFrame& Stack, BYTE*& Result )
 	P_GET_STRING(NewOption);
 	P_FINISH;
 
-	((UGameEngine*)GetLevel()->Engine)->LastURL.AddOption(NewOption);
+	UGameEngine* GameEngine = (UGameEngine*)GetLevel()->Engine;
+	GameEngine->LastURL.AddOption(NewOption);
+	// ★★ ufront 2.39d — AND PERSIST IT, which v200 never did. This only ever touched the in-memory
+	// LastURL, so a player renaming themselves in game (`PlayerPawn.SetName` -> `UpdateURL "Name=<x>"`)
+	// kept it for the session and lost it on the next launch; the launcher, which reads the engine's own
+	// ini to show the current name, could never see it either.
+	//
+	// v400 does exactly this, gated on a `bSaveDefault` flag its script passes. v200's script signature
+	// takes ONE combined "Key=Value" string and has no such flag — and the .u is frozen retail, so it
+	// cannot gain one. Persisting unconditionally is right here anyway: every v200 caller of UpdateURL
+	// (name, skin, face, class) is a `[DefaultPlayer]` PROFILE field, which is precisely the set v400
+	// passes bSaveDefault=true for.
+	char Key[1024];
+	appStrncpy( Key, NewOption, ARRAY_COUNT(Key) );
+	char* Eq = appStrstr( Key, "=" );
+	if( Eq )
+	{
+		*Eq = 0;
+		GameEngine->LastURL.SaveURLConfig( "DefaultPlayer", Key );
+	}
 	unguard;
 }
 AUTOREGISTER_INTRINSIC( APlayerPawn, AI_UpdateURL, execUpdateURL);
