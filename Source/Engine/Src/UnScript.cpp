@@ -877,8 +877,48 @@ void APlayerPawn::execClientTravel( FFrame& Stack, BYTE*& Result )
 	P_GET_UBOOL(bItems);
 	P_FINISH;
 
+	// ★★ ufront 2.39 — A SERVER'S OWN PLAYER MUST NOT CLIENT-TRAVEL DURING A SERVER TRAVEL.
+	//
+	// The owner's report: with Host/Listen enabled, walking into a level exit RELOADS THE CURRENT MAP
+	// forever instead of changing level. Offline the same map change works — and that difference is the
+	// whole diagnosis, because it is an ORDERING bug that only a server can hit:
+	//
+	//   GameInfo.ProcessServerTravel (frozen script) notifies EVERY PlayerPawn with
+	//       P.ClientTravel( Level.GetAddressURL(), TRAVEL_Relative, bItems )
+	//   — including, on a listen server, the HOST'S OWN player, and the URL it sends is the server's own
+	//   address, i.e. the map already loaded. That lands in Viewport->TravelURL (SetClientTravel below).
+	//
+	//   UGameEngine::Tick then runs two blocks IN THIS ORDER:
+	//       1. ServerTravel  — only when NextSwitchCountdown <= 0
+	//       2. ClientTravel  — immediately, if Viewports(0)->TravelURL != "" -> Browse(TravelURL); return;
+	//
+	//   ULevel::Listen sets NextSwitchCountdown = NetDriver->ServerTravelPause (UnLevel.cpp:419), so on a
+	//   SERVER block 1 is still counting down while block 2 fires at once: the host browses its own
+	//   address, the level is torn down, NextURL dies with it, and the travel never happens. Offline there
+	//   is no net driver, the script zeroes the countdown itself, block 1 wins, and it all works.
+	//
+	// ⚠ The engine ALREADY tries to defend against this — the ServerTravel block clears the local
+	// viewport's TravelURL before browsing — but that code never gets to run. The defence is downstream of
+	// the race.
+	//
+	// v400 fixes it in script, which is not available to us here (the .u packages are frozen retail):
+	//     if( NetConnection(P.Player)!=None ) P.ClientTravel( URL, ... );   // REMOTE only
+	//     else                               P.PreClientTravel();          // local: notify, do not travel
+	// so the same rule is applied here, at the intrinsic.
+	//
+	// ⚠ DELIBERATELY NARROW: only while a server travel is actually pending (`NextURL` set), only on a
+	// server, and only for a LOCAL player. A listen host's ordinary local travels — `ClientTravel("?restart")`
+	// from GameInfo/PlayerPawn — still work, which a blanket "servers never client-travel locally" would
+	// have broken.
 	if( Player )
-		XLevel->Engine->SetClientTravel( Player, URL, 1, bItems, (ETravelType)TravelType );
+	{
+		ALevelInfo* Info = XLevel ? XLevel->GetLevelInfo() : NULL;
+		const UBOOL bServer = Info && ( Info->NetMode==NM_ListenServer || Info->NetMode==NM_DedicatedServer );
+		if( bServer && *Info->NextURL && !Cast<UNetConnection>(Player) )
+			debugf( NAME_DevNet, "[ufront] suppressing local ClientTravel('%s') during server travel to '%s'", URL, Info->NextURL );
+		else
+			XLevel->Engine->SetClientTravel( Player, URL, 1, bItems, (ETravelType)TravelType );
+	}
 
 	unguardexecSlow;
 }
