@@ -543,6 +543,18 @@ APlayerPawn* ULevel::SpawnPlayActor( UPlayer* Player, ENetRole RemoteRole, const
 			}
 		}
 	}
+	// ufront 2.39c — ⚠ A NAME MATCH OVERWRITES the caller's Items, so a player listed with an EMPTY entry
+	// arrives with nothing even though its viewport had items exported. Log both sides of that decision:
+	// "matched, 0 bytes" and "no match, kept N bytes" are completely different faults and used to look the
+	// same from the outside.
+	debugf
+	(
+		NAME_DevNet,
+		"[ufront/travel] arrive '%s': %i bytes of travel info (%i player(s) still listed)",
+		PlayerName ? PlayerName : "?",
+		Items.Length(),
+		TravelNames.Num()
+	);
 
 	// Handle inventory items.
 	Str = *Items;
@@ -568,7 +580,7 @@ APlayerPawn* ULevel::SpawnPlayActor( UPlayer* Player, ENetRole RemoteRole, const
 		}
 		else
 		{
-			debugf( NAME_Log, "SpawnPlayActor: Spawned travelling actor" );
+			debugf( NAME_Log, "SpawnPlayActor: Spawned travelling actor %s (%s)", ActorName, ClassName );
 			Accept = new(Accepted)FAcceptInfo(Spawned,ActorName);
 		}
 

@@ -1005,8 +1005,15 @@ void ExportTravel( FOutputDevice& Out, AActor* Actor )
 {
 	guard(ExportTravel);
 	check(Actor);
+	// ufront 2.39c — say what is and is not crossing the map. An item is only carried if bTravel is set
+	// AND its properties are CPF_Travel; a silent skip here is indistinguishable from "the travel lost it"
+	// anywhere downstream, which is exactly the report this was added to answer.
 	if( !Actor->bTravel )
+	{
+		debugf( NAME_DevNet, "[ufront/travel] SKIP  %s (%s) — bTravel=false", Actor->GetName(), Actor->GetClass()->GetPathName() );
 		return;
+	}
+	debugf( NAME_DevNet, "[ufront/travel] EXPORT %s (%s)", Actor->GetName(), Actor->GetClass()->GetPathName() );
 	Out.Logf( "Class=%s Name=%s\r\n{\r\n", Actor->GetClass()->GetPathName(), Actor->GetName() );
 	for( TFieldIterator<UProperty> It(Actor->GetClass()); It; ++It )
 	{
@@ -1061,6 +1068,16 @@ void UGameEngine::SetClientTravel( UPlayer* Player, const char* NextURL, UBOOL b
 				ExportTravel( CarryInfo, Inv );
 			Player->TravelItems = CarryInfo;
 		}
+		// ufront 2.39c — one summary line per player, so a log says at a glance who carried what.
+		debugf
+		(
+			NAME_DevNet,
+			"[ufront/travel] %s '%s': bItems=%i -> %i bytes of travel info",
+			Cast<UNetConnection>(Player) ? "remote" : "local",
+			Player->Actor ? Player->Actor->GetName() : "?",
+			(INT)bItems,
+			Player->TravelItems.Length()
+		);
 		if( bURL && Cast<UViewport>(Player) )
 		{
 			// Set next URL.
@@ -1148,8 +1165,29 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 				if( P && P->Player )
 				{
 					P->Player->TravelItems="";
-					if( Cast<UNetConnection>(P->Player) )
-						SetClientTravel( P->Player, GLevel->GetLevelInfo()->NextURL, 1, GLevel->GetLevelInfo()->bNextItems, TRAVEL_Relative );
+					// ★★ ufront 2.39c — EVERY player's items are exported here, not just the remote ones.
+					//
+					// v200 wiped TravelItems on the line above and then re-exported ONLY when the player
+					// was a UNetConnection, so a LISTEN HOST'S OWN player travelled with nothing: the
+					// owner arrived on the next map with no weapons, armour or health while the guests
+					// kept theirs. It is not recoverable downstream either — SpawnPlayActor prefers a
+					// TravelNames match over the viewport's own TravelItems, so the empty string here
+					// OVERWRITES whatever ClientTravel had already exported.
+					//
+					// v400 does it for every PlayerPawn (its "Export items and self" loop, with no
+					// connection test at all), which is the rule adopted here.
+					//
+					// ⚠ bURL is still 0 for a local player: we want the ITEMS, not the travel. Arming
+					// Viewport->TravelURL would re-enter the client-travel that the block below acts on
+					// — the map-reload loop of 2.39b. The line after this clears it regardless.
+					SetClientTravel
+					(
+						P->Player,
+						GLevel->GetLevelInfo()->NextURL,
+						Cast<UNetConnection>(P->Player) != NULL,
+						GLevel->GetLevelInfo()->bNextItems,
+						TRAVEL_Relative
+					);
 					if( Cast<UViewport>( P->Player ) )
 						Cast<UViewport>( P->Player )->TravelURL = "";
 					new(TravelNames)FString(P->PlayerName);
