@@ -1190,8 +1190,22 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 					);
 					if( Cast<UViewport>( P->Player ) )
 						Cast<UViewport>( P->Player )->TravelURL = "";
-					new(TravelNames)FString(P->PlayerName);
-					new(TravelItems)FString(P->Player->TravelItems);
+					// ★★ ufront 2.39c — THE LOCAL PLAYER IS NOT LISTED HERE, and that is the fix, not an
+					// omission. This list is keyed by PLAYER NAME, and every web player defaults to
+					// "Player", so entries collide. The local player never needs its own entry: it carries
+					// its items on its viewport (Viewport->TravelItems, consumed by SpawnPlayActor during
+					// LoadMap — which runs INSIDE Browse below, i.e. before this list is even assigned, so
+					// it could never match itself anyway). But the entry CAN be matched by somebody else,
+					// and it was: measured with a host and a guest both named "Player", the guest matched
+					// the HOST's entry and re-spawned the host's actors, while its own was left unclaimed.
+					// Distinct names hide the bug completely, which is why it survived the earlier runs.
+					// ⚠ Two REMOTE players sharing a name still collide with each other — that is UE1's
+					// name-keyed design and needs unique names.
+					if( !Cast<UViewport>( P->Player ) )
+					{
+						new(TravelNames)FString(P->PlayerName);
+						new(TravelItems)FString(P->Player->TravelItems);
+					}
 				}
 			}
 			debugf( "Server switch level: %s", GLevel->GetLevelInfo()->NextURL );
