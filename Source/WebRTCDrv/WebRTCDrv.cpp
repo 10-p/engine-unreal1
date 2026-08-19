@@ -119,7 +119,10 @@ class DLL_EXPORT UWebRTCConnection : public UNetConnection
 		if( OutNum>0 || Driver->Time-LastSendTime>Driver->KeepAliveTime )
 		{
 			LastSendTime = Driver->Time;
-			if( OutNum > 0 )
+			// WebRTCConnId < 0 means this connection has been DETACHED from the transport (a newer
+			// client driver took the one client slot — see UWebRTCNetDriver::Init). Drop its traffic
+			// rather than posting it into somebody else's session.
+			if( OutNum > 0 && WebRTCConnId >= 0 )
 				webrtc_send( WebRTCConnId, OutData, OutNum );
 			QueuedBytes += OutNum + 28; // ~UDP header, for the rate limiter (parity with UTcpipConnection)
 			OutNum = 0;
@@ -146,6 +149,13 @@ IMPLEMENT_CLASS(UWebRTCConnection);
 /*-----------------------------------------------------------------------------
 	UWebRTCNetDriver.
 -----------------------------------------------------------------------------*/
+class UWebRTCNetDriver;
+
+// ★ THE CLIENT HAS EXACTLY ONE TRANSPORT SLOT. The glue hands every client connect the same conn id (0),
+// so only one client driver can own the wire at a time. Tracked here so a second Init(connect) can take
+// the slot cleanly instead of silently sharing it. Server-side ids are allocated per peer and unaffected.
+static UWebRTCNetDriver* GClientDriver = NULL;
+
 class DLL_EXPORT UWebRTCNetDriver : public UNetDriver
 {
 	DECLARE_CLASS(UWebRTCNetDriver,UNetDriver,CLASS_Transient|CLASS_Config)
@@ -154,12 +164,18 @@ class DLL_EXPORT UWebRTCNetDriver : public UNetDriver
 	FString	RoomName;
 	FString	ServerName;      // ?ServerName= for browser discovery
 	UBOOL	bIsListenServer;
+	// Pipes the level told us to IGNORE (not refuse) — re-offered on a later Tick. See Tick().
+	TArray<INT>	ParkedAccepts;
 
 	// UObject interface.
 	void Destroy()
 	{
 		guard(UWebRTCNetDriver::Destroy);
 		debugf( NAME_Exit, "[WebRTC] Destroy: room='%s'", *RoomName );
+		// The parked pipes are about to be closed wholesale by webrtc_destroy(); just drop our list.
+		ParkedAccepts.Empty();
+		if( GClientDriver==this )
+			GClientDriver = NULL;
 		webrtc_destroy();
 		Super::Destroy();
 		unguard;
@@ -215,6 +231,22 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 		FString ServerPeerId;
 		ServerPeerId.Setf( "%s-%s-srv", WEBRTC_PEER_PREFIX, *RoomName );
 		debugf( NAME_DevNet, "[WebRTC] Init(connect): room='%s' -> peer '%s'", *RoomName, *ServerPeerId );
+		// ★ TAKE THE ONE CLIENT SLOT. A server travel calls Init(connect) again while the OLD level is
+		// still ticking and flushing — UE1 keeps you playing until the new level has loaded. On UDP the
+		// two connections have different local ports and coexist harmlessly; here they would share glue
+		// conn 0, so the departing level's driver goes on writing into the NEW session. Measured on a
+		// coop travel: it sprayed actor bunches at frame rate into the fresh login, and the server
+		// refused every one ("NotifyAcceptingChannel 2 1 ... Refused") until the join gave up.
+		if( GClientDriver && GClientDriver!=this && GClientDriver->GetServerConnection() )
+		{
+			debugf( NAME_DevNet, "[WebRTC] Init(connect): detaching the previous client connection (one transport slot)" );
+			// ⚠ DETACHED, NOT CLOSED. Marking it USOCK_Closed makes the engine treat the departing
+			// level as "connection lost" and abort the travel outright (measured: the guest landed on
+			// Index.unr?failed instead of the new map). It must simply go quiet: no sends, no receives,
+			// no transport polling — the level change destroys it a moment later anyway.
+			GClientDriver->GetServerConnection()->WebRTCConnId = -1;
+		}
+		GClientDriver = this;
 		webrtc_connect( *ServerPeerId );
 
 		// Pending server connection + control channel (channel 0) — UE1's UTcpNetDriver creates it here
@@ -251,25 +283,57 @@ void UWebRTCNetDriver::Tick()
 	BYTE Data[UNetConnection::MAX_PACKET_SIZE];
 
 	// Server: accept newly-opened peer connections.
+	//
+	// ★ ACCEPTC_Ignore IS NOT A REFUSAL. ULevel::NotifyAcceptingConnection (UnLevel.cpp) returns it for
+	// every incoming connection while a server travel is pending (`NextURL` set) — i.e. for the whole
+	// ServerTravelPause window. On UDP that means "drop this connect packet on the floor": nothing is
+	// torn down, the client simply keeps retrying and gets in once the new level is listening.
+	//
+	// Our transport is a PIPE, and closing it is a loud, visible event: the client's glue sees the data
+	// channel die, tears the peer down, reconnects, is ignored again, and the two sides livelock.
+	// Measured on a unreal1 coop travel: 306 connect/close rounds inside a ~6s pause, which left both
+	// ends' handshake state so far apart that the guest never rejoined at all.
+	//
+	// So park the pipe and re-offer it on a later Tick, leaving the transport untouched — the
+	// pipe-oriented equivalent of dropping the packet. ⚠ The parked ids must be re-offered BEFORE
+	// draining new arrivals, or a client that has been waiting loses its place to a newer one.
+	TArray<INT> Incoming = ParkedAccepts;
+	ParkedAccepts.Empty();
 	INT NewConnId;
 	while( (NewConnId = webrtc_accept_connection()) > 0 )
+		Incoming.AddItem( NewConnId );
+
+	for( INT i=0; i<Incoming.Num(); i++ )
 	{
-		if( Notify->NotifyAcceptingConnection() != ACCEPTC_Accept )
+		INT ConnId = Incoming(i);
+		// The client may have given up (or the page closed) while we were ignoring it.
+		if( webrtc_get_connection_state( ConnId ) == WEBRTC_STATE_CLOSED )
+			continue;
+		EAcceptConnection Acc = Notify->NotifyAcceptingConnection();
+		if( Acc == ACCEPTC_Ignore )
 		{
-			webrtc_close( NewConnId );
+			ParkedAccepts.AddItem( ConnId );
 			continue;
 		}
-		UWebRTCConnection* Conn = new UWebRTCConnection( NewConnId, this, USOCK_Open, 0 );
-		Conn->URL.Host.Setf( "webrtc:%i", NewConnId );
+		if( Acc != ACCEPTC_Accept )
+		{
+			webrtc_close( ConnId );
+			continue;
+		}
+		UWebRTCConnection* Conn = new UWebRTCConnection( ConnId, this, USOCK_Open, 0 );
+		Conn->URL.Host.Setf( "webrtc:%i", ConnId );
 		Notify->NotifyAcceptedConnection( Conn );
 		Connections.AddItem( Conn );
-		debugf( NAME_DevNet, "[WebRTC] Accepted connection connId=%i (clients=%i)", NewConnId, Connections.Num() );
+		debugf( NAME_DevNet, "[WebRTC] Accepted connection connId=%i (clients=%i)", ConnId, Connections.Num() );
 	}
 
 	// Poll receive on the client's server connection + all server-side client connections.
 	// (Do NOT promote the pending server connection to Open here — the engine's join flow owns that,
 	// like the native driver; we only surface a dead transport as USOCK_Closed.)
-	if( GetServerConnection() )
+	// A DETACHED connection (WebRTCConnId < 0) has had the client transport slot taken from it by a
+	// newer driver — see Init. Poll nothing for it: asking the glue about a connId it no longer owns
+	// would report CLOSED and the engine would treat the departing level as "connection lost".
+	if( GetServerConnection() && GetServerConnection()->WebRTCConnId >= 0 )
 	{
 		UWebRTCConnection* SC = GetServerConnection();
 		if( webrtc_get_connection_state( SC->WebRTCConnId ) == WEBRTC_STATE_CLOSED && SC->State != USOCK_Closed )
