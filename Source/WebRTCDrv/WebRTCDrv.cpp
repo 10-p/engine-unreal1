@@ -276,11 +276,34 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 		bDetached       = 0;
 		RoomName   = URL.GetOption( "room=", "default" );
 		ServerName = URL.GetOption( "ServerName=", "" );
+
+		// ★★ ufront 2.40 — WHEN THE URL DOES NOT SAY, ASK OUR OWN CONFIG. A room now holds SEVERAL
+		// servers, and the transport identifies one as `<room>_<slug of the server name>` — so the name is
+		// no longer decoration, it is half of the address other players dial. The stock in-game LISTEN
+		// path sends a travel URL with neither option, so without this every menu-hosted game registers
+		// under a bare room and two of them in one room collide on the broker.
+		//
+		// ⚠ THIS ENGINE HAS NO GameReplicationInfo, so unlike its siblings there is no game-owned
+		// `ServerName` to read. The driver's OWN config section is the honest home for a setting only the
+		// driver uses — `UWebRTCNetDriver` is CLASS_Config, so this is its section by construction. The
+		// launcher seeds it with `-ini:` and the engine persists it, exactly as the others do; the point is
+		// that the value lives in the engine's config and is read AT LISTEN TIME, so nothing can hold a
+		// stale copy of it.
+		if( !ServerName.Length() )
+		{
+			char Cfg[256] = "";
+			if( GetConfigString( "WebRTCDrv.WebRTCNetDriver", "ServerName", Cfg, ARRAY_COUNT(Cfg) ) && Cfg[0] )
+				ServerName = Cfg;
+		}
+
 		debugf( NAME_DevNet, "[WebRTC] Init(listen): room='%s' name='%s'", *RoomName, *ServerName );
 		// ufront 2.38 — tell the synthetic LAN which room is OURS, so a host browsing its own server
 		// list does not find itself and try to connect a peer to itself.
 		WebRTCLan_SetLocalRoom( *RoomName );
-		webrtc_init_listen( *RoomName );
+		// `room/serverName` — the transport slugs the name and builds `<prefix>-<room>_<slug>-srv`. The
+		// separator is a `/` because a server name may contain anything, including the `_` the peer id uses.
+		FString ListenKey = ServerName.Length() ? (RoomName + FString("/") + ServerName) : RoomName;
+		webrtc_init_listen( *ListenKey );
 	}
 
 	return 1;
