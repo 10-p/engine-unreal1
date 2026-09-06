@@ -99,18 +99,31 @@ void UGameEngine::Init()
 		Render->Init( this );
 	}
 
+	// Create default URL.
+	FURL DefaultURL;
+	DefaultURL.GetConfigOptions( "DefaultPlayer" );
+
 	// Load the entry level.
 	char Error256[256];
 	if( Client )
 	{
-		if( !LoadMap( FURL("Entry"), NULL, Error256 ) )
+		// ★★ ufront 2.53 — SEEDED WITH DefaultURL, WHICH v200 DID NOT DO, AND WHICH v400 DOES NOT NEED.
+		// The Entry level is where the main menu (and its Player Setup screen) lives, and the pawn spawned
+		// into it takes its name from THIS url — `SpawnPlayActor` reads `URL.GetOption("NAME=", ...)`,
+		// defaulting to `FURL::DefaultName`, i.e. `[URL] Name=Player`. A bare `FURL("Entry")` therefore
+		// put every player in the menu as "Player" no matter what the config said.
+		//
+		// ⚠ THIS PART HAS NO v400 COUNTERPART, deliberately. UT99's menu does not read the pawn at all —
+		// it calls the `GetDefaultURL` native (UnPawn.cpp) to read `[DefaultPlayer]` straight from the
+		// config. This engine has no such native, and its frozen retail script never calls one:
+		// `Engine.u`/`UnrealI.u` contain `UpdateURL`, `SetName` and `ChangeName`, and no `GetDefaultURL`.
+		// So the only way the menu can show the right name here is for the Entry pawn to BE spawned with
+		// it, which is what this does. Moving the DefaultURL construction above the load is the whole
+		// change; nothing else about the entry path is touched.
+		if( !LoadMap( FURL(&DefaultURL,"Entry",TRAVEL_Partial), NULL, Error256 ) )
 			appErrorf( LocalizeError("LoadEntry"), Error256 );
 		Exchange( GLevel, GEntry );
 	}
-
-	// Create default URL.
-	FURL DefaultURL;
-	DefaultURL.GetConfigOptions( "DefaultPlayer" );
 
 	// Enter initial world.
 	char AutoURL[4096]="";
@@ -125,11 +138,25 @@ void UGameEngine::Init()
 	FURL URL( &DefaultURL, AutoURL, TRAVEL_Partial );
 	if( !URL.Valid )
 		appErrorf( LocalizeError("InvalidUrl"), AutoURL );
-	UBOOL Success = Browse( FURL(&LastURL,AutoURL,TRAVEL_Partial), Error256 );
+	// ★★ ufront 2.53 — BROWSE THE URL WE JUST BUILT. v200 built `URL` from DefaultURL, checked its
+	// `Valid` flag, and then threw the whole thing away to browse a url built from `LastURL` instead —
+	// which at this point is the default-constructed `LastURL("")` from the constructor, so its Name
+	// option is `FURL::DefaultName`, i.e. `[URL] Name=Player` out of Unreal.ini.
+	//
+	// That is why the launcher's generated name never reached this engine while it worked on the other
+	// three: the `-ini:` seed lands in `[DefaultPlayer]` correctly, `GetConfigOptions` reads it into
+	// DefaultURL correctly, and then the only url that carried it was discarded. `SpawnPlayActor` reads
+	// `URL.GetOption("NAME=", *FURL::DefaultName)`, so every player logged in as "Player" — and in a coop
+	// game every player having the SAME name is exactly the collision the random-name feature exists to
+	// prevent (UE1 keys its map-travel inventory table by player name; measured in 2.39c).
+	//
+	// engine-ut99's UnGame.cpp does `Browse( URL, NULL, Error )` and uses DefaultURL for the fallback
+	// below. This now matches it line for line.
+	UBOOL Success = Browse( URL, Error256 );
 
 	// If waiting for a network connection, go into the starting level.
 	if( !Success && !Error256[0] && appStricmp( AutoURL, *FURL::DefaultLocalMap )!=0 )
-		Success = Browse( FURL(&LastURL,*FURL::DefaultLocalMap,TRAVEL_Partial), Error256 );
+		Success = Browse( FURL(&DefaultURL,*FURL::DefaultLocalMap,TRAVEL_Partial), Error256 );
 
 	// Handle failure.
 	if( !Success )

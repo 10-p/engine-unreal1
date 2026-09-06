@@ -71,7 +71,10 @@ void APlayerPawn::SetPlayer( UPlayer* InPlayer )
 	eventPossess();
 
 	// Debug message.
-	debugf( NAME_Log, "Possessed PlayerPawn: %s", GetFullName() );
+	// ufront 2.53 — say WHICH PLAYER, not just which object. The engine's own `PlayerName` is what the
+	// Player Setup menu shows and what a coop server sees; the class name says nothing about it, and a
+	// name that never made it out of the config looks identical to one that did.
+	debugf( NAME_Log, "Possessed PlayerPawn: %s [ufront/profile] PlayerName='%s'", GetFullName(), PlayerName );
 
 	unguard;
 }

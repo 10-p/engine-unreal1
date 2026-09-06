@@ -518,6 +518,30 @@ APlayerPawn* ULevel::SpawnPlayActor( UPlayer* Player, ENetRole RemoteRole, const
 	if( !Actor )
 		return NULL;
 
+	// ★★ ufront 2.53 — APPLY THE URL'S NAME, BECAUSE v200's FROZEN SCRIPT DOES NOT.
+	//
+	// `eventLogin` above receives the full option string — `?Name=Player-a1b2c3?Class=…`, confirmed in the
+	// log — and v200's retail `GameInfo.Login` simply does not carry it onto the pawn: measured, the URL
+	// said `Name=Player-d9d8ff` and `Actor->PlayerName` came back as `Player`. `PlayerName` is what the
+	// Player Setup menu displays and what another player sees, so every install showed the same name.
+	//
+	// ⚠ THIS IS WHY THE LAUNCHER'S RANDOM NAME NEVER WORKED HERE WHILE IT WORKED ON THE OTHER THREE, AND
+	// IT IS NOT THE SAME BUG AS THE URL ONE FIXED IN UnGame.cpp — that one stopped the name reaching the
+	// URL at all; this one drops it between the URL and the pawn. Both had to go.
+	//
+	// ⚠ ONLY WHEN THE SCRIPT LEFT THE SHIPPED DEFAULT. A script that DID choose a name — a real network
+	// login, or an in-game rename through SetName/ChangeName — must always win, so this fills a gap
+	// rather than overriding a decision.
+	//
+	// ⚠ `PlayerName` is a CHAR[20] on the pawn (EngineClasses.h), not an FString: bound the copy.
+	const char* WantName = URL.GetOption( "NAME=", NULL );
+	if( WantName && *WantName && appStricmp( Actor->PlayerName, *FURL::DefaultName )==0 )
+	{
+		appStrncpy( Actor->PlayerName, WantName, ARRAY_COUNT(Actor->PlayerName) );
+		debugf( NAME_Log, "[ufront/profile] login name '%s' applied to the pawn (v200 script leaves it '%s')",
+			Actor->PlayerName, *FURL::DefaultName );
+	}
+
 	// Possess the newly-spawned player.
 	Actor->SetPlayer( Player );
 	Actor->Role       = ROLE_Authority;
