@@ -407,6 +407,14 @@ if(BUILD_NULLSOUNDDRV)
 endif()
 
 if(BUILD_NOPENALDRV)
+  if(EMSCRIPTEN)
+    # ufront 2.61: openal-soft instead of Emscripten's built-in OpenAL (5.1/HRTF/EFX reverb on the web).
+    # EAX OFF: NOpenALDrv never calls the EAX API — its "EAX" reverb is EFX's AL_EFFECT_EAXREVERB, which
+    # openal-soft always has. openal-soft throws for every AL error, so its objects are -fexceptions and the
+    # link enables catching (Unreal/CMakeLists.txt); the engine's own objects are unchanged (see above).
+    include(OpenALSoftWeb)
+    ufront_openal_soft_web(EAX OFF)
+  endif()
   add_subdirectory(NOpenALDrv)
   list(APPEND INSTALL_TARGETS NOpenALDrv)
 endif()

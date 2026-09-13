@@ -53,7 +53,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOM
   # Web: Emscripten's built-in OpenAL. Native Linux: keep the parent's system -lopenal. Windows: the
   # prebuilt OpenAL Soft import library the parent's OpenALMingw.cmake set. All three: fetched libxmp.
   if(EMSCRIPTEN)
-    set(OPENAL_LIBRARY "-lopenal")
+    # ufront 2.61: openal-soft, built by the parent (cmake/OpenALSoftWeb.cmake) — was Emscripten's -lopenal.
+    set(OPENAL_LIBRARY OpenAL)
   endif()
   set(LIBXMP_LIBRARY xmp_static)
 endif()

@@ -128,9 +128,13 @@ if(EMSCRIPTEN)
     # ⚠ 2.17 §C found this exact fact and mis-read it, concluding the flag would only ACQUIRE a wasteful
     # per-frame blit. That assumed the implicit path worked. The trade is "blit vs showing 1 frame in 80".
     -sOFFSCREEN_FRAMEBUFFER
-    # main() itself is one of these; the engine spawns no others on the web (UnThread's music thread is
-    # NOPENAL_WEB-guarded off), so a small pool avoids paying for workers nothing will use.
-    -sPTHREAD_POOL_SIZE=2
+    # main() itself is one of these; UnThread's music thread is NOPENAL_WEB-guarded off. ufront 2.61: openal-soft
+    # adds TWO — the web backend's mixer thread and the event thread every context starts — so 2 -> 4. A thread
+    # created with the pool empty still starts, but only once the main thread has spun up a worker.
+    -sPTHREAD_POOL_SIZE=4
+    # ufront 2.61: openal-soft reports every AL error by throwing and catching it, so catching must be ON (the
+    # first AL error would otherwise abort). Only its objects are -fexceptions; see Source/CMakeLists.txt.
+    -sNO_DISABLE_EXCEPTION_CATCHING
     "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_close','_ue_exec_command','_wasmfs_create_jsimpl_backend','_wasmfs_create_file','_ufront_wasmfs_register','_ufront_wasmfs_set_pending']"
     # PThread (2.13.2): the host needs the worker list to hand the FS sync channel to the engine thread.
     # Runtime methods are NOT on Module unless exported — omitting it makes the host silently no-op.
