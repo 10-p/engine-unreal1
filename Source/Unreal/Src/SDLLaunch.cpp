@@ -549,9 +549,9 @@ void MainLoop( UEngine* Engine )
 		// ULevel::Tick then FLOORS DeltaSeconds at 0.001s (UnLevTic.cpp) -> above 1000 fps the world
 		// advances MORE time than really elapsed and the whole game runs fast. On this box the web client
 		// is nowhere near vsync-bound since 2.13.7's unclamped MessagePort yield, so the ceiling is real
-		// hardware, not the browser. A net/demo cap (GetMaxTickRate>0) still wins; otherwise the launcher's
-		// Advanced "Frame rate limit" (-FRAMERATECAP=<n>) wins over [Engine.Engine] FrameRateCap in the ini,
-		// and the default is 120. <=0 means uncapped, restoring the old behaviour.
+		// hardware, not the browser. A net/demo cap (GetMaxTickRate>0) still wins; otherwise [Engine.Engine]
+		// FrameRateCap in the ini (the launcher's Advanced "Frame rate limit" writes it through -ini:), and the
+		// default is 120. <=0 means uncapped, restoring the old behaviour.
 		FLOAT Cap = (FLOAT)MaxTickRate;
 		if( Cap <= 0.f )
 		{
@@ -560,9 +560,9 @@ void MainLoop( UEngine* Engine )
 			{
 				FLOAT V = 0.f;
 				char Buf[64];
-				if( Parse( appCmdLine(), "FRAMERATECAP=", V ) )
-					ClientCap = V;
-				else if( GetConfigString( "Engine.Engine", "FrameRateCap", Buf, ARRAY_COUNT(Buf) ) )
+				// ufront 2.61: the ini is the ONLY home — the 2.19 -FRAMERATECAP=<n> switch is gone. The launcher sets
+				// this key with -ini:System:[Engine.Engine]:FrameRateCap=<n>, only when the player changed it.
+				if( GetConfigString( "Engine.Engine", "FrameRateCap", Buf, ARRAY_COUNT(Buf) ) )
 					ClientCap = appAtof( Buf );
 				else
 					ClientCap = 120.f;
