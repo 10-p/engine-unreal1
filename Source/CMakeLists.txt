@@ -42,6 +42,7 @@ option(BUILD_NOPENGLDRV "Build NOpenGLDrv" OFF)
 option(BUILD_NOPENGLESDRV "Build NOpenGLESDrv" ON)
 option(BUILD_NULLSOUNDDRV "Build SoundDrv (Null driver)" ON)
 option(BUILD_NOPENALDRV "Build NOpenALDrv" ON)
+option(UT_BUNDLED_OPENAL "Native Linux: build openal-soft (the ufront fork) and ship libopenal.so.1 beside the binary, instead of linking whatever libopenal the system has (ufront 2.70)" ON)
 option(BUILD_WINDRV "Build WinDrv" OFF)
 option(BUILD_STATIC "Link everything into a single binary" OFF)
 
@@ -330,6 +331,10 @@ if(BUILD_NOPENALDRV)
         # Soft's official prebuilt Windows binaries (same pattern as SDL2Mingw). Real audio, because a
         # null audio subsystem is not a usable default.
         include(OpenALMingw)
+      elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UT_BUNDLED_OPENAL)
+        # ufront 2.70: native Linux links the fork's own libopenal.so.1 (the `OpenAL` target, built below by
+        # cmake/OpenALSoft.cmake NATIVE and copied beside the binary), not the system library.
+        set(OPENAL_LIBRARY OpenAL)
       else()
         set(OPENAL_LIBRARY "-lopenal")
       endif()
@@ -412,8 +417,13 @@ if(BUILD_NOPENALDRV)
     # EAX OFF: NOpenALDrv never calls the EAX API — its "EAX" reverb is EFX's AL_EFFECT_EAXREVERB, which
     # openal-soft always has. openal-soft throws for every AL error, so its objects are -fexceptions and the
     # link enables catching (Unreal/CMakeLists.txt); the engine's own objects are unchanged (see above).
-    include(OpenALSoftWeb)
-    ufront_openal_soft_web(EAX OFF)
+    include(OpenALSoft)
+    ufront_openal_soft(PLATFORM WEB EAX OFF)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UT_BUNDLED_OPENAL)
+    # ufront 2.70: native Linux carries the same fork, SHARED, beside the binary (cmake/OpenALSoft.cmake) —
+    # the system libopenal is whatever the distro built, and the Galaxy reverb effect lives in the fork.
+    include(OpenALSoft)
+    ufront_openal_soft(PLATFORM NATIVE EAX OFF)
   endif()
   add_subdirectory(NOpenALDrv)
   list(APPEND INSTALL_TARGETS NOpenALDrv)
