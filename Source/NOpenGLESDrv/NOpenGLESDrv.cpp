@@ -176,7 +176,7 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 	{
 		glGenBuffers( 1, &GLBuf );
 		glBindBuffer( GL_ARRAY_BUFFER, GLBuf );
-		glBufferData( GL_ARRAY_BUFFER, VtxDataSize, (void*)VtxData, GL_DYNAMIC_DRAW );
+		glBufferData( GL_ARRAY_BUFFER, VtxDataSize * sizeof(FLOAT), (void*)VtxData, GL_DYNAMIC_DRAW ); // ufront 2.72: bytes, not floats (VAO path; web has UseVAO off)
 	}
 
 	// ufront 2.19: anisotropic filtering — a real numeric control. Clamp to what the driver advertises
