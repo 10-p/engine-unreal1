@@ -986,13 +986,15 @@ void UNOpenALAudioSubsystem::UpdateReverb( FPointRegion& Region )
 			alAuxiliaryEffectSloti( ReverbSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL );
 			if( ReverbKind == REVERB_GALAXY )
 			{
-				// ufront 2.70: the zone -> Galaxy mapping exactly as UnGalaxy.cpp UpdateReverb handed it to
-				// glxSetSampleReverb (ut99-v400/Galaxy/Src/UnGalaxy.cpp): every ZoneInfo reverb property is used.
+				// ufront 2.73: the zone -> Galaxy mapping exactly as Unreal's own Galaxy wrapper handed it to
+				// glxSetSampleReverb (unreal1-v200/Galaxy/Src/Galaxy.cpp): Delay/500 and Gain/255 UNCLAMPED.
+				// (2.70 used UT99's UnGalaxy.cpp clamps, 0.001..0.340 s and 0.001..0.999; the effect is now
+				// Unreal's 1998 routine, which takes the whole byte range and reads a 0 s tap as the oldest cell.)
 				FLOAT Times[6], Gains[6];
 				for( INT i=0; i<6; i++ )
 				{
-					Times[i] = Clamp( ReverbZone->Delay[i]/500.0f, 0.001f, 0.340f );
-					Gains[i] = Clamp( ReverbZone->Gain[i]/255.0f, 0.001f, 0.999f );
+					Times[i] = ReverbZone->Delay[i]/500.0f;
+					Gains[i] = ReverbZone->Gain[i]/255.0f;
 				}
 				alEffectf ( ReverbEffect, AL_GALAXY_REVERB_VOLUME, ReverbZone->MasterGain/255.0f );
 				alEffectf ( ReverbEffect, AL_GALAXY_REVERB_HFDAMP, (FLOAT)Clamp( (INT)ReverbZone->CutoffHz, 0, 44100 ) );
