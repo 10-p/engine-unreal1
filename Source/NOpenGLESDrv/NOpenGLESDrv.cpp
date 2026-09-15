@@ -148,6 +148,14 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 #endif
 
 	debugf( NAME_Log, "Got OpenGL %s", glGetString( GL_VERSION ) );
+	{
+		// ufront 2.72: the depth the default framebuffer really has. Under -sOFFSCREEN_FRAMEBUFFER this is
+		// Emscripten's emulated framebuffer; 16 here is the banding z-fight (offscreen-depth24.sh makes it 24).
+		GLint DepthBits = 0, StencilBits = 0;
+		glGetIntegerv( GL_DEPTH_BITS, &DepthBits );
+		glGetIntegerv( GL_STENCIL_BITS, &StencilBits );
+		debugf( NAME_Log, "NOpenGLES: default framebuffer depth %d bits, stencil %d bits", DepthBits, StencilBits );
+	}
 
 	NoVolumetricBlend = true;
 	SupportsFogMaps = true;
