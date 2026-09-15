@@ -618,7 +618,12 @@ void UNOpenGLESRenderDevice::UpdateUniforms()
 	if( UniformsChanged[UF_Brightness] )
 	{
 		FlushTriangles();
-		glUniform1f( ShaderInfo->Uniforms[UF_Brightness], CurrentBrightness );
+		// ufront 2.72: a modulated poly multiplies the framebuffer by 2*texel, so its neutral grey must stay exactly
+		// 0.5 — the brightness scale (0.5 + 1.5*B in the shader) lifted every modulated sprite by 1.25x at the default
+		// brightness and stacked per overlapping quad: the visible SQUARE around lingering smoke. Send the neutral
+		// value (1/3 -> a factor of exactly 1.0) while PF_Modulated is the current blend; the original drivers put
+		// brightness in the gamma ramp, which never touched a modulation factor either.
+		glUniform1f( ShaderInfo->Uniforms[UF_Brightness], ( CurrentPolyFlags & PF_Modulated ) ? ( 1.f / 3.f ) : CurrentBrightness );
 		UniformsChanged[UF_Brightness] = false;
 	}
 
@@ -882,6 +887,8 @@ void UNOpenGLESRenderDevice::SetBlend( DWORD PolyFlags, UBOOL InverseOrder )
 			UBOOL Show = !( PolyFlags & PF_Invisible );
 			glColorMask( Show, Show, Show, Show );
 		}
+		if( Xor & PF_Modulated )
+			UniformsChanged[UF_Brightness] = true; // ufront 2.72: brightness is neutral for modulated polys (UpdateUniforms)
 		if( Xor & PF_Occlude )
 			glDepthMask( (PolyFlags & PF_Occlude) != 0 );
 		if( Xor & PF_Masked )
