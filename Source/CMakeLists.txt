@@ -78,6 +78,10 @@ if(EMSCRIPTEN)
   # a main thread whose canvas has been transferred away -> InvalidStateError (Emscripten #24792). It also
   # gives every object the atomics/bulk-memory features a shared-memory link expects.
   add_compile_options(-pthread)
+  # The SDL2 port must be requested at COMPILE time too: Core/NSDLDrv include <SDL2/SDL.h>, which only
+  # exists in the Emscripten cache once the port is installed. As a link-only flag a fresh emsdk fails
+  # with "'SDL2/SDL.h' file not found".
+  add_compile_options(-sUSE_SDL=2)
   add_definitions(-DASM=0)        # Core/SoftDrv use their portable (non-x86) code paths
   # clang (Emscripten) makes passing a non-POD FString through variadic debugf/appErrorf a hard error;
   # GCC/MSVC tolerate it. Downgrade to a warning (these are mostly script-export/debug paths).
@@ -202,6 +206,9 @@ if(TARGET_IS_WINDOWS)
     # the binary runs on the build machine and dies with "not found" everywhere else. With it, the only
     # imports left are stock system DLLs, so the static build really is a single self-contained file.
     add_link_options(-static-libgcc -static-libstdc++)
+    # A posix-thread-model MinGW (MSYS2, Arch/Fedora packages) also pulls in libwinpthread-1.dll through
+    # libstdc++; link it statically too, or the exe does not start outside the build machine.
+    add_link_options(-Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic)
   endif()
 else()
   # TODO
