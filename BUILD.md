@@ -2,10 +2,10 @@
 
 The **private engine repo** for the original **Unreal (1998), Unreal Engine 1 v200** web port — engine
 source only. Game assets (Unreal v200: maps/textures/music/sounds + the `.u`/`.int` packages) live **out of
-tree** at `$UNREAL_ASSETS_DIR` (default `/home/ion/unreal-assets`) and are never tracked here. Base import:
+tree** and are never tracked here; no build reads them. Base import:
 [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1) @ `41cf09a` (kept as the `upstream` remote).
 
-The public monorepo `ufront` (`/home/ion/ufrontend`) consumes this repo's WASM artifact, owns the host
+The public monorepo `ufront` ([10-p/unreal-frontend-arch-private](https://github.com/10-p/unreal-frontend-arch-private)) consumes this repo's WASM artifact, owns the host
 page / UI / glue / assembly, and injects the heavy glue behind the thin ABI shim. **Migration state lives
 in the monorepo** (`docs/migration/STATE.md`), not here.
 
@@ -15,13 +15,13 @@ in the monorepo** (`docs/migration/STATE.md`), not here.
 |--------|--------|---------|
 | `wasm` | `build-wasm/SDLLaunch/SDLLaunch.{js,wasm,data}` + `meta.json` | Emscripten **dev** (assertions + DWARF) |
 | `wasm-perf` | `build-wasm-perf/SDLLaunch/…` | Emscripten **product** (`-O3`, no debug) — what `ufront` consumes |
-| `native` | `build-native/Unreal/Unreal.bin` | 32-bit native GLES/software twin (needs `libsdl2-dev:i386`) |
-| `native64` | `build-native64/Unreal/Unreal.bin` | 64-bit (LP64) x86_64 twin (needs `libsdl2-dev:amd64`) — § *64-bit* |
+| `native` | `build-native/Unreal/Unreal.bin` | 32-bit native GLES/software twin (needs a 32-bit SDL2; see README) |
+| `native64` | `build-native64/Unreal/Unreal.bin` | 64-bit (LP64) x86_64 twin (needs the 64-bit SDL2) — § *64-bit* |
 | `native64-asan` | `build-native64-asan/` | `native64` + AddressSanitizer |
 | `windows` | `build-windows/Unreal/Unreal.exe` | 32-bit **Windows** binary via MinGW-w64 (§ *Windows builds*) |
 
 ```bash
-source ~/emsdk/emsdk_env.sh            # emsdk 5.0.x; sets $EMSDK for the toolchain file
+source <emsdk>/emsdk_env.sh            # emsdk 5.0.7; sets $EMSDK for the toolchain file
 cmake --preset wasm-perf && cmake --build --preset wasm-perf -j"$(nproc)"   # the web build
 cmake --preset native    && cmake --build --preset native    -j"$(nproc)"   # the native twin
 cmake --preset windows   && cmake --build --preset windows   -j"$(nproc)"   # the Windows binary
@@ -51,8 +51,8 @@ module, generalised — `ufront_openal_soft(PLATFORM WEB|NATIVE …)`) FetchCont
 (`10-p/openal-soft-web` `ufront/web`) and builds it SHARED for the `native` preset. The launcher links it
 (`DT_NEEDED libopenal.so.1`), carries `$ORIGIN` in its rpath and copies `libopenal.so.1` beside itself, so
 **a run tree that takes the binary must take `libopenal.so.1` with it** (the loader stops before `main`
-otherwise). Backends are whatever this host's headers allowed at configure time — PulseAudio, ALSA, OSS on
-this box, each dlopen'd at run time — and the configure log says which
+otherwise). Backends are whatever this host's headers allowed at configure time — e.g. PulseAudio, ALSA,
+OSS, each dlopen'd at run time — and the configure log says which
 (`Building OpenAL with support for the following backends`). `-DUT_BUNDLED_OPENAL=OFF` restores the system
 library. Why: the system library is whatever the distro built, so the native binary carries the fork to play
 what the web plays.
@@ -207,13 +207,13 @@ MSYS2's `mingw32` environment ships, so from an MSYS2 `MINGW32` prompt the prese
 What the port actually needed:
 
 - **SDL2** — a cross build has no system SDL2, so `Source/cmake/SDL2Mingw.cmake` FetchContents SDL2's
-  official prebuilt MinGW binaries (hash-pinned, version matched to this box's Linux SDL2 so the Windows
-  build and the native twin are the same library). ⚠ Link order: `-lmingw32 -lSDL2main` **before**
+  official prebuilt MinGW binaries (hash-pinned, 2.32.10). ⚠ Link order: `-lmingw32 -lSDL2main` **before**
   `-lSDL2` — SDL.h renames the launcher's `main()` to `SDL_main` and SDL2main provides the `WinMain` that
   calls it, which is why the launcher needs no source change.
 - **`-static-libgcc -static-libstdc++`** — otherwise the `.exe` imports `libgcc_s_dw2-1.dll` and
   `libstdc++-6.dll`, which exist on the build machine and nowhere else. With them the only imports left
-  are stock system DLLs, so `BUILD_STATIC` really does yield **one self-contained file**.
+  are stock system DLLs plus `OpenAL32.dll` (copied beside the exe since ufront 2.34), so ship the two together.
+- **`-lwinpthread` statically** — a posix-thread-model MinGW (MSYS2, Arch) otherwise adds `libwinpthread-1.dll`.
 - **`Unreal/Src/Res/LaunchRes.rc`** — its icon path (`..\res\Unreal.ico`) only ever resolved because
   Windows filesystems are case-insensitive; cross-compiling from Linux it is a hard `windres` error.
 - **`SoftDrv/Src/SoftDrvPrivate.h`** — the Win32 headers define `IN`/`OUT` as empty annotation macros,
@@ -228,8 +228,9 @@ GPU is involved):
 
 ```bash
 Xvfb :99 -screen 0 1024x768x24 &
-DISPLAY=:99 WINEPREFIX=~/.wine-u1 wine Unreal.exe -SOFTWARERENDERER   # or -NULLRENDERER
-WINEPREFIX=~/.wine-u1 wineserver -k          # ⚠ always; wine leaves processes behind
+export WINEDLLOVERRIDES="mscoree,mshtml="   # a new prefix otherwise waits on the Mono/Gecko installer dialogs
+DISPLAY=:99 WINEPREFIX=<prefix> wine Unreal.exe -SOFTWARERENDERER   # or -NULLRENDERER
+WINEPREFIX=<prefix> wineserver -k          # ⚠ always; wine leaves processes behind
 ```
 
 Assert on **milestones in `System/Unreal.log`** (`Game class is 'Intro'`, `Opened viewport`,

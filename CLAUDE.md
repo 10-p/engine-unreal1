@@ -2,7 +2,7 @@
 
 **What this is:** the **private** engine repo for the original **Unreal (1998), Unreal Engine 1 v200**,
 web port. It holds engine source only and produces a **WASM artifact** (+ native binaries). It is **not**
-the product on its own — the public monorepo `ufront` (`/home/ion/ufrontend`) consumes this engine's WASM
+the product on its own — the public monorepo `ufront` (`10-p/unreal-frontend-arch-private`) consumes this engine's WASM
 artifact, owns the host page / UI / build assembly, and owns the browser glue behind a thin **ABI shim**.
 
 Created by **step 2.6** of the ufront re-architecture (the first cross-engine-*generation* port: UE1 vs
@@ -10,17 +10,17 @@ UT2004's UE2.5, on the same shell + glue + ABI). Base import: **[fgsfdsfgs/UE1](
 @ `41cf09a` (kept as the `upstream` remote; our private work is fresh commits on `main`).
 
 ## Map of the world
-| Thing | Path | Role |
+| Thing | Where | Role |
 |-------|------|------|
-| This engine repo (private) | `/home/ion/engines/engine-unreal1` | UE1 source → WASM/native artifacts |
-| Sibling engine (the MODEL) | `/home/ion/engines/engine-ut2004` | the UE2.5 port — the pattern this repo mirrors |
-| Public monorepo | `/home/ion/ufrontend` | consumes the artifact; host/UI/glue/build; **migration state lives here** |
-| Game assets (never in git) | `/home/ion/unreal-assets` | Unreal v200, ~456 MB; `$UNREAL_ASSETS_DIR` |
-| UE1 reference (read-only) | `/home/ion/U1` | pristine fgsfdsfgs/UE1 @ `41cf09a` (identical to our base) |
+| This engine repo (private) | `10-p/engine-unreal1` | UE1 source → WASM/native artifacts |
+| Sibling engine (the MODEL) | `10-p/engine-ut2004` | the UE2.5 port — the pattern this repo mirrors |
+| Public monorepo | `10-p/unreal-frontend-arch-private` | consumes the artifact; host/UI/glue/build; **migration state lives here** |
+| Game assets (never in git) | any local folder | Unreal v200, ~456 MB; not read by any build |
+| UE1 reference (read-only) | [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1) (add as `upstream`) | pristine fgsfdsfgs/UE1 @ `41cf09a` (identical to our base) |
 | Software-renderer REFERENCE | [10-p/UE1-funkey](https://github.com/10-p/UE1-funkey) | ARM port proving `SoftDrv` on non-x86 — **reference only, not a commit quarry** |
 
 > **Migration plan & durable state are in the monorepo**, not here:
-> `/home/ion/ufrontend/docs/migration/STATE.md` (read first if continuing the migration),
+> `docs/migration/STATE.md` (read first if continuing the migration),
 > `ROADMAP.md`, `steps/2.6-engine-unreal1.md` (this step's spec + decisions D1–D12).
 
 ## Status (Phase 2, step 2.6 — IN PROGRESS)
