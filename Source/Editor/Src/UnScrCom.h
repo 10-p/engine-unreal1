@@ -108,8 +108,11 @@ public:
 	UClass* MetaClass;
 
 	// Constructors.
+	// Enum(NULL) clears the whole union (ufront 2.84, as engine-ut99 2bd4e9f). It used to clear BitMask, 4 bytes:
+	// on LP64 the pointer members kept a garbage high half, so a plain byte had an Enum and `B = 7` was a type
+	// mismatch.
 	FPropertyBase( EPropertyType InType )
-	:	Type(InType), ArrayDim(1), PropertyFlags(0), BitMask(0), MetaClass(NULL)
+	:	Type(InType), ArrayDim(1), PropertyFlags(0), Enum(NULL), MetaClass(NULL)
 	{}
 	FPropertyBase( UEnum* InEnum )
 	:	Type(CPT_Byte), ArrayDim(1), PropertyFlags(0), Enum(InEnum), MetaClass(NULL)
