@@ -2852,7 +2852,16 @@ void UObject::CallFunction( FFrame& Stack, BYTE*& Result, UFunction* Function )
 			Out->Src  = Out->Dest = Dest;
 			Stack.Step( Stack.Object, Out->Dest );
 			if( Out->Dest != Dest )
-				appMemcpy( Dest, Out->Dest, Out->Size );
+			{
+				// A string is copied up to its terminator, as a string assignment copies it: a string constant is
+				// read in place from the bytecode, and its parameter's fixed size ran past the end of the
+				// function's Script (AddressSanitizer heap-buffer-overflow, at every width: the original copied
+				// the same span).
+				if( Parm->ArrayDim==1 && Parm->GetClass()==UStringProperty::StaticClass )
+					appStrncpy( (char*)Dest, (char*)Out->Dest, Out->Size );
+				else
+					appMemcpy( Dest, Out->Dest, Out->Size );
+			}
 			Out += *NewStack.Code++;
 			++Parm;
 		}
