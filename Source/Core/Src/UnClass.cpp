@@ -343,6 +343,16 @@ UStruct::UStruct( UStruct* InSuperStruct )
 //
 static INT NativePlaceholderSize( UStruct* Owner, UProperty* Property )
 {
+	// Object.DynamicString is an EMPTY script struct standing in for a C++ FString (Player.TravelItems): script
+	// gives it 0 bytes, C++ 12 (16 on LP64), so Player's script layout was 12 bytes short of its C++ class on
+	// every width. It occupies an FString in the class layout; its element size stays 0, so script's
+	// struct copies still copy nothing -- a byte copy of an FString would share its buffer.
+	UStructProperty* StructProperty = Cast<UStructProperty>( Property );
+	if
+	(	StructProperty
+	&&	appStricmp( StructProperty->Struct->GetName(), "DynamicString" )==0
+	&&	StructProperty->Struct->GetParent() && appStricmp( StructProperty->Struct->GetParent()->GetName(), "Object" )==0 )
+		return sizeof(FString) * Property->ArrayDim;
 	if( !Cast<UIntProperty>(Property) || !Cast<UClass>(Owner) || !Owner->GetParent() )
 		return 0;
 	static const struct { const char* Package; const char* Struct; const char* Property; INT Size; } Placeholders[] =
