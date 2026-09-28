@@ -873,10 +873,12 @@ AUTOREGISTER_INTRINSIC( UObject, EX_ByteToString, execByteToString );
 void UObject::execIntToByte( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execIntToByte);
-	BYTE Buffer[MAX_CONST_SIZE];
-	Result = Buffer;
-	Stack.Step( Stack.Object, Result );
-	*(BYTE*)Result = *(INT*)Result;
+	// ufront 2.84 -- converts into the caller's buffer, like every other conversion (and v400). It pointed Result
+	// at this frame's own Buffer, so every caller read the byte from a returned frame (AddressSanitizer:
+	// stack-use-after-return, at every width).
+	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
+	Stack.Step( Stack.Object, Addr );
+	*(BYTE*)Result = *(INT*)Addr;
 	unguardexecSlow;
 }
 AUTOREGISTER_INTRINSIC( UObject, EX_IntToByte, execIntToByte );
