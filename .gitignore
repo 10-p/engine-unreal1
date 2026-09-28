@@ -17,5 +17,6 @@ tools/asmport/oracle/oracle
 # ufront 2.84: the 64-bit trees, and a script package compiled from tools/test (a build product)
 /build-native64/
 /build-native64-asan/
+/build-native64-cov/
 /build-android-*/
 /tools/test/**/*.u
