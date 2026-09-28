@@ -49,7 +49,7 @@ for i in range(count):
     members = {}
     nested  = {}
     for f in ctype.fields():
-        if f.is_base_class or not hasattr(f, 'bitpos'):
+        if f.is_base_class or not hasattr(f, 'bitpos') or not f.name:	# an anonymous union/struct has no name
             continue
         if f.bitsize:
             members[f.name.lower()] = ((f.bitpos // 32) * 4, 1 << (f.bitpos % 32))
@@ -107,7 +107,7 @@ for k in range(int(objs['ArrayNum'])):
         print("SSIZE %s.%s C++ F%s=%d script=%d" % (outer, sname, sname, ctype.sizeof, int(st['PropertiesSize'])))
     members = {}
     for f in ctype.fields():
-        if f.is_base_class or not hasattr(f, 'bitpos'):
+        if f.is_base_class or not hasattr(f, 'bitpos') or not f.name:	# an anonymous union/struct has no name
             continue
         members[f.name.lower()] = f.bitpos // 8
     field = st['Children']
