@@ -241,6 +241,7 @@ void UObject::execClassContext( FFrame& Stack, BYTE*& Result )
 
 	// Get class expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
+	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
 	Stack.Step( Stack.Object, Addr );
 
 	// Execute expression in class context.
@@ -530,8 +531,12 @@ void UObject::execContext( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execContext);
 
-	// Get actor variable.
+	// Get actor variable. (ufront 2.84: an object read from a scratch buffer starts it zeroed for a pointer's
+	// width. A None context inside -- `None.A.B`, `Pawn(None.A)` -- fills only the compiler's 4 bytes; the rest
+	// of this uninitialised buffer made the high half of the pointer read below, SIGSEGV on LP64. v400
+	// initialised these locals; v200 does not. Also execClassContext, both casts, ObjectToBool/String.)
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
+	appMemset( Buffer, 0, sizeof(UObject*) );
 	Stack.Step( this, Addr );
 
 	// Execute or skip the following expression in the actor's context.
@@ -796,6 +801,7 @@ void UObject::execDynamicCast( FFrame& Stack, BYTE*& Result )
 
 	// Compile actor expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
+	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
 	Stack.Step( Stack.Object, Addr );
 
 	UObject* Castee = *(UObject**)Addr;
@@ -814,6 +820,7 @@ void UObject::execMetaCast( FFrame& Stack, BYTE*& Result )
 
 	// Compile actor expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
+	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
 	Stack.Step( Stack.Object, Addr );
 
 	UObject* Castee = *(UObject**)Addr;
@@ -989,6 +996,7 @@ void UObject::execObjectToBool( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execObjectToBool);
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
+	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
 	Stack.Step( Stack.Object, Addr );
 	*(DWORD*)Result = *(UObject**)Addr!=NULL;
 	unguardexecSlow;
@@ -999,6 +1007,7 @@ void UObject::execObjectToString( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execObjectToString);
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
+	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
 	Stack.Step( Stack.Object, Addr );
 	appStrcpy((char*)Result, *(UObject**)Addr ? (*(UObject**)Addr)->GetName() : "None");
 	unguardexecSlow;
