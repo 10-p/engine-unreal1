@@ -616,12 +616,12 @@ void UObject::execStructCmpEq( FFrame& Stack, BYTE*& Result )
 	BYTE Buffer1[255], *Addr1=Buffer1;
 	GNullContextResult = NULL;
 	Stack.Step( this, Addr1 );
-	ZeroNullContextTail( Addr1, Struct->GetPropertiesSize() );
+	ZeroNullContextTail( Addr1, Min<INT>( Struct->GetPropertiesSize(), sizeof(Buffer1) ) );
 
 	// Get second expression.
 	BYTE Buffer2[255], *Addr2=Buffer2;
 	Stack.Step( this, Addr2 );
-	ZeroNullContextTail( Addr2, Struct->GetPropertiesSize() );
+	ZeroNullContextTail( Addr2, Min<INT>( Struct->GetPropertiesSize(), sizeof(Buffer2) ) );
 
 	// Compare.
 	*(DWORD*)Result = Struct->StructCompare(Addr1,Addr2);
@@ -641,12 +641,12 @@ void UObject::execStructCmpNe( FFrame& Stack, BYTE*& Result )
 	BYTE Buffer1[MAX_STRING_CONST_SIZE], *Addr1=Buffer1;
 	GNullContextResult = NULL;
 	Stack.Step( this, Addr1 );
-	ZeroNullContextTail( Addr1, Struct->GetPropertiesSize() );
+	ZeroNullContextTail( Addr1, Min<INT>( Struct->GetPropertiesSize(), sizeof(Buffer1) ) );
 
 	// Get second expression.
 	BYTE Buffer2[MAX_STRING_CONST_SIZE], *Addr2=Buffer2;
 	Stack.Step( this, Addr2 );
-	ZeroNullContextTail( Addr2, Struct->GetPropertiesSize() );
+	ZeroNullContextTail( Addr2, Min<INT>( Struct->GetPropertiesSize(), sizeof(Buffer2) ) );
 
 	// Compare.
 	*(DWORD*)Result = !Struct->StructCompare(Addr1,Addr2);
@@ -666,7 +666,7 @@ void UObject::execStructMember( FFrame& Stack, BYTE*& Result )
 	BYTE Buffer[255], *Addr = Result ? Buffer : NULL;
 	GNullContextResult = NULL;
 	Stack.Step( this, Addr );
-	ZeroNullContextTail( Addr, ((UStruct*)Property->GetParent())->GetPropertiesSize() );	// ufront 2.84, see ExecLet
+	ZeroNullContextTail( Addr, Min<INT>( ((UStruct*)Property->GetParent())->GetPropertiesSize(), sizeof(Buffer) ) );	// ufront 2.84, see ExecLet
 
 	// Set result. (ufront 2.84: a struct that came back in this frame's own Buffer -- an operator's or a native's
 	// result, a None context -- is a temporary, so its member is copied into the caller's buffer, which is sized
