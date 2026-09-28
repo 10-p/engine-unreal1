@@ -141,6 +141,9 @@ typedef uintptr_t UPTRINT; // Pointer-sized unsigned.
 // A copy of a small, constant number of bytes from a possibly unaligned address: one load where the CPU allows
 // unaligned loads, never a library call (the builtin expands inline at any optimisation level). ufront 2.84.
 #define appUnalignedCopy(Dest,Src,Count) __builtin_memcpy(Dest,Src,Count)
+// Inlined at EVERY optimisation level (ufront 2.84): the script VM (UnCorSc.cpp, UnProp.cpp) is compiled at -Og,
+// where an ordinary inline function that grows past a few instructions becomes a call per bytecode operand.
+#define ALWAYS_INLINE inline __attribute__((always_inline))
 
 #ifndef PLATFORM_WIN32 // On Windows these are defined in minwindef.h.
 // Unsigned base types.

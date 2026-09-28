@@ -998,11 +998,11 @@ public:
 };
 
 // Script object references (see FObjectManager).
-inline UObject* FObjectManager::GetScriptObject( INT Ref )
+ALWAYS_INLINE UObject* FObjectManager::GetScriptObject( INT Ref )
 {
 	return Ref!=INDEX_NONE ? ((UObject**)Objects.GetData())[Ref] : NULL;
 }
-inline INT FObjectManager::GetScriptRef( UObject* Obj )
+ALWAYS_INLINE INT FObjectManager::GetScriptRef( UObject* Obj )
 {
 	return Obj ? (INT)Obj->GetIndex() : INDEX_NONE;
 }

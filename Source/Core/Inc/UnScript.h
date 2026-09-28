@@ -276,38 +276,38 @@ inline void FFrame::Step( UObject* Context, BYTE*& Result )
 // (ufront 2.84, as engine-ut99 2.83). A typed read of an unaligned address is undefined behaviour everywhere
 // and a bus error on 32-bit ARM (engine-ut99 measured it: execVectorConst, SIGBUS on armeabi-v7a). A
 // constant-size copy compiles to the same single load wherever unaligned loads are legal (x86, arm64, wasm).
-template< class T > inline T ReadScriptOperand( const BYTE* Code )
+template< class T > ALWAYS_INLINE T ReadScriptOperand( const BYTE* Code )
 {
 	T Result;
 	appUnalignedCopy( &Result, Code, sizeof(T) );
 	return Result;
 }
-inline INT FFrame::ReadInt()
+ALWAYS_INLINE INT FFrame::ReadInt()
 {
 	INT Result = ReadScriptOperand<INT>( Code );
 	Code += sizeof(INT);
 	return Result;
 }
-inline UObject* FFrame::ReadObject()
+ALWAYS_INLINE UObject* FFrame::ReadObject()
 {
 	// A 4-byte object index, not a pointer (FObjectManager::GetScriptObject).
 	INT Ref = ReadScriptOperand<INT>( Code );
 	Code += sizeof(INT);
 	return FObjectManager::GetScriptObject( Ref );
 }
-inline FLOAT FFrame::ReadFloat()
+ALWAYS_INLINE FLOAT FFrame::ReadFloat()
 {
 	FLOAT Result = ReadScriptOperand<FLOAT>( Code );
 	Code += sizeof(FLOAT);
 	return Result;
 }
-inline INT FFrame::ReadWord()
+ALWAYS_INLINE INT FFrame::ReadWord()
 {
 	INT Result = ReadScriptOperand<_WORD>( Code );
 	Code += sizeof(_WORD);
 	return Result;
 }
-inline FName FFrame::ReadName()
+ALWAYS_INLINE FName FFrame::ReadName()
 {
 	FName Result = ReadScriptOperand<FName>( Code );
 	Code += sizeof(FName);
