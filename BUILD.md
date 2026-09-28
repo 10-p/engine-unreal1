@@ -152,8 +152,8 @@ hashing", NaN != NaN).
 **Test loops** (headless; `Xvfb :98`, loopback only):
 
 ```bash
-tools/dev/mkrun.sh build-native64 /home/ion/native-runtrees/unreal-64      # + build-native64/Unreal/libopenal.so.1
-cd /home/ion/native-runtrees/unreal-64/System
+tools/dev/mkrun.sh build-native64 <run-tree>      # + build-native64/Unreal/libopenal.so.1
+cd <run-tree>/System
 gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -MAKE             # 1035/1 (EditorEngine.Pad), structs 10/0
 DISPLAY=:98 gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -SOFTWARERENDERER   # 925/0, 10/0
 ./Unreal.bin "DmDeck16?game=U64Test.U64Game" -server                              # U64 DONE passed=<n> failed=0

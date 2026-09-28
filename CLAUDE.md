@@ -23,8 +23,8 @@ UT2004's UE2.5, on the same shell + glue + ABI). Base import: **[fgsfdsfgs/UE1](
 > `docs/migration/STATE.md` (read first if continuing the migration),
 > `ROADMAP.md`, `steps/2.6-engine-unreal1.md` (this step's spec + decisions D1–D12).
 
-## Status (Phase 2, step 2.6 — IN PROGRESS)
-Standing up the web port. The engine bakes only the thin `webrtc_*` shim (`vendor/glue/webrtc-shim.js`,
+## Status
+The web port (step 2.6) is done; Windows (2.33) and 64-bit Linux (2.84) builds exist too (`BUILD.md`). The engine bakes only the thin `webrtc_*` shim (`vendor/glue/webrtc-shim.js`,
 vendored from `@ufront/glue` at `ABI_VERSION 1`); heavy glue (FetchFS + IDB + WebRTC session logic) is
 **injected at runtime** by the host, not baked. The WASM build emits a **bare loader**
 (`SDLLaunch.{js,wasm,data}` + `meta.json`, `loaderStyle=global-module`, no `.html`) that the monorepo's
@@ -42,8 +42,8 @@ vendored from `@ufront/glue` at `ABI_VERSION 1`); heavy glue (FetchFS + IDB + We
   (`GExportsTable`/`appGetStaticExport`), all packages linked with `--whole-archive` (preserve the
   package registrants). Emscripten can't do UE1's `.so`/`.dll` package loading (`docs/10` §4).
 - **Main-loop inversion (Asyncify).** UE1's blocking `MainLoop` (`Unreal/Src/SDLLaunch.cpp`,
-  `while(GIsRunning){ Engine->Tick(); appSleep(); }`) becomes `emscripten_set_main_loop` driving one
-  `Tick()` per callback + `-sASYNCIFY` (`docs/10` §2).
+  `while(GIsRunning){ Engine->Tick(); appSleep(); }`) yields each frame with `emscripten_sleep` under
+  `-sASYNCIFY` — **not** `emscripten_set_main_loop`, whose unwind collides with `main()`'s `try/catch` (`BUILD.md`).
 - **File layer is POSIX — untouched.** UE1 bottoms out at libc `fopen`/POSIX `opendir` (`Core/Src/UnFile.cpp`,
   no `FFileManager`). FetchFS (injected glue) intercepts **below** it at the Emscripten FS layer — so the
   same shim/glue serve UE1 unchanged. **Do not** write an engine-side web file manager.

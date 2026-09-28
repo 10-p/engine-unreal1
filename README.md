@@ -10,12 +10,13 @@ Based on [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1). Design notes and web
 * Added GLES2 and fixed pipeline GL graphics drivers (NOpenGLESDrv and NOpenGLDrv).
 * Added OpenAL + libxmp audio driver (NOpenALDrv).
 * Added GCC support and fixed a bunch of related bugs.
+* Added a 64-bit (x86_64) Linux build that still runs the retail 32-bit packages.
 * Added a WebAssembly build and a WebRTC net driver (WebRTCDrv) for the browser.
 * Editor UI is not supported.
 
 ## Building
 
-All builds are 32-bit and use the CMake presets in `Source/`, so run every `cmake` command from `Source/`.
+Builds are 32-bit unless noted and use the CMake presets in `Source/`, so run every `cmake` command from `Source/`.
 The first configure of each preset needs network access: OpenAL Soft, libxmp and (Windows) SDL2 are fetched.
 
 ### Linux x86
@@ -32,6 +33,8 @@ The first configure of each preset needs network access: OpenAL Soft, libxmp and
    cmake --preset native && cmake --build --preset native -j$(nproc)
    ```
 3. The result is `build-native/Unreal/Unreal.bin` plus `libopenal.so.1`, which must stay next to it.
+
+**64-bit (x86_64):** use the `native64` preset instead of `native`, with the regular 64-bit libraries in place of the i386/lib32 ones. The result lands in `build-native64/Unreal/`.
 
 **32-bit SDL2 from source** (when your distro has no package): build it into any prefix and point the preset at it.
 ```
