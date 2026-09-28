@@ -222,7 +222,7 @@ BYTE CORE_API GRegisterIntrinsic( int iIntrinsic, void* Func );
 #define P_GET_ROTATOR(var)          FRotator      var;   {FRotator *Ptr=&var; Stack.Step( Stack.Object, *(BYTE**)&Ptr ); var=*Ptr;}
 #define P_GET_ROTATOR_OPT(var,def)  FRotator  var=def;   {FRotator *Ptr=&var; Stack.Step( Stack.Object, *(BYTE**)&Ptr ); var=*Ptr;}
 #define P_GET_ROTATOR_REF(var)      FRotator  a##var(0,0,0),*var=&a##var;     {Stack.Step( Stack.Object, *(BYTE**)&var );          }
-#define P_GET_OBJECT(cls,var)       cls          *var;   {cls**Ptr=&var;       Stack.Step( Stack.Object, *(BYTE**)&Ptr ); var=*Ptr;}
+#define P_GET_OBJECT(cls,var)       cls     *var=NULL;   {cls**Ptr=&var;       Stack.Step( Stack.Object, *(BYTE**)&Ptr ); var=*Ptr;}
 #define P_GET_OBJECT_OPT(var,def)   UObject*var=def;     {UObject**Ptr=&var;   Stack.Step( Stack.Object, *(BYTE**)&Ptr ); var=*Ptr;}
 #define P_GET_OBJECT_REF(var)       UObject*a##var=NULL,**var=&a##var;        {Stack.Step( Stack.Object, *(BYTE**)&var );          }
 #define P_GET_STRING(var)           CHAR var##T[MAX_STRING_CONST_SIZE], *var=var##T; {Stack.Step( Stack.Object,*(BYTE**)&var);     }

@@ -12,6 +12,10 @@ Revision history:
 
 #include "CorePrivate.h"
 
+// ufront 2.84 -- the last None-context zero-fill: where it wrote and how many bytes (see UProperty::ExecLet).
+BYTE* GNullContextResult = NULL;
+INT   GNullContextSize   = 0;
+
 /*-----------------------------------------------------------------------------
 	Globals.
 -----------------------------------------------------------------------------*/
@@ -253,7 +257,11 @@ void UObject::execClassContext( FFrame& Stack, BYTE*& Result )
 		BYTE bSize = *Stack.Code++;
 		Stack.Code += wSkip;
 		if( Result )
+		{
 			appMemset( Result, 0, bSize );
+			GNullContextResult = Result;
+			GNullContextSize   = bSize;
+		}
 		GBoolAddr = NULL;
 	}
 
@@ -368,8 +376,10 @@ void UObject::execSwitch( FFrame& Stack, BYTE*& Result )
 	// Get switch size.
 	BYTE bSize = *Stack.Code++;
 
-	// Get switch expression.
+	// Get switch expression. (ufront 2.84: the first pointer's width of both buffers starts zeroed, so a short
+	// None-context fill still reads as None when an object case compares whole pointers below.)
 	BYTE SwitchBuffer[MAX_CONST_SIZE], *SwitchVal=SwitchBuffer;
+	appMemset( SwitchBuffer, 0, sizeof(UObject*) );
 	Stack.Step( Stack.Object, SwitchVal );
 
 	// Check each case clause till we find a match.
@@ -386,10 +396,17 @@ void UObject::execSwitch( FFrame& Stack, BYTE*& Result )
 
 		// Get case expression.
 		BYTE Buffer[MAX_STRING_CONST_SIZE], *Val=Buffer;
+		appMemset( Buffer, 0, sizeof(UObject*) );
+		BYTE CaseToken = *Stack.Code;
 		Stack.Step( Stack.Object, Val );
 
-		// Compare.
-		if( (bSize ? appMemcmp(SwitchVal,Val,bSize) : appStrcmp((char*)SwitchVal,(char*)Val) )==0 )
+		// Compare. bSize is the compiled (32-bit) size: 4 for an object. A case that is an object constant
+		// means an object switch, so compare whole pointers (ufront 2.84) -- the low halves of two different
+		// objects can be equal on LP64.
+		INT CmpSize = bSize;
+		if( bSize && bSize<sizeof(UObject*) && (CaseToken==EX_ObjectConst || CaseToken==EX_NoObject) )
+			CmpSize = sizeof(UObject*);
+		if( (CmpSize ? appMemcmp(SwitchVal,Val,CmpSize) : appStrcmp((char*)SwitchVal,(char*)Val) )==0 )
 			break;
 
 		// Jump to next handler.
@@ -531,7 +548,11 @@ void UObject::execContext( FFrame& Stack, BYTE*& Result )
 		BYTE bSize = *Stack.Code++;
 		Stack.Code += wSkip;
 		if( Result )
+		{
 			appMemset( Result, 0, bSize );
+			GNullContextResult = Result;
+			GNullContextSize   = bSize;
+		}
 		GBoolAddr = NULL;
 	}
 	unguardexecSlow;

@@ -27,6 +27,11 @@ class CORE_API UTextBufferFactory : public UFactory
 	UObject* Create( UClass* Class, UObject* InParent, FName Name, UObject* Context, const char* Type, const char*& Buffer, const char* BufferEnd, FFeedbackContext* Warn=NULL );
 };
 
+// The last None-context zero-fill: where it wrote and how many bytes (ufront 2.84, UnCorSc.cpp; see
+// UProperty::ExecLet).
+extern BYTE* GNullContextResult;
+extern INT   GNullContextSize;
+
 /*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/
