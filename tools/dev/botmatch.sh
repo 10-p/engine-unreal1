@@ -23,6 +23,9 @@ MAP=${4:-DmDeck16}
 OUT=$SRV/botmatch; rm -rf "$OUT"; mkdir -p "$OUT"
 PORT=$(sed -n '/^\[URL\]/,/^\[/{s/^Port=\([0-9]*\).*/\1/p}' "$SRV/System/Unreal.ini" | head -1)
 PORT=${PORT:-7777}
+# A game saves its config on exit, and -NULLRENDERER makes that NullDrv: the trees' ini files go back as they were.
+mkdir -p "$OUT/ini/srv" "$OUT/ini/cli"
+cp -p "$SRV"/System/*.ini "$OUT/ini/srv/"; cp -p "$CLI"/System/*.ini "$OUT/ini/cli/"
 cd "$SRV/System"
 rm -f botmatch-server.log
 script -qfc "timeout $((SECS+60)) ./Unreal.bin '$MAP?game=UnrealI.DeathMatchGame' -server LOG=botmatch-server.log" "$OUT/server.pty" > /dev/null 2>&1 &
@@ -37,6 +40,7 @@ sleep "$SECS"
 pkill -TERM -f "^./Unreal.bin 127.0.0.1:$PORT " 2>/dev/null || true
 pkill -TERM -f "^./Unreal.bin .*-server LOG=botmatch-server.log$" 2>/dev/null || true
 wait 2>/dev/null || true
+cp -p "$OUT"/ini/srv/*.ini "$SRV/System/"; cp -p "$OUT"/ini/cli/*.ini "$CLI/System/"
 # v200 logs to a file only (unbuffered, so a killed game's log is complete); each process names its own.
 cp "$SRV/System/botmatch-server.log" "$OUT/server.log"; cp "$CLI/System/botmatch-client.log" "$OUT/client.log"
 BAD='SIGSEGV|Signal|Assertion failed|appError|Critical|General protection|Segmentation fault|\[layout\]|ERROR: AddressSanitizer|runtime error:'
