@@ -668,8 +668,15 @@ void UObject::execStructMember( FFrame& Stack, BYTE*& Result )
 	Stack.Step( this, Addr );
 	ZeroNullContextTail( Addr, ((UStruct*)Property->GetParent())->GetPropertiesSize() );	// ufront 2.84, see ExecLet
 
-	// Set result.
-	Result = Addr ? Addr+Property->Offset : NULL;
+	// Set result. (ufront 2.84: a struct that came back in this frame's own Buffer -- an operator's or a native's
+	// result, a None context -- is a temporary, so its member is copied into the caller's buffer, which is sized
+	// for the member's type. Returning a pointer into Buffer had every caller read it from a returned frame
+	// (`Normal(V).Z`; AddressSanitizer stack-use-after-return, at every width). A static array member is still
+	// returned by pointer: its reader is EX_ArrayElement, whose caller's buffer holds one element.)
+	if( Addr==Buffer && Property->ArrayDim==1 )
+		appMemcpy( Result, Buffer+Property->Offset, Property->GetElementSize() );
+	else
+		Result = Addr ? Addr+Property->Offset : NULL;
 	GProperty = Property;
 
 	unguardexecSlow;
