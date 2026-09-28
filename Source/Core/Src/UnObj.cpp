@@ -1057,9 +1057,13 @@ void FObjectManager::PreRegister( UObject* InObject, FName InPackageName )
 	}
 	else
 	{
-		// Add to the autoregistry chain.
-		InObject->LinkerIndex = (INT)AutoRegister;
-		*(FName*)&InObject->Linker = InPackageName;
+		// Add to the autoregistry chain. Until the object manager starts, the chain waits in Linker (a
+		// pointer) and the package name in LinkerIndex (4 bytes, an FName's size); StaticInit gives both back
+		// their real meaning. (ufront 2.84: it was the other way round -- the chain in the 4-byte LinkerIndex,
+		// which held a pointer only while pointers were 4 bytes.)
+		static_assert( sizeof(FName)<=sizeof(DWORD), "the package name waits in the 4-byte LinkerIndex" );
+		*(UObject**)&InObject->Linker    = AutoRegister;
+		*(FName*   )&InObject->LinkerIndex = InPackageName;
 		AutoRegister = InObject;
 	}
 }
@@ -1144,8 +1148,8 @@ void FObjectManager::Init()
 	UObject* Next;
 	for( UObject* Object=AutoRegister; Object!=NULL; Object=Next )
 	{
-		Next = (UObject*)Object->LinkerIndex;
-		Register( Object, *(FName*)&Object->Linker );
+		Next = *(UObject**)&Object->Linker;
+		Register( Object, *(FName*)&Object->LinkerIndex );
 		Object->Linker      = NULL;
 		Object->LinkerIndex = INDEX_NONE;
 		if( Object->GetClass()==UClass::StaticClass )
