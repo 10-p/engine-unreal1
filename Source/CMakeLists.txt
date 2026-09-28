@@ -45,6 +45,11 @@ option(BUILD_NOPENALDRV "Build NOpenALDrv" ON)
 option(UT_BUNDLED_OPENAL "Native Linux: build openal-soft (the ufront fork) and ship libopenal.so.1 beside the binary, instead of linking whatever libopenal the system has (ufront 2.70)" ON)
 option(BUILD_WINDRV "Build WinDrv" OFF)
 option(BUILD_STATIC "Link everything into a single binary" OFF)
+# ufront 2.84 — a 64-bit (LP64) build (2.83 did the same for UT99). OFF keeps the historical behaviour: an
+# x86_64 compiler is demoted to -m32, because until 2.84 the engine could only run 32-bit. ON builds x86_64 as
+# x86_64. An arm64 compiler has nothing to demote to, so it always builds 64-bit. The C++ side does not read
+# this option: PLATFORM_64BITS comes from the compiler (Core.h), so it can never disagree with the code built.
+option(UT_ALLOW_64BIT "Build x86_64 as a 64-bit (LP64) engine instead of demoting to -m32" OFF)
 
 # ufront step 2.6a — Emscripten / WebAssembly build (the web port). Emscripten can't load UE1's
 # .so/.dll packages, has no x86 inline asm, and gets SDL2/GLES2 from its own ports. Force the web-safe
@@ -137,13 +142,17 @@ message(STATUS "Target arch: ${TARGET_ARCH}")
 message(STATUS "64-bit: ${TARGET_IS_64BIT}")
 
 if(TARGET_IS_64BIT)
-  if(TARGET_IS_X86 AND NOT MSVC)
-    message(STATUS "Building x86 binary with x86_64 compiler")
+  if(MSVC)
+    # LLP64 (Windows x64) is not part of ufront 2.84: `long` is 32-bit there, which the typedefs cover, but
+    # nothing has been built or run. Refuse rather than produce an unverified binary.
+    message(FATAL_ERROR "64-bit MSVC builds are not supported. Use -A Win32.")
+  elseif(TARGET_IS_X86 AND NOT UT_ALLOW_64BIT)
+    message(STATUS "Building x86 binary with x86_64 compiler (pass -DUT_ALLOW_64BIT=ON for x86_64)")
     set(TARGET_IS_64BIT FALSE)
     set(TARGET_ARCH "x86")
     add_compile_options(-m32)
   else()
-    message(FATAL_ERROR "64-bit platforms are currently not supported. If you're building on Windows with MSVC, try -A Win32.")
+    message(STATUS "Building a 64-bit (LP64) engine for ${TARGET_ARCH}")
   endif()
 endif()
 
@@ -162,11 +171,8 @@ message(STATUS "Windows target: ${TARGET_IS_WINDOWS}")
 
 # Common compiler options
 
-if(TARGET_IS_64BIT)
-  add_definitions(-DPLATFORM_64BIT)
-else()
-  add_definitions(-DPLATFORM_32BIT)
-endif()
+# (ufront 2.84: the PLATFORM_32BIT/PLATFORM_64BIT definitions that stood here were read by nothing. The
+# width macro the code uses is PLATFORM_64BITS, derived from the compiler in Core/Inc/Core.h.)
 
 if(TARGET_IS_X86)
   add_definitions(-DPLATFORM_X86)
