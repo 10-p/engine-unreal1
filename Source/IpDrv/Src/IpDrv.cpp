@@ -277,7 +277,7 @@ class DLL_EXPORT UTcpipConnection : public UNetConnection
 		(
 			String256,
 			"%s [%i.%i.%i.%i]:%i state: ",
-			URL.Host,
+			*URL.Host,
 			IPBYTE(RemoteAddr.sin_addr, 1),
 			IPBYTE(RemoteAddr.sin_addr, 2),
 			IPBYTE(RemoteAddr.sin_addr, 3),
@@ -656,14 +656,14 @@ INT UTcpNetDriver::Exec( const char* Cmd, FOutputDevice* Out )
 		{
 			FString Str;
 			URL.String( Str );
-			debugf(NAME_Log,"     Protocol: %s", URL.Protocol  );
-			debugf(NAME_Log,"         Host: %s", URL.Host      );
-			debugf(NAME_Log,"          Map: %s", URL.Map       );
-			debugf(NAME_Log,"       Portal: %s", URL.Portal    );
+			debugf(NAME_Log,"     Protocol: %s", *URL.Protocol );
+			debugf(NAME_Log,"         Host: %s", *URL.Host     );
+			debugf(NAME_Log,"          Map: %s", *URL.Map      );
+			debugf(NAME_Log,"       Portal: %s", *URL.Portal   );
 			debugf(NAME_Log,"         Port: %i", URL.Port      );
 			debugf(NAME_Log,"   NumOptions: %i", URL.Op.Num()  );
 			for( int i=0; i<URL.Op.Num(); i++ )
-				debugf(NAME_Log,"     Option %i: %s", i, URL.Op(i) );
+				debugf(NAME_Log,"     Option %i: %s", i, *URL.Op(i) );
 			debugf(NAME_Log," Result: '%s'", *Str );
 		}
 		else debugf( NAME_ExecWarning, "BAD URL" );

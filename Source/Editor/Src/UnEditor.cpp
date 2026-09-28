@@ -103,7 +103,7 @@ void UEditorEngine::Init()
 					for( INT i=0; i<Files.Num(); i++ )
 					{
 						// Import class.
-						appSprintf( Filename, "../%s/Classes/%s", Pkg, Files(i) );
+						appSprintf( Filename, "../%s/Classes/%s", Pkg, *Files(i) );
 						char Temp[256];
 						appStrcpy( Temp, *Files(i) );
 						*appStrchr(Temp,'.') = 0;

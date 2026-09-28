@@ -853,7 +853,7 @@ void UClass::Export( FOutputDevice& Out, const char* FileType, int Indent )
 			// Constants.
 			INT Consts=0;
 			for( TFieldIterator<UConst> ItC(this); ItC && ItC.GetStruct()==this; ++ItC )
-				Out.Logf( "#define UCONST_%s %s\r\n", ItC->GetName(), ItC->Value ),Consts++;
+				Out.Logf( "#define UCONST_%s %s\r\n", ItC->GetName(), *ItC->Value ),Consts++;
 			if( Consts )
 				Out.Logf( "\r\n" );
 
