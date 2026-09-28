@@ -231,7 +231,7 @@ BYTE CORE_API GRegisterIntrinsic( int iIntrinsic, void* Func );
 #define P_GET_STRUCT(typ,var)       typ var; {typ *Ptr=&var; Stack.Step( Stack.Object, *(BYTE**)&Ptr ); var=*Ptr;}
 #define P_GET_STRUCT_OPT(typ,var,def) typ var=def; {typ *Ptr=&var; Stack.Step( Stack.Object, *(BYTE**)&Ptr ); var=*Ptr;}
 #define P_GET_STRUCT_REF(typ,var)   typ a##var,*var=&a##var; {Stack.Step( Stack.Object, *(BYTE**)&var );}
-#define P_GET_SKIP_OFFSET(var)      _WORD var; {debug(*Stack.Code==EX_Skip); Stack.Code++; var=*(_WORD*)Stack.Code; Stack.Code+=2; }
+#define P_GET_SKIP_OFFSET(var)      _WORD var; {debug(*Stack.Code==EX_Skip); Stack.Code++; var=ReadScriptOperand<_WORD>(Stack.Code); Stack.Code+=2; }
 #define P_FINISH                    {Stack.Code++;}
 
 //
@@ -272,34 +272,44 @@ inline void FFrame::Step( UObject* Context, BYTE*& Result )
 	(Context->*GIntrinsics[B])( *this, Result );
 	unguardSlow;
 }
+// The bytecode is a packed byte stream, so an operand can sit at any address: every multi-byte read copies
+// (ufront 2.84, as engine-ut99 2.83). A typed read of an unaligned address is undefined behaviour everywhere
+// and a bus error on 32-bit ARM (engine-ut99 measured it: execVectorConst, SIGBUS on armeabi-v7a). A
+// constant-size copy compiles to the same single load wherever unaligned loads are legal (x86, arm64, wasm).
+template< class T > inline T ReadScriptOperand( const BYTE* Code )
+{
+	T Result;
+	appUnalignedCopy( &Result, Code, sizeof(T) );
+	return Result;
+}
 inline INT FFrame::ReadInt()
 {
-	INT Result = *(INT*)Code;
+	INT Result = ReadScriptOperand<INT>( Code );
 	Code += sizeof(INT);
 	return Result;
 }
 inline UObject* FFrame::ReadObject()
 {
 	// A 4-byte object index, not a pointer (FObjectManager::GetScriptObject).
-	INT Ref = *(INT*)Code;
+	INT Ref = ReadScriptOperand<INT>( Code );
 	Code += sizeof(INT);
 	return FObjectManager::GetScriptObject( Ref );
 }
 inline FLOAT FFrame::ReadFloat()
 {
-	FLOAT Result = *(FLOAT*)Code;
+	FLOAT Result = ReadScriptOperand<FLOAT>( Code );
 	Code += sizeof(FLOAT);
 	return Result;
 }
 inline INT FFrame::ReadWord()
 {
-	INT Result = *(_WORD*)Code;
+	INT Result = ReadScriptOperand<_WORD>( Code );
 	Code += sizeof(_WORD);
 	return Result;
 }
 inline FName FFrame::ReadName()
 {
-	FName Result = *(FName*)Code;
+	FName Result = ReadScriptOperand<FName>( Code );
 	Code += sizeof(FName);
 	return Result;
 }

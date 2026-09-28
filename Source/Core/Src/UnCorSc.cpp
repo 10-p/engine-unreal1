@@ -303,7 +303,7 @@ void UObject::execBoolVariable( FFrame& Stack, BYTE*& Result )
 	// Get bool variable.
 	GBoolAddr = NULL;
 	BYTE B = *Stack.Code++;
-	UBoolProperty* Property = (UBoolProperty*)FObjectManager::GetScriptObject( *(INT*)Stack.Code ); // peek the next slot
+	UBoolProperty* Property = (UBoolProperty*)FObjectManager::GetScriptObject( ReadScriptOperand<INT>(Stack.Code) ); // peek the next slot
 	(this->*GIntrinsics[B])( Stack, *(BYTE**)&GBoolAddr );
 	GProperty = Property;
 

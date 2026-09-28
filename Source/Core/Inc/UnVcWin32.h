@@ -93,6 +93,7 @@ typedef float				FLOAT;		// 32-bit IEEE floating point.
 typedef double				DOUBLE;		// 64-bit IEEE double.
 typedef INT_PTR				PTRINT;		// Pointer-sized signed (ufront 2.84).
 typedef UINT_PTR			UPTRINT;	// Pointer-sized unsigned.
+#define appUnalignedCopy(Dest,Src,Count) memcpy(Dest,Src,Count)	/* ufront 2.84: an intrinsic for a constant count, see UnGcc.h */
 
 // Unwanted VC++ level 4 warnings to disable.
 #pragma warning(disable : 4244) /* conversion to float, possible loss of data							*/

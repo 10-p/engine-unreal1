@@ -138,6 +138,10 @@ typedef double   DOUBLE; // 64-bit IEEE double.
 typedef intptr_t  PTRINT;  // Pointer-sized signed.
 typedef uintptr_t UPTRINT; // Pointer-sized unsigned.
 
+// A copy of a small, constant number of bytes from a possibly unaligned address: one load where the CPU allows
+// unaligned loads, never a library call (the builtin expands inline at any optimisation level). ufront 2.84.
+#define appUnalignedCopy(Dest,Src,Count) __builtin_memcpy(Dest,Src,Count)
+
 #ifndef PLATFORM_WIN32 // On Windows these are defined in minwindef.h.
 // Unsigned base types.
 typedef uint8_t  BYTE;   // 8-bit  unsigned.

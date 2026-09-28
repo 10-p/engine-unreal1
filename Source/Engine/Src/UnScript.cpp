@@ -198,12 +198,9 @@ AUTOREGISTER_INTRINSIC( AActor, EX_RotationConst, execRotationConst );
 void AActor::execVectorConst( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(AActor::execVectorConst);
-#ifdef PLATFORM_ARM
-	// try to avoid potential unaligned accesses
-	appMemcpy( (void*)Result, (void*)Stack.Code, sizeof(FVector) );
-#else
-	*(FVector*)Result = *(FVector*)Stack.Code;
-#endif
+	// The operand is unaligned in the packed bytecode: a copy on every target (ufront 2.84; this was the
+	// ARM-only branch, and a typed unaligned read is undefined everywhere).
+	appUnalignedCopy( Result, Stack.Code, sizeof(FVector) );
 	Stack.Code += sizeof(FVector);
 	unguardexecSlow;
 }

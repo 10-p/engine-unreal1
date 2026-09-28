@@ -1446,9 +1446,11 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		}
 		case EX_Case:
 		{
-			_WORD *W=(_WORD*)&Script(iCode);
+			// Read back AFTER the transfer (loading fills it) and by copy: the slot is unaligned (ufront 2.84).
 			XFER(_WORD);; // Code offset.
-			if( *W != MAXWORD )
+			_WORD W;
+			appUnalignedCopy( &W, &Script(iCode-sizeof(_WORD)), sizeof(W) );
+			if( W != MAXWORD )
 				SerializeExpr( iCode, Ar ); // Boolean expr.
 			break;
 		}
