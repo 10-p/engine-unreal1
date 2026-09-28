@@ -125,6 +125,13 @@ void UNSDLClient::Destroy()
 {
 	guard(UNSDLClient::Destroy);
 
+	// ufront 2.84 -- close any viewport still open (`exit`, SIGTERM) while this client and SDL video are alive: a
+	// viewport's Destroy removes it from Viewports, clears FullscreenViewport and shuts its render device down.
+	// Left to the final purge, that ran after the engine had deleted this client (AddressSanitizer:
+	// heap-use-after-free at every exit, every width).
+	for( INT i=Viewports.Num()-1; i>=0; i-- )
+		delete Viewports(i);
+
 	if (Controller)
 	{
 		SDL_GameControllerClose(Controller);
