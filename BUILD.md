@@ -132,15 +132,22 @@ lessons in `docs/10` §10.
   Offset`, Core), so a 64-bit `-MAKE` writes the bytes a 32-bit one does but for the GUID.
 - **A call lays each parameter where the callee's linked property reads it** — v200 summed `EX_BeginFunction`'s
   compiled (32-bit) spans.
-- **A None context clears its whole destination** (`UProperty::ExecLet`, `P_GET_OBJECT` starts NULL), and an
-  object `switch` compares whole pointers.
+- **A None context clears its whole destination** — it fills only the compiled (32-bit) size, so every reader of
+  one zeroes the rest to the value's size in memory (`ZeroNullContextTail()`, CorePrivate.h: `ExecLet`, a struct
+  member, a struct compare); a scratch buffer an object is read from starts zeroed, `P_GET_OBJECT`/`P_GET_ACTOR`
+  start NULL; an object `switch` compares whole pointers.
 - `PTRINT`/`UPTRINT` wherever a pointer passes through an integer; the autoregister chain in a pointer-sized field;
   no `long` where 32 bits are meant; no `FString` object through `...`; SoftDrv's lit palette after its struct.
 
 **Fixed on the way — on every width, the web's included:** four members GCC laid out differently from the script
 (`EditorEngine.AutosaveTimeMinutes`, `IceTexture.MoveIce`, `TcpLink.URL`/`LinkState` — 46 members read at the wrong
 offset); `Player` was 12 bytes short of its C++ class (`DynamicString`); a byte out-parameter's copy-back wrote its
-caller's neighbouring bytes.
+caller's neighbouring bytes. The test pass (ASan, player sessions, bot matches) then found seven more, none of
+them 64-bit: `IntToByte` and a temporary struct's member were returned as pointers into a returned frame; a string
+constant passed as a parameter was copied at the parameter's full size past the function's `Script`; the music
+thread was spawned detached and joined; a viewport outlived its client at exit; `rmode 1` stopped every GCC
+SoftDrv game (its depth-cue table stayed locked); a dedicated server stopped on a NaN rocket ("moved without proper
+hashing", NaN != NaN).
 
 **Test loops** (headless; `Xvfb :98`, loopback only):
 
@@ -151,7 +158,24 @@ gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -MAKE       
 DISPLAY=:98 gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -SOFTWARERENDERER   # 925/0, 10/0
 ./Unreal.bin "DmDeck16?game=U64Test.U64Game" -server                              # U64 DONE passed=<n> failed=0
 <repo>/tools/dev/botmatch.sh <server-tree> 300 [<client-tree>]                     # bMultiPlayerBots/InitialBots in the ini
+# ASan: build-native64-asan (preset native64-asan), a tree of its own, and for every run
+ASAN_OPTIONS=alloc_dealloc_mismatch=0:detect_leaks=0 <repo>/tools/dev/botmatch.sh <asan-tree> 240
+# player sessions, every device (SoftDrv, NOpenGLES, NOpenGL), under ASan too:
+unshare -rn <repo>/tools/dev/census/play.sh <tree> -NOPENGLESRENDERER "DmDeck16?game=UnrealI.DeathMatchGame" /tmp/p \
+    "stat global" "rmode 1" "rmode 5" shot "savegame 5" "open ?load=5" "open DmAriza"
 ```
+
+**Coverage census here:** the build must keep the preset's `-DASM=0` —
+`cmake --preset native64 -B ../build-native64-cov "-DCMAKE_C_FLAGS=-DASM=0 --coverage" "-DCMAKE_CXX_FLAGS=-DASM=0
+--coverage" "-DCMAKE_EXE_LINKER_FLAGS=--coverage /tmp/gcovdump.o" -DCMAKE_SHARED_LINKER_FLAGS=--coverage`. The
+counters land in the build directory, so any number of trees running that binary add to one census. 2.84: 2,297 of
+3,376 functions ran at x86_64 (fixture, bot match, `-MAKE`, the three devices, a menu walk, downloads); the rest are
+UnrealEd, SoftDrv's 15/16-bit/MMX variants and code read for LP64 defects (none open).
+
+v200 harness facts: the log goes **only** to `System/<exe>.log` (`LOG=<file>` names it; two processes in one tree
+need two names); the console stays open after Return; a `-*RENDERER` switch is saved in the ini as the player's
+choice (`botmatch.sh` restores the trees' ini files); an `appError` leaves the process alive, waiting on SDL's
+message box (`play.sh` stops at a `Critical:` line).
 
 `tools/test/U64Test` is compiled by the **32-bit** `Unreal.bin -MAKE` (`EditPackages[n]=U64Test` in Unreal.ini, the
 folder linked beside `System`); a 64-bit `-MAKE` of it must match but for the GUID. **Run the layout sweep in both
