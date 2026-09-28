@@ -2807,17 +2807,28 @@ void UObject::CallFunction( FFrame& Stack, BYTE*& Result, UFunction* Function )
 		FFrame NewStack( this, Function, 0, NewZeroed<BYTE>(GMem,Function->GetPropertiesSize()) );
 		debug(*NewStack.Code==EX_BeginFunction);
 		NewStack.Code++;
-		BYTE* Dest = NewStack.Locals;
+
+		// Each parameter goes where the function's linked property reads it (ufront 2.84). EX_BeginFunction
+		// lists one byte per parameter: its size plus the gap to the next one, in the compiling engine's
+		// 32-bit layout -- an object parameter is 4 there and 8 on LP64, so summing them put every later
+		// parameter at the wrong offset and let the next one overwrite a pointer's high half. The compiler
+		// iterated the same properties in the same order to emit those bytes; here they only count the
+		// parameters. Copies use the parameter's own size, not the padded span (which also wrote a byte
+		// out-parameter's neighbours back on every width).
+		TFieldIterator<UProperty> Parm( Function );
 		FOutParmRec Outs[MAX_FUNC_PARMS], *Out = Outs;
-		while( (Out->Size = *NewStack.Code++) != 0 )
+		while( *NewStack.Code++ != 0 )
 		{
 			debug(*NewStack.Code==0 || *NewStack.Code==1);
-			Out->Src = Out->Dest = Dest;
+			debug(Parm && (Parm->PropertyFlags & (CPF_Parm|CPF_ReturnParm))==CPF_Parm);
+			BYTE* Dest = NewStack.Locals + Parm->Offset;
+			Out->Size = Parm->GetSize();
+			Out->Src  = Out->Dest = Dest;
 			Stack.Step( Stack.Object, Out->Dest );
 			if( Out->Dest != Dest )
 				appMemcpy( Dest, Out->Dest, Out->Size );
-			Dest += Out->Size;
-			Out  += *NewStack.Code++;
+			Out += *NewStack.Code++;
+			++Parm;
 		}
 		debug(*Stack.Code==EX_EndFunctionParms);
 		Stack.Code++;
