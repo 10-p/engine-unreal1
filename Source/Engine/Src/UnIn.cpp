@@ -60,11 +60,14 @@ UInput::UInput()
 	{
 		UClass* Class=GetClass();
 
-		// Create input alias struct.
+		// Create input alias struct. Its layout comes from FAlias itself (ufront 2.84): engine-ut99 described
+		// the same struct by arithmetic -- sizeof(FName)+sizeof(FString), Command at sizeof(FName) -- which held
+		// only without padding, and on LP64 every key bound to an alias crashed (engine-ut99 65e2f5a). Here
+		// Command is a char[64], so the sum happened to be right; it stays right by construction now.
 		UStruct* AliasStruct = new(Class,"Alias")UStruct( NULL );
-		AliasStruct->SetPropertiesSize( sizeof(FName) + 64*sizeof(char));
-		new(AliasStruct,"Alias",  RF_Public)UNameProperty  ( EC_CppProperty, 0,             "", CPF_Config );
-		new(AliasStruct,"Command",RF_Public)UStringProperty( EC_CppProperty, sizeof(FName), "", CPF_Config, 64 );
+		AliasStruct->SetPropertiesSize( sizeof(FAlias) );
+		new(AliasStruct,"Alias",  RF_Public)UNameProperty  ( EC_CppProperty, STRUCT_OFFSET(FAlias,Alias),   "", CPF_Config );
+		new(AliasStruct,"Command",RF_Public)UStringProperty( EC_CppProperty, STRUCT_OFFSET(FAlias,Command), "", CPF_Config, ARRAY_COUNT(((FAlias*)NULL)->Command) );
 
 		// Add alias list.
 		(new(Class,"Aliases",RF_Public)UStructProperty( CPP_PROPERTY(Aliases), "Aliases", CPF_Config, AliasStruct ))->ArrayDim = ALIAS_MAX;
