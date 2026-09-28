@@ -308,7 +308,7 @@ CORE_API char* appStrncat( char* Dest, const char* Src, int Max);
 CORE_API char* appStrupr( char* String );
 CORE_API const char* appStrfind(const char* Str, const char* Find);
 CORE_API UBOOL appMemIsZero( const void* V, int Count );
-CORE_API unsigned long appMemCrc( const unsigned char* Data, int Length );
+CORE_API DWORD appMemCrc( const unsigned char* Data, int Length );
 CORE_API INT appAtoi( const char* Str );
 CORE_API FLOAT appAtof( const char* Str );
 CORE_API INT appStrtoi( const char* Start, char** End, INT Base );

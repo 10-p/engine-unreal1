@@ -966,10 +966,10 @@ CORE_API DWORD GCRCTable[256] =
 // CRC32 computer based on polynomial:
 // x^32+x^26+x^23+x^22+x^16+x^12+x^11+x^10+x^8+x^7+x^5+x^4+x^2+x+1.
 //
-unsigned long appMemCrc( const unsigned char* Data, int Length )
+DWORD appMemCrc( const unsigned char* Data, int Length )
 {
 	guard(appMemCrc);
-	unsigned long CRC = 0xFFFFFFFF;
+	DWORD CRC = 0xFFFFFFFF;	// ufront 2.84: a CRC32, not a long (~CRC set the upper half on LP64)
 	for( int i=0; i<Length; i++ )
 	{
 		int Index = (CRC ^ *(Data++)) & 0x000000FF;

@@ -151,7 +151,9 @@ void ATcpLink::execGetIPByName( FFrame& Stack, BYTE*& Result )
 			if( lpstHost )
 			{
 				// success
-				IpSetInt( inAddrStr, *((u_long *)lpstHost->h_addr) );
+				DWORD HostAddr;
+				appMemcpy( &HostAddr, lpstHost->h_addr, sizeof(HostAddr) );	// ufront 2.84: the address is 4 bytes, not a long
+				IpSetInt( inAddrStr, HostAddr );
 				appSprintf( IpAddr, "%u.%u.%u.%u",
 					IPBYTE(inAddrStr, 1), IPBYTE(inAddrStr, 2), IPBYTE(inAddrStr, 3), IPBYTE(inAddrStr, 4));
 				//IpAddr = inet_ntoa( inAddrStr );
