@@ -868,7 +868,7 @@ private:
 			return Export._Object;
 		}
 		else return NULL;
-		unguardf(( "(%s %i %08X)", *ExportMap(Index).ObjectName, Tell(), (DWORD)File ));
+		unguardf(( "(%s %i %p)", *ExportMap(Index).ObjectName, Tell(), File ));
 	}
 
 	// Return the loaded object corresponding to an import index; any errors are fatal.
@@ -956,7 +956,7 @@ private:
 		// Restore position.
 		Pop( SavedStatus );
 		Object->ClearFlags( RF_Preloading );
-		unguardf(( "(%s %i==%i/%i (%i %i) %08X)", Object->GetFullName(), Tell(), Pos, Eof, ExportMap( Object->GetLinkerIndex() ).SerialOffset, ExportMap( Object->GetLinkerIndex() ).SerialSize, (DWORD)File ));
+		unguardf(( "(%s %i==%i/%i (%i %i) %p)", Object->GetFullName(), Tell(), Pos, Eof, ExportMap( Object->GetLinkerIndex() ).SerialOffset, ExportMap( Object->GetLinkerIndex() ).SerialSize, File ));
 	}
 
 	// Map an import/export index to an object; all errors here are fatal.
@@ -1018,7 +1018,7 @@ private:
 		Object = IndexToObject( Index );
 
 		return *this;
-		unguardf(( "(%s %i %08X))", GetFullName(), Tell(), (DWORD)File ));
+		unguardf(( "(%s %i %p))", GetFullName(), Tell(), File ));
 	}
 	FArchive& operator<<( FName& Name )
 	{
@@ -1032,7 +1032,7 @@ private:
 		Name = NameMap( NameIndex );
 
 		return *this;
-		unguardf(( "(%s %i %08X))", GetFullName(), Tell(), (DWORD)File ));
+		unguardf(( "(%s %i %p))", GetFullName(), Tell(), File ));
 	}
 };
 

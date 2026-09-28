@@ -91,6 +91,8 @@ typedef signed __int64		SQWORD;		// 64-bit signed.
 typedef signed int			UBOOL;		// Boolean 0 (false) or 1 (true).
 typedef float				FLOAT;		// 32-bit IEEE floating point.
 typedef double				DOUBLE;		// 64-bit IEEE double.
+typedef INT_PTR				PTRINT;		// Pointer-sized signed (ufront 2.84).
+typedef UINT_PTR			UPTRINT;	// Pointer-sized unsigned.
 
 // Unwanted VC++ level 4 warnings to disable.
 #pragma warning(disable : 4244) /* conversion to float, possible loss of data							*/

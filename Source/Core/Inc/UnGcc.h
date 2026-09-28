@@ -132,6 +132,12 @@ typedef int64_t  SQWORD; // 64-bit signed.
 typedef int32_t  UBOOL;  // Boolean 0 (false) or 1 (true).
 typedef double   DOUBLE; // 64-bit IEEE double.
 
+// Pointer-sized integers (ufront 2.84, as engine-ut99 2.83). Use these wherever a pointer passes through an
+// integer: an address rounded up, a pointer parked in a script-visible slot, a pointer printed or hashed.
+// INT and DWORD stay 32-bit on every target, so a pointer through either is truncated on LP64.
+typedef intptr_t  PTRINT;  // Pointer-sized signed.
+typedef uintptr_t UPTRINT; // Pointer-sized unsigned.
+
 #ifndef PLATFORM_WIN32 // On Windows these are defined in minwindef.h.
 // Unsigned base types.
 typedef uint8_t  BYTE;   // 8-bit  unsigned.

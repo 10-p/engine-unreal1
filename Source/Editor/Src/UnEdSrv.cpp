@@ -1863,7 +1863,7 @@ UBOOL UEditorEngine::Exec( const char* Stream, FOutputDevice* Out )
 			}
 			check(Viewport->Actor!=NULL);
 
-			DWORD hWndParent=0;
+			QWORD hWndParent=0; // ufront 2.84: a window handle is pointer-sized
 			Parse(Str,"HWND=",hWndParent);
 
 			INT NewX=Viewport->SizeX, NewY=Viewport->SizeY;
@@ -1909,7 +1909,7 @@ UBOOL UEditorEngine::Exec( const char* Stream, FOutputDevice* Out )
 				INT OpenY = INDEX_NONE;
 				Parse( Str, "X=", OpenX );
 				Parse( Str, "Y=", OpenY );
-				Viewport->OpenWindow( (void*)hWndParent, 0, NewX, NewY, OpenX, OpenY );
+				Viewport->OpenWindow( (void*)(UPTRINT)hWndParent, 0, NewX, NewY, OpenX, OpenY );
 				if( appStricmp(Viewport->GetName(),"Standard3V")==0 )
 					ResetSound();
 			}

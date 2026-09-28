@@ -1264,7 +1264,7 @@ static void global_Flicker( AActor* Owner, FLOAT& Brightness, FVector& Color )
 {
 	guardSlow(global_Flicker);
 
-	FLOAT Random = GRandoms->RandomBase((int)Owner);
+	FLOAT Random = GRandoms->RandomBase(Owner->GetIndex()); // ufront 2.84: the object index, not a truncated address
 	if( Random < 0.5 )	Brightness = 0.0;
 	else				Brightness *= Random;
 	unguardSlow;
