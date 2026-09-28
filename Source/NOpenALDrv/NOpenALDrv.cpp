@@ -1149,7 +1149,9 @@ void UNOpenALAudioSubsystem::StartMusicThread()
 	// This isn't an atomic because we only set it before the thread starts and before we wait on it to join.
 	MusicThreadRunning = true;
 
-	MusicThread = appThreadSpawn( MusicThreadProc, (void*)this, "MusicThread", true, nullptr );
+	// Joinable (ufront 2.84): StopMusicThread() joins it, and joining a detached thread is undefined
+	// (AddressSanitizer aborts on it at every client exit).
+	MusicThread = appThreadSpawn( MusicThreadProc, (void*)this, "MusicThread", false, nullptr );
 	check(MusicThread);
 #endif
 
