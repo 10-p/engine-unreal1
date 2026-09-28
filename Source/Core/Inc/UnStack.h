@@ -31,6 +31,7 @@ struct CORE_API FFrame
 	void Step( UObject* Context, BYTE*& Result );
 	void CDECL ScriptWarn( UBOOL Critical, char* Fmt, ... );
 	INT ReadInt();
+	UObject* ReadObject(); // a 4-byte object index, not a pointer (ufront 2.84)
 	FLOAT ReadFloat();
 	INT ReadWord();
 	FName ReadName();

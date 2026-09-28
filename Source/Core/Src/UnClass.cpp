@@ -1129,6 +1129,25 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 	EExprToken Expr=(EExprToken)0;
 	guard(SerializeExpr);
 	#define XFER(T) {Ar << *(T*)&Script(iCode); iCode += sizeof(T); }
+	// A script object reference (ufront 2.84, as engine-ut99 2.83): the stream keeps a 4-byte slot holding the
+	// object's index (FObjectManager::GetScriptRef), never an address, so no code offset depends on the
+	// pointer width. The archive always sees the object itself -- a loader resolves it, a saver writes the
+	// package's reference, the garbage collector marks it, a replacing archive may hand back another -- and
+	// its index goes back into the slot.
+	#define XFER_OBJ \
+	{ \
+		UObject* Obj = NULL; \
+		if( !Ar.IsLoading() ) \
+		{ \
+			INT Ref; \
+			appMemcpy( &Ref, &Script(iCode), sizeof(Ref) ); \
+			Obj = FObjectManager::GetScriptObject( Ref ); \
+		} \
+		Ar << Obj; \
+		INT NewRef = FObjectManager::GetScriptRef( Obj ); \
+		appMemcpy( &Script(iCode), &NewRef, sizeof(NewRef) ); \
+		iCode += sizeof(INT); \
+	}
 
 	// Get expr token.
 	XFER(BYTE);
@@ -1155,7 +1174,7 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		case EX_InstanceVariable:
 		case EX_DefaultVariable:
 		{
-			XFER(UProperty*);
+			XFER_OBJ;
 			break;
 		}
 		case EX_BoolVariable:
@@ -1178,7 +1197,7 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		}
 		case EX_IntrinsicParm:
 		{
-			XFER(UProperty*);
+			XFER_OBJ;
 			break;
 		}
 		case EX_ClassContext:
@@ -1205,7 +1224,7 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		}
 		case EX_FinalFunction:
 		{
-			XFER(UStruct*); // Stack node.
+			XFER_OBJ; // Stack node.
 			while( SerializeExpr( iCode, Ar ) != EX_EndFunctionParms ); // Parms.
 			break;
 		}
@@ -1226,7 +1245,7 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		}
 		case EX_ObjectConst:
 		{
-			XFER(UObject*);
+			XFER_OBJ;
 			break;
 		}
 		case EX_NameConst:
@@ -1258,13 +1277,13 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		}
 		case EX_MetaCast:
 		{
-			XFER(UClass*);
+			XFER_OBJ;
 			SerializeExpr( iCode, Ar );
 			break;
 		}
 		case EX_DynamicCast:
 		{
-			XFER(UClass*);
+			XFER_OBJ;
 			SerializeExpr( iCode, Ar );
 			break;
 		}
@@ -1348,14 +1367,14 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		case EX_StructCmpEq:
 		case EX_StructCmpNe:
 		{
-			XFER(UStruct*); // Struct.
+			XFER_OBJ; // Struct.
 			SerializeExpr( iCode, Ar ); // Left expr.
 			SerializeExpr( iCode, Ar ); // Right expr.
 			break;
 		}
 		case EX_StructMember:
 		{
-			XFER(UProperty*); // Property.
+			XFER_OBJ; // Property.
 			SerializeExpr( iCode, Ar ); // Inner expr.
 			break;
 		}

@@ -278,6 +278,13 @@ inline INT FFrame::ReadInt()
 	Code += sizeof(INT);
 	return Result;
 }
+inline UObject* FFrame::ReadObject()
+{
+	// A 4-byte object index, not a pointer (FObjectManager::GetScriptObject).
+	INT Ref = *(INT*)Code;
+	Code += sizeof(INT);
+	return FObjectManager::GetScriptObject( Ref );
+}
 inline FLOAT FFrame::ReadFloat()
 {
 	FLOAT Result = *(FLOAT*)Code;

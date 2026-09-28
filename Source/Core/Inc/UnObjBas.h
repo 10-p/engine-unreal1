@@ -458,6 +458,15 @@ public:
 
 	// Accessors.
 	virtual UBOOL GetInitialized() {return Initialized;}
+
+	// Script object references (ufront 2.84, as engine-ut99 2.83). Compiled UnrealScript keeps a 4-byte slot
+	// for every object it names (a property, function, struct, class or object constant), and the retail
+	// packages computed every jump, skip, label and saved state offset around slots of that size. So in memory
+	// a slot holds the object's index in the object table rather than its address: the stream has the same
+	// layout on every pointer width, and no code offset ever moves. UStruct::SerializeExpr converts on load
+	// and save; the VM and the script compiler go through these two. INDEX_NONE is None.
+	static inline UObject* GetScriptObject( INT Ref );
+	static inline INT GetScriptRef( UObject* Obj );
 	virtual UPackage* GetTransientPackage() {return TransientPackage;}
 	FName GetTempState() {return TempState;}//oldver
 	FName GetTempGroup() {return TempGroup;}//oldver
@@ -982,6 +991,16 @@ public:
 		return (T*)FObjectIterator::operator->();
 	}
 };
+
+// Script object references (see FObjectManager).
+inline UObject* FObjectManager::GetScriptObject( INT Ref )
+{
+	return Ref!=INDEX_NONE ? ((UObject**)Objects.GetData())[Ref] : NULL;
+}
+inline INT FObjectManager::GetScriptRef( UObject* Obj )
+{
+	return Obj ? (INT)Obj->GetIndex() : INDEX_NONE;
+}
 
 /*----------------------------------------------------------------------------
 	The End.

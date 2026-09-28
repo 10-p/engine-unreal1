@@ -202,7 +202,7 @@ void UObject::execLocalVariable( FFrame& Stack, BYTE*& Result )
 
 	debug(Stack.Object==this);
 	debug(Stack.Locals!=NULL);
-	GProperty = ((UProperty*)Stack.ReadInt());
+	GProperty = (UProperty*)Stack.ReadObject();
 	Result = Stack.Locals + GProperty->Offset;
 
 	unguardexecSlow;
@@ -213,7 +213,7 @@ void UObject::execInstanceVariable( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execInstanceVariable);
 
-	GProperty = (UProperty*)Stack.ReadInt();
+	GProperty = (UProperty*)Stack.ReadObject();
 	Result = (BYTE*)this + GProperty->Offset;
 
 	unguardexecSlow;
@@ -224,7 +224,7 @@ void UObject::execDefaultVariable( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execDefaultVariable);
 
-	GProperty = (UProperty*)Stack.ReadInt();
+	GProperty = (UProperty*)Stack.ReadObject();
 	Result = &GetClass()->Defaults(GProperty->Offset);
 
 	unguardexecSlow;
@@ -295,7 +295,7 @@ void UObject::execBoolVariable( FFrame& Stack, BYTE*& Result )
 	// Get bool variable.
 	GBoolAddr = NULL;
 	BYTE B = *Stack.Code++;
-	UBoolProperty* Property = *(UBoolProperty**)Stack.Code;
+	UBoolProperty* Property = (UBoolProperty*)FObjectManager::GetScriptObject( *(INT*)Stack.Code ); // peek the next slot
 	(this->*GIntrinsics[B])( Stack, *(BYTE**)&GBoolAddr );
 	GProperty = Property;
 
@@ -330,7 +330,7 @@ AUTOREGISTER_INTRINSIC( UObject, EX_Nothing, execNothing );
 
 void UObject::execIntrinsicParm( FFrame& Stack, BYTE*& Result )
 {
-	Result = Stack.Locals + ((UProperty*)Stack.ReadInt())->Offset;
+	Result = Stack.Locals + ((UProperty*)Stack.ReadObject())->Offset;
 }
 AUTOREGISTER_INTRINSIC( UObject, EX_IntrinsicParm, execIntrinsicParm );
 
@@ -558,7 +558,7 @@ void UObject::execFinalFunction( FFrame& Stack, BYTE*& Result )
 	guardSlow(UObject::execFinalFunction);
 
 	// Call the final function.
-	CallFunction( Stack, Result, (UFunction*)Stack.ReadInt() );
+	CallFunction( Stack, Result, (UFunction*)Stack.ReadObject() );
 
 	unguardexecSlow;
 }
@@ -584,8 +584,7 @@ void UObject::execStructCmpEq( FFrame& Stack, BYTE*& Result )
 	guardSlow(UObject::execStructCmpEq);
 
 	// Get struct.
-	UStruct* Struct = *(UStruct**)Stack.Code;
-	Stack.Code += sizeof(UStruct*);
+	UStruct* Struct = (UStruct*)Stack.ReadObject();
 
 	// Get first expression.
 	BYTE Buffer1[255], *Addr1=Buffer1;
@@ -607,8 +606,7 @@ void UObject::execStructCmpNe( FFrame& Stack, BYTE*& Result )
 	guardSlow(UObject::execStructCmpNe);
 
 	// Get struct.
-	UStruct* Struct = *(UStruct**)Stack.Code;
-	Stack.Code += sizeof(UStruct*);
+	UStruct* Struct = (UStruct*)Stack.ReadObject();
 
 	// Get first expression.
 	BYTE Buffer1[MAX_STRING_CONST_SIZE], *Addr1=Buffer1;
@@ -630,7 +628,7 @@ void UObject::execStructMember( FFrame& Stack, BYTE*& Result )
 	guardSlow(UObject::execStructMember);
 
 	// Get structure element.
-	UProperty* Property = (UProperty*)Stack.ReadInt();
+	UProperty* Property = (UProperty*)Stack.ReadObject();
 
 	// Get struct expression.
 	BYTE Buffer[255], *Addr = Result ? Buffer : NULL;
@@ -677,7 +675,7 @@ AUTOREGISTER_INTRINSIC( UObject, EX_StringConst, execStringConst );
 void UObject::execObjectConst( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execObjectConst);
-	*(UObject**)Result = (UObject*)Stack.ReadInt();
+	*(UObject**)Result = (UObject*)Stack.ReadObject();
 	unguardexecSlow;
 }
 AUTOREGISTER_INTRINSIC( UObject, EX_ObjectConst, execObjectConst );
@@ -773,7 +771,7 @@ void UObject::execDynamicCast( FFrame& Stack, BYTE*& Result )
 	guardSlow(UObject::execDynamicCast);
 
 	// Get destination class of dynamic actor class.
-	UClass* Class = (UClass *)Stack.ReadInt();
+	UClass* Class = (UClass*)Stack.ReadObject();
 
 	// Compile actor expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
@@ -791,7 +789,7 @@ void UObject::execMetaCast( FFrame& Stack, BYTE*& Result )
 	guardSlow(UObject::execMetaCast);
 
 	// Get destination class of dynamic actor class.
-	UClass* MetaClass = (UClass*)Stack.ReadInt();
+	UClass* MetaClass = (UClass*)Stack.ReadObject();
 
 	// Compile actor expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
