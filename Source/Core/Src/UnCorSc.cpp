@@ -612,13 +612,16 @@ void UObject::execStructCmpEq( FFrame& Stack, BYTE*& Result )
 	// Get struct.
 	UStruct* Struct = (UStruct*)Stack.ReadObject();
 
-	// Get first expression.
+	// Get first expression. (ufront 2.84: a None context's struct is zero to its size in memory, as in ExecLet.)
 	BYTE Buffer1[255], *Addr1=Buffer1;
+	GNullContextResult = NULL;
 	Stack.Step( this, Addr1 );
+	ZeroNullContextTail( Addr1, Struct->GetPropertiesSize() );
 
 	// Get second expression.
 	BYTE Buffer2[255], *Addr2=Buffer2;
 	Stack.Step( this, Addr2 );
+	ZeroNullContextTail( Addr2, Struct->GetPropertiesSize() );
 
 	// Compare.
 	*(DWORD*)Result = Struct->StructCompare(Addr1,Addr2);
@@ -636,11 +639,14 @@ void UObject::execStructCmpNe( FFrame& Stack, BYTE*& Result )
 
 	// Get first expression.
 	BYTE Buffer1[MAX_STRING_CONST_SIZE], *Addr1=Buffer1;
+	GNullContextResult = NULL;
 	Stack.Step( this, Addr1 );
+	ZeroNullContextTail( Addr1, Struct->GetPropertiesSize() );
 
 	// Get second expression.
 	BYTE Buffer2[MAX_STRING_CONST_SIZE], *Addr2=Buffer2;
 	Stack.Step( this, Addr2 );
+	ZeroNullContextTail( Addr2, Struct->GetPropertiesSize() );
 
 	// Compare.
 	*(DWORD*)Result = !Struct->StructCompare(Addr1,Addr2);
@@ -658,7 +664,9 @@ void UObject::execStructMember( FFrame& Stack, BYTE*& Result )
 
 	// Get struct expression.
 	BYTE Buffer[255], *Addr = Result ? Buffer : NULL;
+	GNullContextResult = NULL;
 	Stack.Step( this, Addr );
+	ZeroNullContextTail( Addr, ((UStruct*)Property->GetParent())->GetPropertiesSize() );	// ufront 2.84, see ExecLet
 
 	// Set result.
 	Result = Addr ? Addr+Property->Offset : NULL;

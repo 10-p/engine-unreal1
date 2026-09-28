@@ -190,18 +190,12 @@ void UProperty::ExecLet( void* Var, FFrame& Stack )
 {
 	guardSlow(UProperty::ExecLet);
 
-	// Assign value.
-	BYTE Buffer[MAX_CONST_SIZE], *Val=Buffer;
+	// Assign value. (ufront 2.84: room for any value, not MAX_CONST_SIZE -- a None context's struct is zeroed here
+	// to its size in memory, which on LP64 passes 16 bytes for a struct holding pointers.)
+	BYTE Buffer[MAX_STRING_CONST_SIZE], *Val=Buffer;
 	GNullContextResult = NULL;
 	Stack.Step( Stack.Object, Val );
-
-	// ufront 2.84 -- `X = None.Y` zero-fills only as many bytes as the compiler recorded: the value's size in
-	// the 32-bit retail format (4 for any object). Where the value is larger in memory (an 8-byte pointer, a
-	// struct holding one) the rest of this uninitialised buffer would be copied into X as a live-looking
-	// garbage reference. So when the fill landed on this value and fell short, zero the rest. Never on 32-bit.
-	if( Val==GNullContextResult && GNullContextSize<GetElementSize() )
-		appMemset( Val+GNullContextSize, 0, GetElementSize()-GNullContextSize );
-	GNullContextResult = NULL;
+	ZeroNullContextTail( Val, Min<INT>( GetElementSize(), sizeof(Buffer) ) );
 
 	if( Var )
 		appMemcpy( Var, Val, GetElementSize() );
