@@ -34,7 +34,7 @@
 	Private definitions.
 ----------------------------------------------------------------------------*/
 
-typedef unsigned long   unsigned32;
+typedef unsigned int    unsigned32;	// ufront 2.84: was unsigned long -- 8 bytes on LP64, overrunning the 16-byte FGuid and the 6-byte node id.
 typedef unsigned short  unsigned16;
 typedef unsigned char   unsigned8;
 typedef unsigned char   byte;
