@@ -471,7 +471,7 @@ void FLightManager::ShadowMapGen( FTextureInfo& Tex, BYTE* SrcBits, BYTE* Dest1 
 		appMemset( Dest1, 127, ShadowMaskSpace*8 );
 		return;
 	}
-	debug(((INT)Dest1 & 3)==0);
+	debug(((UPTRINT)Dest1 & 3)==0);
 
 	// Generate smooth shadow map by convolving the shadow bitmask with a smoothing filter.
 	INT Size4 = (ShadowMaskU*8)/4;
