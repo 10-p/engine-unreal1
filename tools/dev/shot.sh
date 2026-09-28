@@ -22,8 +22,8 @@ XPID=$!
 sleep 1
 
 ( cd "$RUN/System" && DISPLAY="$DISP" SDL_VIDEODRIVER=x11 \
-    ./Unreal.bin "$MAP" -log "$@" >/tmp/u1run.log 2>&1 ) &
-GPID=$!
+    exec ./Unreal.bin "$MAP" -log "$@" >/tmp/u1run.log 2>&1 ) &
+GPID=$!	# exec: the subshell BECOMES the game, so the kill below reaches it (ufront 2.84; it used to leave every game running)
 
 sleep "$SECS"
 
