@@ -19,9 +19,14 @@ A="${UNREAL_ASSETS_DIR:-/home/ion/unreal-assets}"
 rm -rf "$RUN"
 mkdir -p "$RUN/System"
 
-for d in Maps Textures Sounds Music Help Save Cache; do
+for d in Maps Textures Sounds Music Help; do
     [ -d "$A/$d" ] && ln -sfn "$A/$d" "$RUN/$d"
 done
+# Save and Cache are written by the engine (save games, downloaded packages), so they are the run tree's own
+# (ufront 2.84: they were symlinks, and a test's save game or download went straight into the asset tree). The
+# asset tree's saves are copied so they stay loadable.
+mkdir -p "$RUN/Cache"
+if [ -d "$A/Save" ]; then cp -a "$A/Save" "$RUN/Save"; else mkdir -p "$RUN/Save"; fi
 
 # Packages and the like: symlinks are fine, nothing writes to them.
 for f in "$A"/System/*; do
