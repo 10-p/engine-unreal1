@@ -482,8 +482,9 @@ void UStruct::LinkOffsets( FArchive& Ar )
 	// Layout guard: an intrinsic class's C++ sizeof must equal the size derived from the loaded .u property
 	// offsets; otherwise C++ and script read the same object through two layouts. Necessary, not sufficient:
 	// a member can move inside a class while the size still matches (tools/dev/layout-sweep.gdb compares
-	// every offset). ufront 2.84 bring-up: warn, and allocate the larger size so C++ never writes past the
-	// object; it becomes fatal once the sweep is clean, as in engine-ut99.
+	// every offset). FATAL (ufront 2.84, as engine-ut99 034eb9b): past the first difference every access is
+	// silent corruption, and an object allocated at the script size is smaller than the class C++ writes
+	// through. The packages are fixed, so a mismatch is always our header or the placeholder table.
 	{
 		extern UStruct* GLayoutStructs[]; extern INT GLayoutSizes[]; extern INT GLayoutCount;
 		for( INT li=0; li<GLayoutCount; li++ )
@@ -493,7 +494,8 @@ void UStruct::LinkOffsets( FArchive& Ar )
 				{
 					debugf( NAME_Warning, "[layout] intrinsic %s: C++ sizeof=%i but script layout=%i -- member-offset shift risk",
 						GetName(), GLayoutSizes[li], PropertiesSize );
-					PropertiesSize = Max( PropertiesSize, GLayoutSizes[li] );
+					appErrorf( "Intrinsic class %s: C++ sizeof=%i but script layout=%i. The C++ header and the package disagree (tools/dev/layout-sweep.gdb names the member).",
+						GetName(), GLayoutSizes[li], PropertiesSize );
 				}
 				break;
 			}
