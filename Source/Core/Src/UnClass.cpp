@@ -1523,10 +1523,43 @@ void UFunction::Serialize( FArchive& Ar )
 	guard(UFunction::Serialize);
 	UStruct::Serialize( Ar );
 
-	// Function info.
+	// Function info. ParmsSize and ReturnValueOffset are layout values (ufront 2.84): a package carries them
+	// in the script format's 32-bit layout, while the running engine needs its own (an object parameter is 8
+	// bytes on LP64, so ProcessEvent copied too few bytes and a call read its result at the wrong offset). So
+	// saving writes the script format and loading recomputes them from the linked properties, as the
+	// compiler does. On 32-bit targets both are the values the package already holds.
+	INT RunParmsSize = ParmsSize, RunReturnValueOffset = ReturnValueOffset;
+	if( Ar.IsSaving() )
+	{
+		ParmsSize = 0;
+		for( TFieldIterator<UProperty> It(this); It; ++It )
+		{
+			INT Alignment;
+			if( It->PropertyFlags & CPF_Parm )
+				ParmsSize = ScriptFormatOffset(*It) + ScriptFormatElementSize(*It,Alignment) * It->ArrayDim;
+			if( It->PropertyFlags & CPF_ReturnParm )
+				ReturnValueOffset = ScriptFormatOffset(*It);
+		}
+	}
 	Ar << ParmsSize << iIntrinsic;
 	Ar << NumParms << OperPrecedence;
 	Ar << ReturnValueOffset << FunctionFlags;
+	if( Ar.IsSaving() )
+	{
+		ParmsSize         = RunParmsSize;
+		ReturnValueOffset = RunReturnValueOffset;
+	}
+	else if( Ar.IsLoading() )
+	{
+		ParmsSize = 0;
+		for( TFieldIterator<UProperty> It(this); It; ++It )
+		{
+			if( It->PropertyFlags & CPF_Parm )
+				ParmsSize = It->Offset + It->GetSize();
+			if( It->PropertyFlags & CPF_ReturnParm )
+				ReturnValueOffset = It->Offset;
+		}
+	}
 
 	// Replication info.
 	if( FunctionFlags & FUNC_Net )
