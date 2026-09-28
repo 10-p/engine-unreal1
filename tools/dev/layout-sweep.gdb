@@ -1,0 +1,130 @@
+# layout-sweep.gdb -- every script property of every intrinsic class vs the same-named C++ member
+# (ufront 2.84: engine-ut99's tool, for v200 -- Parent for Outer, FObjectManager::Objects for GObjObjects).
+#
+#   cd <run-tree>/System && gdb -batch -x <engine-repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -MAKE
+#   cd <run-tree>/System && gdb -batch -x <engine-repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -NULLRENDERER
+#
+# Run BOTH hosts. Some reflected layouts exist only in one process (UT99's input-alias struct exists only
+# where a client is), so a sweep in one host is blind to the other's. `-MAKE` stops when the editor engine is
+# destroyed; the client stops at its first game tick (map loaded, viewport open; headless under Xvfb).
+#
+# The runtime layout guard in UStruct::LinkOffsets compares only an intrinsic class's C++ sizeof with its
+# script size. It cannot see a member that moved inside a class when a later one re-aligns. This compares
+# OFFSETS, property by property: UE1 loads script properties at the offsets LinkOffsets computes, while the
+# C++ reads its members at the compiler's offsets. Bools are compared as (32-bit unit, bit).
+# Output: a SHIFT/SIZE line per class disagreement, then `checked=<n> shifted=<n>`; then the script structs
+# with a same-named C++ F<Name> (SSHIFT/SSIZE), then `structs=<n> checked=<n> shifted=<n>`. A name can
+# match an unrelated C++ type -- read a report before acting on it. A property may point at a same-named
+# member of a nested struct: one level of nested members is accepted as a match.
+# Needs a build with debug info (the native presets are RelWithDebInfo).
+set pagination off
+set debuginfod enabled off
+python
+import gdb
+make = "-make" in gdb.parameter("args").lower()
+gdb.execute("break " + ("UEditorEngine::Destroy" if make else "UGameEngine::Tick"))
+end
+run
+python
+import gdb
+def name_of(obj):
+    idx = int(obj['Name']['Index'])
+    return gdb.parse_and_eval("((FNameEntry**)FName::Names.Data)[%d]->Name" % idx).string()
+UObjectPtr   = gdb.lookup_type('UObject').pointer()
+UPropertyPtr = gdb.lookup_type('UProperty').pointer()
+UBoolPtr     = gdb.lookup_type('UBoolProperty').pointer()
+count = int(gdb.parse_and_eval("GLayoutCount"))
+checked = shifted = 0
+for i in range(count):
+    struct = gdb.parse_and_eval("GLayoutStructs[%d]" % i)
+    cname  = name_of(struct)
+    ctype  = None
+    for prefix in ('A', 'U', 'F', ''):
+        try:
+            ctype = gdb.lookup_type(prefix + cname); break
+        except gdb.error:
+            pass
+    if ctype is None:
+        print("NOTYPE %s" % cname); continue
+    members = {}
+    nested  = {}
+    for f in ctype.fields():
+        if f.is_base_class or not hasattr(f, 'bitpos'):
+            continue
+        if f.bitsize:
+            members[f.name.lower()] = ((f.bitpos // 32) * 4, 1 << (f.bitpos % 32))
+        else:
+            members[f.name.lower()] = (f.bitpos // 8, 0)
+            ftype = f.type.strip_typedefs()
+            if ftype.code == gdb.TYPE_CODE_STRUCT:
+                for g in ftype.fields():
+                    if not g.is_base_class and hasattr(g, 'bitpos') and not g.bitsize and g.name:
+                        nested.setdefault(g.name.lower(), set()).add((f.bitpos + g.bitpos) // 8)
+    size_cpp = int(gdb.parse_and_eval("GLayoutSizes[%d]" % i))
+    if int(struct['PropertiesSize']) != size_cpp:
+        print("SIZE %s C++=%d script=%d" % (cname, size_cpp, int(struct['PropertiesSize'])))
+    field = struct['Children']
+    while int(field) != 0:
+        obj = field.cast(UObjectPtr)
+        if int(obj['Parent']) != int(struct.cast(UObjectPtr)):
+            break
+        pclass = name_of(obj['Class'])
+        cpp = members.get(name_of(obj).lower())
+        if pclass.endswith('Property') and cpp is not None:
+            checked += 1
+            off  = int(field.cast(UPropertyPtr)['Offset'])
+            mask = int(field.cast(UBoolPtr)['BitMask']) if pclass == 'BoolProperty' else 0
+            if (cpp[0] != off or (pclass == 'BoolProperty' and cpp[1] and cpp[1] != mask)) \
+                    and off not in nested.get(name_of(obj).lower(), ()):
+                shifted += 1
+                print("SHIFT %s.%s (%s) C++=%d/%x script=%d/%x" % (cname, name_of(obj), pclass, cpp[0], cpp[1], off, mask))
+        field = field['Next']
+print("checked=%d shifted=%d" % (checked, shifted))
+
+# (ufront 2.83) Script STRUCTS mirrored by a C++ struct F<Name>. The runtime guard only knows native
+# classes, but a struct's size is also a stride (TArray<FBuilderPoly>) and its members are read by C++ at
+# its own offsets, so every script struct with a same-named C++ type is compared too: size, then each
+# property. A name can match an unrelated C++ type -- read a report before acting on it.
+UStructPtr = gdb.lookup_type('UStruct').pointer()
+objs = gdb.parse_and_eval("FObjectManager::Objects")
+data = objs['Data'].cast(UObjectPtr.pointer())
+s_checked = s_shifted = s_structs = 0
+for k in range(int(objs['ArrayNum'])):
+    o = data[k]
+    if int(o) == 0 or name_of(o['Class']) != 'Struct':
+        continue
+    sname = name_of(o)
+    try:
+        ctype = gdb.lookup_type('F' + sname).strip_typedefs()
+    except gdb.error:
+        continue
+    if ctype.code != gdb.TYPE_CODE_STRUCT:
+        continue
+    s_structs += 1
+    st = o.cast(UStructPtr)
+    outer = name_of(o['Parent'])
+    if int(st['PropertiesSize']) != ctype.sizeof:
+        print("SSIZE %s.%s C++ F%s=%d script=%d" % (outer, sname, sname, ctype.sizeof, int(st['PropertiesSize'])))
+    members = {}
+    for f in ctype.fields():
+        if f.is_base_class or not hasattr(f, 'bitpos'):
+            continue
+        members[f.name.lower()] = f.bitpos // 8
+    field = st['Children']
+    while int(field) != 0:
+        fo = field.cast(UObjectPtr)
+        if int(fo['Parent']) != int(o):
+            break
+        pclass = name_of(fo['Class'])
+        cpp = members.get(name_of(fo).lower())
+        if pclass.endswith('Property') and cpp is not None:
+            s_checked += 1
+            off = int(field.cast(UPropertyPtr)['Offset'])
+            if cpp != off:
+                s_shifted += 1
+                print("SSHIFT %s.%s.%s (%s) C++=%d script=%d" % (outer, sname, name_of(fo), pclass, cpp, off))
+        field = field['Next']
+print("structs=%d checked=%d shifted=%d" % (s_structs, s_checked, s_shifted))
+end
+kill
+quit

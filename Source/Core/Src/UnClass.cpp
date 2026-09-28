@@ -316,7 +316,15 @@ UStruct::UStruct( EIntrinsicConstructor, INT InSize, FName InName, FName InPacka
 ,	FriendlyName( InName )
 ,	TextPos( 0 )
 ,	Line( 0 )
-{}
+{
+	// Layout guard (ufront 2.84, engine-ut99's since 2.32): record the native C++ sizeof (InSize) keyed by
+	// object pointer, so LinkOffsets can compare it with the size derived from the LOADED .u property offsets.
+	// Plain globals (BSS): safe at the static-init time these intrinsic constructors run. The names are the
+	// ones tools/dev/layout-sweep.gdb reads.
+	extern UStruct* GLayoutStructs[]; extern INT GLayoutSizes[]; extern INT GLayoutCount;
+	if( GLayoutCount < 4096 ) { GLayoutStructs[GLayoutCount]=this; GLayoutSizes[GLayoutCount]=InSize; GLayoutCount++; }
+}
+UStruct* GLayoutStructs[4096]; INT GLayoutSizes[4096]; INT GLayoutCount=0;
 UStruct::UStruct( UStruct* InSuperStruct )
 :	UField( InSuperStruct )
 ,	PropertiesSize( InSuperStruct ? InSuperStruct->GetPropertiesSize() : 0 )
@@ -348,6 +356,26 @@ void UStruct::LinkOffsets( FArchive& Ar )
 		}
 	}
 	PropertiesSize = Align(PropertiesSize,4);
+
+	// Layout guard: an intrinsic class's C++ sizeof must equal the size derived from the loaded .u property
+	// offsets; otherwise C++ and script read the same object through two layouts. Necessary, not sufficient:
+	// a member can move inside a class while the size still matches (tools/dev/layout-sweep.gdb compares
+	// every offset). ufront 2.84 bring-up: warn, and allocate the larger size so C++ never writes past the
+	// object; it becomes fatal once the sweep is clean, as in engine-ut99.
+	{
+		extern UStruct* GLayoutStructs[]; extern INT GLayoutSizes[]; extern INT GLayoutCount;
+		for( INT li=0; li<GLayoutCount; li++ )
+			if( GLayoutStructs[li]==this )
+			{
+				if( GLayoutSizes[li] != PropertiesSize )
+				{
+					debugf( NAME_Warning, "[layout] intrinsic %s: C++ sizeof=%i but script layout=%i -- member-offset shift risk",
+						GetName(), GLayoutSizes[li], PropertiesSize );
+					PropertiesSize = Max( PropertiesSize, GLayoutSizes[li] );
+				}
+				break;
+			}
+	}
 	unguard;
 }
 
