@@ -1068,8 +1068,24 @@ void UClass::Serialize( FArchive& Ar )
 	UState::Serialize( Ar );
 
 	// Variables.
+	INT RunRecordSize = ClassRecordSize;
 	Ar << ClassRecordSize << ClassFlags << ClassGuid;
 	Ar << Dependencies << PackageImports;
+
+	// ClassRecordSize is a UDatabase class's record size -- sizeof its C++ BaseDataType, a layout value
+	// (ufront 2.84). The package holds the compiling engine's: 4 for ULevel's AActor* records, a 32-bit
+	// FBspSurf or FPoly. UDatabase::Realloc allocates DbMax records of it while Element() strides by the C++
+	// type, so on LP64 every level's actor list and BSP surfaces were allocated at the 32-bit size and
+	// overrun. A class loaded from a package keeps its C++ size if it is intrinsic, and takes its
+	// superclass's otherwise (as the compiler sets it). Saving writes the running size: on LP64 a larger
+	// one, which any engine only over-allocates by.
+	if( Ar.IsLoading() )
+	{
+		if( GetFlags() & RF_Intrinsic )
+			ClassRecordSize = RunRecordSize;
+		else if( GetSuperClass() )
+			ClassRecordSize = GetSuperClass()->ClassRecordSize;
+	}
 
 	// Defaults.
 	if( Ar.IsLoading() )
