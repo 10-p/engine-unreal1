@@ -507,7 +507,7 @@ class DLL_EXPORT UIceTexture : public UFractalTexture
 	BYTE        Frequency;
 	BYTE        Amplitude;
 
-	DWORD       MoveIce:1;   // Mirrored as BOOLEAN in C++
+	DWORD       MoveIce:1 GCC_PACK(4);   // Mirrored as BOOLEAN in C++. ufront 2.84: GCC packed it into the BYTEs' word above (208, script 212)
 	FLOAT       MasterCount;
 	FLOAT       UDisplace;
 	FLOAT 		VDisplace;

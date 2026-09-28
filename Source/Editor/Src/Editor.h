@@ -303,7 +303,7 @@ class EDITOR_API UEditorEngine : public UEngine, public FNotifyHook
 	FLOAT FovAngle;
 	DWORD GodMode:1;
 	DWORD AutoSave:1;
-	BYTE AutosaveTimeMinutes;
+	BYTE AutosaveTimeMinutes GCC_ALIGN(4);	// ufront 2.84: GCC packed it into the bitfield word above (321, script 324)
 	char GameCommandLine[240];
 	char EditPackages[32][96];
 

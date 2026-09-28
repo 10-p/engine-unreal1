@@ -48,7 +48,7 @@ enum ETcpLinkState
 class IPDRV_API ATcpLink : public AInfo
 {
 public:
-    CHAR URL[80];
+    CHAR URL[80] GCC_ALIGN(4);	// ufront 2.84: GCC put it in AInfo's tail padding (441, script 444)
     BYTE IP[4];
     INT Port;
     FLOAT KeepaliveSeconds;
@@ -61,7 +61,7 @@ public:
     DWORD bSocketInitialized:1;
     DWORD bSocketBound:1;
     DWORD bWSAInitialized:1;
-    BYTE LinkState;
+    BYTE LinkState GCC_ALIGN(4);	// ufront 2.84: GCC packed it into the bitfield word above (621, script 624)
     BYTE LinkMode;
     void execGetIPByName( FFrame& Stack, BYTE*& Result );
     void execEncrypt( FFrame& Stack, BYTE*& Result );
