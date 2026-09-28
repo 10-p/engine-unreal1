@@ -5,6 +5,7 @@
 	Revision history:
 		* Created by Tim Sweeney
 =============================================================================*/
+#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
 
 /*-----------------------------------------------------------------------------
 	Constants.
@@ -398,6 +399,7 @@ class ENGINE_API UFont : public UTexture
 	void Serialize( FArchive& Ar );
 };
 
+#pragma pack (pop)
 /*----------------------------------------------------------------------------
 	The End.
 ----------------------------------------------------------------------------*/

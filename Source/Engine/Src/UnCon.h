@@ -4,6 +4,7 @@
 
 	Contains routines for: Messages, menus, status bar
 =============================================================================*/
+#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
 
 /*------------------------------------------------------------------------------
 	UConsole definition.
@@ -105,6 +106,7 @@ private:
     DWORD bNoStuff:1 GCC_PACK(4);
 };
 
+#pragma pack (pop)
 /*------------------------------------------------------------------------------
 	The End.
 ------------------------------------------------------------------------------*/

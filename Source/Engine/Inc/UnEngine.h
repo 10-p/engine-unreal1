@@ -5,6 +5,7 @@
 	Revision history:
 		* Created by Tim Sweeney
 =============================================================================*/
+#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
 
 /*-----------------------------------------------------------------------------
 	Unreal engine.
@@ -58,6 +59,7 @@ class ENGINE_API UEngine : public USubsystem
 	virtual int edcamMode( UViewport* Viewport ) {return 0;}
 };
 
+#pragma pack (pop)
 /*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/

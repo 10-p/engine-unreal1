@@ -2,6 +2,7 @@
 	UnCorObj.h: Standard core object definitions.
 	Copyright 1997 Epic MegaGames, Inc. This software is a trade secret.
 =============================================================================*/
+#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
 
 /*-----------------------------------------------------------------------------
 	UPackage.
@@ -152,6 +153,7 @@ class CORE_API USystem : public USubsystem
 	UBOOL Exec( const char* Cmd, FOutputDevice* Out );
 };
 
+#pragma pack (pop)
 /*----------------------------------------------------------------------------
 	The End.
 ----------------------------------------------------------------------------*/

@@ -5,6 +5,7 @@
 	Revision history:
 		* Created by Tim Sweeney
 =============================================================================*/
+#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
 
 /*-----------------------------------------------------------------------------
 	Core enumerations.
@@ -467,6 +468,10 @@ public:
 	// and save; the VM and the script compiler go through these two. INDEX_NONE is None.
 	static inline UObject* GetScriptObject( INT Ref );
 	static inline INT GetScriptRef( UObject* Obj );
+	// The C++ size of the object header before Parent -- vtable, Index, HashNext, MainFrame, Linker,
+	// LinkerIndex -- which script declares as ObjectInternal[6] (24 bytes, 32-bit pointers). Taken from the
+	// type, never summed by hand (ufront 2.84).
+	static inline INT ObjectHeaderSize();
 	virtual UPackage* GetTransientPackage() {return TransientPackage;}
 	FName GetTempState() {return TempState;}//oldver
 	FName GetTempGroup() {return TempGroup;}//oldver
@@ -1001,7 +1006,12 @@ inline INT FObjectManager::GetScriptRef( UObject* Obj )
 {
 	return Obj ? (INT)Obj->GetIndex() : INDEX_NONE;
 }
+inline INT FObjectManager::ObjectHeaderSize()
+{
+	return STRUCT_OFFSET( UObject, Parent );
+}
 
+#pragma pack (pop)
 /*----------------------------------------------------------------------------
 	The End.
 ----------------------------------------------------------------------------*/

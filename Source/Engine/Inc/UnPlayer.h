@@ -5,6 +5,7 @@
 	Revision history:
 		* Created by Tim Sweeney
 =============================================================================*/
+#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
 
 /*-----------------------------------------------------------------------------
 	UPlayer.
@@ -34,6 +35,7 @@ class ENGINE_API UPlayer : public UObject, public FOutputDevice
 	virtual void ReadInput( FLOAT DeltaSeconds )=0;
 };
 
+#pragma pack (pop)
 /*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/

@@ -5,6 +5,7 @@
 	Revision history:
 		* Created by Tim Sweeney
 =============================================================================*/
+#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
 
 /*-----------------------------------------------------------------------------
 	UCanvas.
@@ -392,6 +393,7 @@ ENGINE_API FLOAT ufrontWeaponFov( FLOAT BaseFov, FLOAT EffectiveFov );
 // transition FovAngle is still interpolating towards it, and the viewmodel must track the live view.
 ENGINE_API extern FLOAT GAutoFovFrameBase;
 
+#pragma pack (pop)
 /*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/

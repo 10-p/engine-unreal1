@@ -332,6 +332,44 @@ UStruct::UStruct( UStruct* InSuperStruct )
 {}
 
 //
+// Native placeholders (ufront 2.84, as engine-ut99 2.83). A few script variables stand in for C++ data that
+// script never touches: the object header, the vtable pointer of a secondary C++ base, a private pointer. The
+// retail packages declare them as ints -- sized for 32-bit pointers -- so on LP64 the C++ data is larger than
+// its script stand-in and every later member would sit at a different offset in C++ than in script. LinkOffsets
+// gives each one the size of its C++ counterpart on this target instead. Sizes come from the C++ types wherever
+// Core can see them; on every 32-bit target each entry equals the script's own size, so nothing changes there.
+// The layout guard in LinkOffsets and tools/dev/layout-sweep.gdb verify the result. The lookup compares
+// strings: a name cached here could be purged by garbage collection when unreferenced and its index reused.
+//
+static INT NativePlaceholderSize( UStruct* Owner, UProperty* Property )
+{
+	if( !Cast<UIntProperty>(Property) || !Cast<UClass>(Owner) || !Owner->GetParent() )
+		return 0;
+	static const struct { const char* Package; const char* Struct; const char* Property; INT Size; } Placeholders[] =
+	{
+		{ "Core",   "Object",       "ObjectInternal",    FObjectManager::ObjectHeaderSize() },	// vtable .. LinkerIndex
+		{ "Core",   "Subsystem",    "ExecVtbl",          (INT)sizeof(FExec) },
+		{ "Engine", "Console",      "vtblOut",           (INT)sizeof(FOutputDevice) },
+		{ "Engine", "Player",       "vfOut",             (INT)sizeof(FOutputDevice) },
+		{ "Engine", "Canvas",       "FramePtr",          (INT)sizeof(void*) },	// FSceneNode*
+		{ "Editor", "EditorEngine", "NotifyVtbl",        (INT)sizeof(FNotifyHook) },
+		{ "Editor", "EditorEngine", "Pad",               (INT)(4*sizeof(void*) + 4*sizeof(INT)) },	// 4 W* + AutosaveCounter + Pad[3]
+		{ "Editor", "EditorEngine", "ConstraintsVtbl",   (INT)sizeof(void*) },	// FEditorConstraints' vtable
+		{ "Fire",   "WaterTexture", "SourceFields",      (INT)sizeof(void*) },	// BYTE*
+		{ "Fire",   "WetTexture",   "LocalSourceBitmap", (INT)sizeof(void*) },	// BYTE*
+		{ "Fire",   "IceTexture",   "LocalSource",       (INT)sizeof(void*) },	// BYTE* LocalSourceBitmap
+	};
+	const char* StructName = Owner->GetName();
+	for( INT i=0; i<ARRAY_COUNT(Placeholders); i++ )
+		if
+		(	appStricmp( StructName, Placeholders[i].Struct )==0
+		&&	appStricmp( Property->GetName(), Placeholders[i].Property )==0
+		&&	appStricmp( Owner->GetParent()->GetName(), Placeholders[i].Package )==0 )
+			return Placeholders[i].Size;
+	return 0;
+}
+
+//
 // Link offsets.
 //
 void UStruct::LinkOffsets( FArchive& Ar )
@@ -351,11 +389,21 @@ void UStruct::LinkOffsets( FArchive& Ar )
 		if( Property && Field->GetParent()==this )
 		{
 			Property->Link( Ar, Prev );
-			PropertiesSize = Property->Offset + Property->GetSize();
+			INT NativeSize = NativePlaceholderSize( this, Property );
+			PropertiesSize = Property->Offset + (NativeSize ? NativeSize : Property->GetSize());
 			Prev = Property;
 		}
 	}
 	PropertiesSize = Align(PropertiesSize,4);
+
+	// Object.DynamicArray {Num,Max,Ptr} is script's stand-in for a C++ TArray (Palette.Colors, Texture.Mips,
+	// FireTexture.Sparks, EditorEngine.Tools); script never reads its fields. Its size is FArray's -- 12 on
+	// 32-bit, as the script declares, 16 on LP64 (ufront 2.84).
+	if
+	(	appStricmp( GetName(), "DynamicArray" )==0
+	&&	GetParent() && appStricmp( GetParent()->GetName(), "Object" )==0
+	&&	GetParent()->GetParent() && appStricmp( GetParent()->GetParent()->GetName(), "Core" )==0 )
+		PropertiesSize = sizeof(FArray);
 
 	// Layout guard: an intrinsic class's C++ sizeof must equal the size derived from the loaded .u property
 	// offsets; otherwise C++ and script read the same object through two layouts. Necessary, not sufficient:
