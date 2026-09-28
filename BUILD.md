@@ -16,6 +16,8 @@ in the monorepo** (`docs/migration/STATE.md`), not here.
 | `wasm` | `build-wasm/SDLLaunch/SDLLaunch.{js,wasm,data}` + `meta.json` | Emscripten **dev** (assertions + DWARF) |
 | `wasm-perf` | `build-wasm-perf/SDLLaunch/…` | Emscripten **product** (`-O3`, no debug) — what `ufront` consumes |
 | `native` | `build-native/Unreal/Unreal.bin` | 32-bit native GLES/software twin (needs `libsdl2-dev:i386`) |
+| `native64` | `build-native64/Unreal/Unreal.bin` | 64-bit (LP64) x86_64 twin (needs `libsdl2-dev:amd64`) — § *64-bit* |
+| `native64-asan` | `build-native64-asan/` | `native64` + AddressSanitizer |
 | `windows` | `build-windows/Unreal/Unreal.exe` | 32-bit **Windows** binary via MinGW-w64 (§ *Windows builds*) |
 
 ```bash
@@ -106,6 +108,56 @@ A baked `EMSCRIPTEN` branch in `Source/CMakeLists.txt` forces the web-safe confi
   Mirrors engine-ut2004's map-load fix.
 - **Small POSIX fixes** (`docs/10` §7, guarded): `pthread_setname_np` no-op; IpDrv socket headers
   (`<sys/select.h>`/`<sys/time.h>`, `u_long`, musl `h_errno`-vs-`errno`).
+
+## 64-bit (LP64) — ufront 2.84
+
+Unreal runs as a 64-bit engine on Linux x86_64 (and still on every 32-bit target) with the **retail 32-bit `.u`
+packages unchanged**. engine-ut99 did it first (2.83); 2.84 walked its list of changes one by one. The record,
+the list and the evidence are in the monorepo: `docs/migration/steps/2.84-64bit-unreal1.md`; the portable
+lessons in `docs/10` §10.
+
+**What makes it work** (each is a commit on `main`; general, not `#if`-guarded):
+
+- **Script object references are 4-byte object indices** in memory (`FObjectManager::GetScriptObject`), so the
+  bytecode keeps the layout the 32-bit compiler gave it: no jump, label or saved-state offset moves. Every operand is
+  read by copy (`ReadScriptOperand<T>`), and the readers are `ALWAYS_INLINE` (the VM files are `-Og`):
+  `execLocalVariable` is a load, a compare and a table load at both widths.
+- **The mirror contract:** every header declaring a scripted intrinsic class is `#pragma pack(push,4)`; object
+  properties align to 4; the script `int`s that stand in for C++ data (the object header, secondary vtables,
+  private pointers) and v200's `DynamicArray`/`DynamicString` stand-ins take their C++ size in `LinkOffsets`. A
+  C++/script size mismatch is **fatal** (`[layout]`, then `appErrorf`) — v200 had no guard before 2.84.
+- **v200 stores layout values in its packages**, so they are recomputed on load and written in the 32-bit script
+  format on save: a function's `ParmsSize`/`ReturnValueOffset`, a database class's `ClassRecordSize` (the level's
+  actor list, the BSP surfaces). The compiler writes the script format too (`ScriptFormatElementSize/StructSize/
+  Offset`, Core), so a 64-bit `-MAKE` writes the bytes a 32-bit one does but for the GUID.
+- **A call lays each parameter where the callee's linked property reads it** — v200 summed `EX_BeginFunction`'s
+  compiled (32-bit) spans.
+- **A None context clears its whole destination** (`UProperty::ExecLet`, `P_GET_OBJECT` starts NULL), and an
+  object `switch` compares whole pointers.
+- `PTRINT`/`UPTRINT` wherever a pointer passes through an integer; the autoregister chain in a pointer-sized field;
+  no `long` where 32 bits are meant; no `FString` object through `...`; SoftDrv's lit palette after its struct.
+
+**Fixed on the way — on every width, the web's included:** four members GCC laid out differently from the script
+(`EditorEngine.AutosaveTimeMinutes`, `IceTexture.MoveIce`, `TcpLink.URL`/`LinkState` — 46 members read at the wrong
+offset); `Player` was 12 bytes short of its C++ class (`DynamicString`); a byte out-parameter's copy-back wrote its
+caller's neighbouring bytes.
+
+**Test loops** (headless; `Xvfb :98`, loopback only):
+
+```bash
+tools/dev/mkrun.sh build-native64 /home/ion/native-runtrees/unreal-64      # + build-native64/Unreal/libopenal.so.1
+cd /home/ion/native-runtrees/unreal-64/System
+gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -MAKE             # 1035/1 (EditorEngine.Pad), structs 10/0
+DISPLAY=:98 gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -SOFTWARERENDERER   # 925/0, 10/0
+./Unreal.bin "DmDeck16?game=U64Test.U64Game" -server                              # U64 DONE passed=<n> failed=0
+<repo>/tools/dev/botmatch.sh <server-tree> 300 [<client-tree>]                     # bMultiPlayerBots/InitialBots in the ini
+```
+
+`tools/test/U64Test` is compiled by the **32-bit** `Unreal.bin -MAKE` (`EditPackages[n]=U64Test` in Unreal.ini, the
+folder linked beside `System`); a 64-bit `-MAKE` of it must match but for the GUID. **Run the layout sweep in both
+hosts** — a reflected layout can exist in only one process. **Coverage census:** `tools/dev/census/` (engine-ut99's
+BUILD.md "Coverage census" has the recipe; the binary here is `Unreal.bin`). A run tree's `Save` and `Cache` are its
+own (`mkrun.sh`); never write into `$UNREAL_ASSETS_DIR`.
 
 ## Windows builds (MinGW-w64) — ufront step 2.33
 
