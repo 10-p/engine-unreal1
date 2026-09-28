@@ -101,6 +101,8 @@ function RunTests()
 	local byte B, TB, N1, N2, N3, OutB;
 	local int i, n, OutI;
 	local Pawn P;
+	local float F;
+	local PointRegion ZeroRegion;
 
 	// Preconditions: the values the None cases overwrite must be live.
 	Report( Region.Zone != None, "precondition_region_zone" );
@@ -146,6 +148,14 @@ function RunTests()
 	OutByteThenInt( TB, 42 );
 	Report( TB == 42 && N1 == 5 && N2 == 6 && N3 == 7, "parms_out_byte_keeps_neighbours" );
 	Report( RetAfterObjs( self, Level, 5 ) == Level && RetIntAfterObjs( self, Level, 5 ) == 5, "return_after_object_parms" );
+
+	// v200 hands most results back by pointer: a value made in an opcode's own scratch buffer must reach the
+	// caller before that frame is gone, and a None-context struct is zero past its compiled (32-bit) size.
+	i = 258;	B = i;								Report( B == 2, "int_to_byte" );
+	F = 0;		F = Normal( vect(0,0,5) ).Z;		Report( F == 1, "struct_member_of_rvalue" );
+	B = 7;		B = Nobody.Region.ZoneNumber;		Report( B == 0, "none_ctx_struct_member_past_fill" );
+	A = self;	A = Nobody.Region.Zone;				Report( A == None, "none_ctx_struct_member_object" );
+	Report( Nobody.Region == ZeroRegion, "none_ctx_struct_compare" );
 
 	// switch compares the compiled size; an object switch must compare whole pointers.
 	A = self;	n = 0;
