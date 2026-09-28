@@ -183,6 +183,17 @@ public:
 	{
 		return GetElementSize() * ArrayDim;
 	}
+	// The size recorded INTO bytecode (a None context's fill, a switch value): the script format's 32-bit
+	// size on every host (ufront 2.84, as engine-ut99 d075242) -- 4 for an object, a struct replayed with the
+	// format's sizes. The 64-bit VM widens where it must (UProperty::ExecLet, execSwitch).
+	INT GetScriptFormatSize() const
+	{
+		if( Type==CPT_ObjectReference )
+			return 4 * ArrayDim;
+		if( Type==CPT_Struct )
+			return ScriptFormatStructSize( Struct ) * ArrayDim;
+		return GetSize();
+	}
 	INT GetElementSize() const
 	{
 		static const INT ElementSizes[CPT_MAX] =

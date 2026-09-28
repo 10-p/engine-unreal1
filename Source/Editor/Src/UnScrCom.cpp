@@ -2092,7 +2092,7 @@ UBOOL FScriptCompiler::CompileExpr
 					// Insert skipover info for handling null contexts.
 					FRetryPoint ContextEnd; InitRetry(ContextEnd);
 					_WORD wSkip = TopNode->Script.Num() - ContextStart.CodeTop; Writer << wSkip;
-					EmitSize( Token.GetSize(), "Context expression" );
+					EmitSize( Token.GetScriptFormatSize(), "Context expression" );
 					CodeSwitcheroo( ContextStart, ContextEnd );
 					continue;
 				}
@@ -2115,7 +2115,7 @@ UBOOL FScriptCompiler::CompileExpr
 			// Insert skipover info for handling null contexts.
 			FRetryPoint ContextEnd; InitRetry(ContextEnd);
 			_WORD wSkip = TopNode->Script.Num() - ContextStart.CodeTop; Writer << wSkip;
-			EmitSize( Token.GetSize(), "Context expression" );
+			EmitSize( Token.GetScriptFormatSize(), "Context expression" );
 			CodeSwitcheroo( ContextStart, ContextEnd );
 		}
 		else break;
@@ -4345,7 +4345,7 @@ void FScriptCompiler::CompileCommand( FToken& Token, UBOOL& NeedSemicolon )
 		}
 		else
 		{
-			EmitSize( TopNest->SwitchType.GetSize(), "'Switch'" );
+			EmitSize( TopNest->SwitchType.GetScriptFormatSize(), "'Switch'" );
 		}
 		CodeSwitcheroo(LowRetry,HighRetry);
 		TopNest->SwitchType.PropertyFlags &= ~(CPF_OutParm);
@@ -5005,13 +5005,16 @@ void FScriptCompiler::CompileSecondPass( UStruct* Node )
 			Writer << EX_BeginFunction;
 			for( TFieldIterator<UProperty> It(TopFunction); It && (It->PropertyFlags&(CPF_Parm|CPF_ReturnParm))==CPF_Parm; ++It )
 			{
-				// Emit parm size into code stream.
+				// Emit parm size into code stream: the parameter's span up to the next one, in the script
+				// format's 32-bit layout on every host (ufront 2.84) -- the runtime lays parameters out from the
+				// linked properties (CallFunction) and only counts these.
 				UProperty* Property = *It;
-				INT Size = Property->GetSize();
+				INT Alignment;
+				INT Size = ScriptFormatElementSize( Property, Alignment ) * Property->ArrayDim;
 				TFieldIterator<UProperty> Next(It);
 				++Next;
 				if( Next && (Next->PropertyFlags&(CPF_Parm|CPF_ReturnParm))==CPF_Parm )
-					Size += Next->Offset - (Property->Offset + Property->GetSize());
+					Size = ScriptFormatOffset( *Next ) - ScriptFormatOffset( Property );
 				BYTE bSize = Size;
 				if( bSize != Size )
 					appThrowf( "Parameter '%s' is too large", Property->GetName() );

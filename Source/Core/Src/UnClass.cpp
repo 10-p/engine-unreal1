@@ -370,6 +370,70 @@ static INT NativePlaceholderSize( UStruct* Owner, UProperty* Property )
 }
 
 //
+// The compiled-script (32-bit) layout (ufront 2.84). Packages are the 32-bit format every engine reads: an
+// object reference is 4 bytes there, a struct holding one or a DynamicArray correspondingly small. The runtime
+// layout is LinkOffsets'; wherever a size or offset is WRITTEN into a package or into bytecode (the compiler's
+// None-context and switch sizes, EX_BeginFunction, a function's ParmsSize and ReturnValueOffset) it must be
+// this one, so a 64-bit engine writes the bytes a 32-bit one does. It replays LinkOffsets' walk with the
+// format's element sizes; exact because every alignment is at most 4.
+//
+CORE_API INT ScriptFormatElementSize( UProperty* Property, INT& Alignment )
+{
+	Alignment = 4;
+	if( Cast<UByteProperty>(Property) )		{ Alignment = 1; return 1; }
+	if( Cast<UStringProperty>(Property) )	{ Alignment = 1; return Property->GetElementSize(); }	// char[StringSize]
+	if( Cast<UObjectProperty>(Property) )	return 4;
+	if( UStructProperty* StructProperty = Cast<UStructProperty>(Property) )
+	{
+		INT Size = ScriptFormatStructSize( StructProperty->Struct );
+		Alignment = Size==2 ? 2 : Size>=4 ? 4 : 1;
+		return Size;
+	}
+	return Property->GetElementSize();	// int, float, name, bool: 4 bytes on every width
+}
+static INT ScriptFormatReplay( UStruct* Struct, UProperty* Stop )
+{
+	INT Size = Struct->GetInheritanceSuper() ? Align( ScriptFormatStructSize(Struct->GetInheritanceSuper()), 4 ) : 0;
+	INT LastOffset = 0;
+	for( UField* Field=Struct->Children; Field; Field=Field->Next )
+	{
+		UProperty* Property = Cast<UProperty>( Field );
+		if( !Property || Field->GetParent()!=Struct )
+			continue;
+		UBoolProperty* Bool = Cast<UBoolProperty>( Property );
+		INT Offset;
+		if( Bool && Bool->BitMask!=FIRST_BITFIELD )
+		{
+			Offset = LastOffset;	// shares the previous bool's word
+		}
+		else
+		{
+			INT Alignment;
+			INT ElementSize = ScriptFormatElementSize( Property, Alignment );
+			Offset = Align( Size, Alignment );
+			Size   = Offset + ElementSize * Property->ArrayDim;
+		}
+		if( Property==Stop )
+			return Offset;
+		LastOffset = Offset;
+	}
+	check(Stop==NULL);
+	return Align( Size, 4 );
+}
+CORE_API INT ScriptFormatStructSize( UStruct* Struct )
+{
+	guard(ScriptFormatStructSize);
+	return ScriptFormatReplay( Struct, NULL );
+	unguard;
+}
+CORE_API INT ScriptFormatOffset( UProperty* Property )
+{
+	guard(ScriptFormatOffset);
+	return ScriptFormatReplay( CastChecked<UStruct>(Property->GetParent()), Property );
+	unguard;
+}
+
+//
 // Link offsets.
 //
 void UStruct::LinkOffsets( FArchive& Ar )
