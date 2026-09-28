@@ -120,7 +120,7 @@ function RunTests()
 	A = self;			A = Echo( Nobody.Owner );	Report( A == None, "none_ctx_nested_argument" );
 	A = self;			A = ReturnNone( Nobody );	Report( A == None, "none_ctx_return_value" );
 	InstObj = self;		InstObj = AssignInsideThenSelf( Nobody ); Report( InstObj == self, "none_ctx_callee_does_not_clear_caller" );
-	S = "abc";			S = NoGame.InstStr;			Report( S == "abc", "none_ctx_string_keeps_value" );
+	S = "abc";			S = NoGame.InstStr;			Report( S == "", "none_ctx_string_clears" );	// v200: a fixed string is zero-filled (v400 kept it)
 	A = self;			A = Pawn(Nobody.Owner);		Report( A == None, "none_ctx_under_cast" );
 	A = Spawn( class'U64StateActor' ); A.SetOwner( self ); A.SetOwner( Nobody.Owner );
 	Report( A.Owner == None, "none_ctx_native_object_parameter" );
