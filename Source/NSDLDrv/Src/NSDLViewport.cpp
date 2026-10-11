@@ -1049,6 +1049,67 @@ UBOOL UNSDLViewport::TickInput()
 					}
 				}
 				break;
+			// ufront (the UC2 port's pads, one pad here; as engine-ut99): hot-plug. A pad connected after start opens
+			// here (the first one; UseJoystick gates it, UNSDLClient::OpenPad), and the one in use closes when it goes.
+			case SDL_CONTROLLERDEVICEADDED:
+				{
+					DWORD Held = 0;
+					if( Client->OpenPad( Ev.cdevice.which, &Held ) && Held )
+					{
+						// H-3 (web): the press that made the browser list the pad is never reported by SDL; give it to the
+						// game now (W3C "standard" button order -> SDL's; the menus' map while a menu is up, as below).
+						static const INT W3CToSDL[17] =
+						{
+							SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_B, SDL_CONTROLLER_BUTTON_X, SDL_CONTROLLER_BUTTON_Y,
+							SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, -1, -1,
+							SDL_CONTROLLER_BUTTON_BACK, SDL_CONTROLLER_BUTTON_START,
+							SDL_CONTROLLER_BUTTON_LEFTSTICK, SDL_CONTROLLER_BUTTON_RIGHTSTICK,
+							SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN,
+							SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT, SDL_CONTROLLER_BUTTON_GUIDE,
+						};
+						const UBOOL bIsInUI = Console &&
+							((UObject*)Console)->GetMainFrame() &&
+							((UObject*)Console)->GetMainFrame()->StateNode &&
+							((UObject*)Console)->GetMainFrame()->StateNode->GetFName() == "Menuing";
+						const BYTE* JoyMap = bIsInUI ? JoyButtonMapUI : JoyButtonMap;
+						for( INT b=0; b<17; b++ )
+						{
+							if( !(Held & (1u<<b)) )
+								continue;
+							if( b==6 || b==7 )
+							{
+								// The triggers are buttons in the browser's layout and axes in SDL's.
+								const INT Axis = b==6 ? SDL_CONTROLLER_AXIS_TRIGGERLEFT : SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+								JoyAxis[Axis] = 32767;
+								if( JoyAxisMap[Axis] )
+									CauseInputEvent( JoyAxisMap[Axis], IST_Press );
+							}
+							else if( JoyMap[W3CToSDL[b]] )
+								CauseInputEvent( JoyMap[W3CToSDL[b]], IST_Press );
+						}
+						debugf( NAME_Init, "NSDLClient: buttons held at the connect given to the game: 0x%x", Held );
+					}
+				}
+				break;
+			case SDL_CONTROLLERDEVICEREMOVED:
+				if( Client->ClosePad( Ev.cdevice.which ) )
+				{
+					// Nothing may stay held: release every pad key (both maps) and zero the axes the frame loop re-sends.
+					for( INT b=0; b<SDL_CONTROLLER_BUTTON_MAX; b++ )
+					{
+						if( JoyButtonMap[b] )
+							CauseInputEvent( JoyButtonMap[b], IST_Release );
+						if( JoyButtonMapUI[b] && JoyButtonMapUI[b] != JoyButtonMap[b] )
+							CauseInputEvent( JoyButtonMapUI[b], IST_Release );
+					}
+					for( INT a=0; a<SDL_CONTROLLER_AXIS_MAX; a++ )
+					{
+						if( JoyAxisMap[a] && JoyAxisMap[a] < IK_JoyX && JoyAxis[a] >= JoyAxisPressThreshold )
+							CauseInputEvent( JoyAxisMap[a], IST_Release );
+						JoyAxis[a] = 0;
+					}
+				}
+				break;
 			case SDL_CONTROLLERBUTTONDOWN:
 			case SDL_CONTROLLERBUTTONUP:
 				{
