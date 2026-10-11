@@ -378,6 +378,11 @@ void appOpenLog( const char* Fname )
 	FGlobalPlatform init/exit.
 -----------------------------------------------------------------------------*/
 
+// ufront: the command line (appSetCmdLine, below), here so that appInit can report a cut line.
+static char* CmdLine=NULL;
+static char CmdLineBuf[4096] = "";
+static UBOOL GCmdLineCut = 0;	// ufront: a token did not fit; appInit says so once the log is up
+
 void appInit()
 {
 	// Init.
@@ -426,6 +431,11 @@ void appInit()
 	// Language.
 	if( GetConfigString( "Engine.Engine", "Language", Temp, ARRAY_COUNT(Temp) ) )
 		SetLanguage( Temp );
+	// ufront (the launcher's Language, G-4 of the UC2 port): say which language this run uses.
+	debugf( NAME_Init, "Language: %s", GetLanguage() );
+	if( GCmdLineCut )
+		debugf( NAME_Warning, "The command line is longer than %i characters: the arguments after '%s' were dropped",
+			(INT)sizeof(CmdLineBuf), CmdLineBuf + Max(0, (INT)appStrlen(CmdLineBuf) - 40) );
 
 	// Computer name.
 	char Comp[MAX_COMPUTERNAME_LENGTH+1]="";
@@ -1567,10 +1577,11 @@ CORE_API FGuid appCreateGuid()
 	Command line.
 -----------------------------------------------------------------------------*/
 
-static char* CmdLine=NULL;
-static char CmdLineBuf[4096] = "";
+// (CmdLine, CmdLineBuf and GCmdLineCut are defined above appInit, which reports a cut line.)
 
 // Set command line from argc/argv.
+// ufront (as engine-uc2's launcher): a token that does not fit is dropped whole, with a warning in appInit; appStrncat
+// used to cut the line in the middle of a token, silently.
 CORE_API void appSetCmdLine( INT Argc, const char** Argv )
 {
 	guard(appSetCmdLine);
@@ -1578,9 +1589,14 @@ CORE_API void appSetCmdLine( INT Argc, const char** Argv )
 	CmdLine = CmdLineBuf;
 	for( INT i = 1; i < Argc; ++i )
 	{
-		appStrncat( CmdLineBuf, Argv[i], sizeof(CmdLineBuf) - 1 );
-		if( i != Argc - 1 )
-			appStrncat( CmdLineBuf, " ", sizeof(CmdLineBuf) - 1 );
+		if( appStrlen(CmdLineBuf) + appStrlen(Argv[i]) + 2 >= sizeof(CmdLineBuf) )
+		{
+			GCmdLineCut = 1;
+			break;
+		}
+		if( i > 1 )
+			appStrcat( CmdLineBuf, " " );
+		appStrcat( CmdLineBuf, Argv[i] );
 	}
 
 	unguard;

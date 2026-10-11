@@ -70,6 +70,10 @@ The same commands, settings and log lines in every engine (ufront's UC2 merge; e
   the engine only; the typed console reaches it before the script exec functions).
 - **`[Engine.GameEngine] FpsLogSeconds=<s>`** (0 = off) / console **`FPSLOG <s>`**: an `FPS:` log line every `<s>`
   seconds (frames, fps, frame ms avg/min/max/p99, the 1% low, the viewport size). `Source/Engine/Src/UnFpsLog.cpp`.
+- **`Init: Language: <ext>`** in the log at start-up: the language this run took (`[Engine.Engine] Language`, read
+  after the `-ini:` overrides; the frontend's Language setting).
+- **The command line** (4,096 characters, `appSetCmdLine`): a token that does not fit is dropped whole, with a
+  warning from `appInit`; it was cut in the middle of a token, silently.
 
 ## The web port (what it took — the portable UE1→web lessons, `docs/10`)
 
