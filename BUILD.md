@@ -74,6 +74,10 @@ The same commands, settings and log lines in every engine (ufront's UC2 merge; e
   after the `-ini:` overrides; the frontend's Language setting).
 - **The command line** (4,096 characters, `appSetCmdLine`): a token that does not fit is dropped whole, with a
   warning from `appInit`; it was cut in the middle of a token, silently.
+- **`appFindFiles` matches like Windows' `_findfirst`** (`Core/Src/UnFile.cpp`): `*`/`?` anywhere,
+  case-insensitive, `*.*` = everything. It took `*.ext` as a substring test (`*.u` also returned `.uax/.umx/.utx`).
+- **Saves are deterministic** (`Core/Src/UnObj.cpp`, engine-uc2's S2): `SavePackage` sorts names, imports and
+  exports with a stable merge sort, and `CacheDrivers` reads the `.int` files in Windows' (NTFS) order.
 
 ## The web port (what it took — the portable UE1→web lessons, `docs/10`)
 

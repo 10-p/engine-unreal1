@@ -2049,6 +2049,63 @@ INT CDECL LinkerExportSort( const void* A, const void* B )
 	return GTempSave->MapObject(((FObjectExport*)B)->_Object) - GTempSave->MapObject(((FObjectExport*)A)->_Object);
 }
 
+// ufront (from engine-uc2's S2, UC2StableSort; ported to UT99 too): SavePackage's three sorts by usage count must not
+// depend on the C library. appQsort is qsort, which leaves the order of equal keys to the library, so the same save on
+// two platforms gave different tables. A stable merge sort gives every platform the order glibc gives.
+static void UfrontStableSort( void* Base, INT Num, INT Width, int(CDECL *Compare)(const void* A, const void* B) )
+{
+	if( Num < 2 )
+		return;
+	TArray<BYTE> Temp;
+	Temp.Add( Num * Width );
+	BYTE* Src = (BYTE*)Base;
+	BYTE* Dst = &Temp(0);
+	for( INT Run=1; Run<Num; Run*=2 )
+	{
+		for( INT Lo=0; Lo<Num; Lo+=2*Run )
+		{
+			INT Mid = Min( Lo+Run, Num ), Hi = Min( Lo+2*Run, Num );
+			INT i = Lo, j = Mid, k = Lo;
+			while( i<Mid && j<Hi )
+				// Equal keys: the left (earlier) one first.
+				if( Compare( Src+j*Width, Src+i*Width ) < 0 )
+					appMemcpy( Dst+(k++)*Width, Src+(j++)*Width, Width );
+				else
+					appMemcpy( Dst+(k++)*Width, Src+(i++)*Width, Width );
+			if( i<Mid )
+				appMemcpy( Dst+k*Width, Src+i*Width, (Mid-i)*Width );
+			if( j<Hi )
+				appMemcpy( Dst+k*Width, Src+j*Width, (Hi-j)*Width );
+		}
+		Exchange( Src, Dst );
+	}
+	if( Src != (BYTE*)Base )
+		appMemcpy( Base, Src, Num*Width );
+}
+
+// ufront (from engine-uc2's S2, UC2SortLikeNTFS): the order Windows listed files in (NTFS: names compared after
+// upper-casing). readdir() order is the file system's, and CacheDrivers' reading order fixes the FName indices of the
+// localization keys, which decide the order of equal-usage names a save appends.
+static void UfrontSortLikeNTFS( TArray<FString>& Files )
+{
+	for( INT i=1; i<Files.Num(); i++ )
+		for( INT j=i; j>0; j-- )
+		{
+			const char* a = *Files(j-1);
+			const char* b = *Files(j);
+			INT Cmp = 0;
+			for( ; ; a++, b++ )
+			{
+				BYTE ca = (BYTE)appToUpper(*a), cb = (BYTE)appToUpper(*b);
+				if( ca!=cb ) { Cmp = ca<cb ? -1 : 1; break; }
+				if( !ca ) break;
+			}
+			if( Cmp <= 0 )
+				break;
+			Exchange( Files(j-1), Files(j) );
+		}
+}
+
 //
 // Archive for tagging objects and names that must be listed in the
 // file's imports table.
@@ -2236,7 +2293,7 @@ UBOOL FObjectManager::SavePackage( UObject* InParent, UObject* Base, DWORD TopLe
 		// Sort names by usage count in order to maximize compression.
 		guard(SortNames);
 		GTempSave = Linker;
-		appQsort( &Linker->NameMap(0), Linker->NameMap.Num(), sizeof(Linker->NameMap(0)), LinkerNameSort );
+		UfrontStableSort( &Linker->NameMap(0), Linker->NameMap.Num(), sizeof(Linker->NameMap(0)), LinkerNameSort );
 		unguard;
 
 		// Save names.
@@ -2259,7 +2316,7 @@ UBOOL FObjectManager::SavePackage( UObject* InParent, UObject* Base, DWORD TopLe
 		// Sort imports by usage count.
 		guard(SortImports);
 		GTempSave = Linker;
-		appQsort( &Linker->ImportMap(0), Linker->ImportMap.Num(), sizeof(Linker->ImportMap(0)), LinkerImportSort );
+		UfrontStableSort( &Linker->ImportMap(0), Linker->ImportMap.Num(), sizeof(Linker->ImportMap(0)), LinkerImportSort );
 		unguard;
 
 		// Build ExportMap.
@@ -2272,7 +2329,7 @@ UBOOL FObjectManager::SavePackage( UObject* InParent, UObject* Base, DWORD TopLe
 
 		// Sort exports by usage count.
 		guard(SortExports);
-		appQsort( &Linker->ExportMap(0), Linker->ExportMap.Num(), sizeof(Linker->ExportMap(0)), LinkerExportSort );
+		UfrontStableSort( &Linker->ExportMap(0), Linker->ExportMap.Num(), sizeof(Linker->ExportMap(0)), LinkerExportSort );
 		unguard;
 
 		// Set linker reverse mappings.
@@ -2993,6 +3050,7 @@ void CacheDrivers( UBOOL ForceRefresh )
 				{
 					appStrcpy( Tmp, "*.int" );
 					TArray<FString> Files = appFindFiles( Filename );
+					UfrontSortLikeNTFS( Files );	// ufront: Windows' order, on every file system
 					for( INT j=0; j<Files.Num(); j++ )
 					{
 						appSprintf( Tmp, "%s%s", appBaseDir(), *Files(j) );
@@ -3037,6 +3095,7 @@ void CacheDrivers( UBOOL ForceRefresh )
 			}
 		}
 		TArray<FString> CoreLangs = appFindFiles( "Core.*" );
+		UfrontSortLikeNTFS( CoreLangs );	// ufront
 		for( i=0; i<CoreLangs.Num(); i++ )
 		{
 			if

@@ -421,6 +421,36 @@ CORE_API const char* appFExt( const char* fname )
 // Example Dir = "c:\\place\\*.ext".
 // Example Result = "test.ext"
 //
+#ifndef PLATFORM_WIN32
+// ufront: '*'/'?' glob with single-star backtracking, case-insensitive (engine-hp2's FFileManagerLinux::WildcardMatch).
+static UBOOL FindFilesWildcardMatch( const char* Pattern, const char* Name )
+{
+	const char *Star=NULL, *Resume=NULL;
+	while( *Name )
+	{
+		if( *Pattern=='*' )
+		{
+			Star = Pattern++;
+			Resume = Name;
+		}
+		else if( *Pattern=='?' || (*Pattern && appToUpper(*Pattern)==appToUpper(*Name)) )
+		{
+			Pattern++;
+			Name++;
+		}
+		else if( Star )
+		{
+			Pattern = Star+1;
+			Name = ++Resume;
+		}
+		else return 0;
+	}
+	while( *Pattern=='*' )
+		Pattern++;
+	return *Pattern==0;
+}
+#endif
+
 CORE_API TArray<FString> appFindFiles( const char* Spec )
 {
 	guard(appFindFiles)
@@ -443,8 +473,8 @@ CORE_API TArray<FString> appFindFiles( const char* Spec )
 	char *Cur;
 	UBOOL Match;
 
-	// Initialize Path to Filename.
-	appStrcpy( Path, Spec );
+	// Initialize Path to Filename (bounded: a char[256] filled by appStrcpy before).
+	appStrncpy( Path, Spec, ARRAY_COUNT(Path) );
 
 	// Separate path and filename.
 	Filestart = Path;
@@ -453,7 +483,7 @@ CORE_API TArray<FString> appFindFiles( const char* Spec )
 			Filestart = Cur + 1;
 
 	// Store filename and remove it from Path.
-	appStrcpy( File, Filestart );
+	appStrncpy( File, Filestart, ARRAY_COUNT(File) );
 	*Filestart = '\0';
 
 	// Check for empty path.
@@ -469,55 +499,10 @@ CORE_API TArray<FString> appFindFiles( const char* Spec )
 	// Check each entry.
 	while( Direntp != NULL )
 	{
-		Match = false;
-
-		if( appStrcmp( File, "*" ) == 0 )
-		{
-			// Any filename.
-			Match = true;
-		}
-		else if( appStrcmp( File, "*.*" ) == 0 )
-		{
-			// Any filename with a '.'.
-			if( appStrchr( Direntp->d_name, '.' ) != NULL )
-				Match = true;
-		}
-		else if( File[0] == '*' )
-		{
-			// "*.ext" filename.
-			if( appStrstrFs( Direntp->d_name, (File + 1) ) != NULL )
-				Match = true;
-		}
-		else if( File[appStrlen( File ) - 1] == '*' )
-		{
-			// "name.*" filename.
-			if( appStrnicmp( Direntp->d_name, File, appStrlen( File ) - 1 ) == 0 )
-				Match = true;
-		}
-		else if( appStrstr( File, "*" ) != NULL )
-		{
-			// single str.*.str match.
-			char* star = appStrstr( File, "*" );
-			INT filelen = appStrlen( File );
-			INT starlen = appStrlen( star );
-			INT starpos = filelen - (starlen - 1);
-			char prefix[256];
-			appStrncpy( prefix, File, starpos );
-			star++;
-			if( appStrnicmp( Direntp->d_name, prefix, starpos - 1 ) == 0 )
-			{
-				// part before * matches
-				char* postfix = Direntp->d_name + (appStrlen(Direntp->d_name) - starlen) + 1;
-				if ( appStricmp( postfix, star ) == 0 )
-					Match = true;
-			}
-		}
-		else
-		{
-			// Literal filename.
-			if( appStricmp( Direntp->d_name, File ) == 0 )
-				Match = true;
-		}
+		// ufront (engine-hp2's fix of the same stock code, ported to UT99 too): a real wildcard match, '*' and '?'
+		// anywhere, case-insensitive, "*.*" = everything: the semantics of the Win32 _findfirst above. The stock
+		// matcher took "*.ext" as a substring test ("*.u" also returned .uax/.umx/.utx/.unr) and knew a few shapes.
+		Match = appStrcmp( File, "*.*" ) == 0 || FindFilesWildcardMatch( File, Direntp->d_name );
 
 		// Does this entry match the Filename?
 		if( Match )
