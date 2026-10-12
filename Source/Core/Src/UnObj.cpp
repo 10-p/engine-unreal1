@@ -734,11 +734,60 @@ IMPLEMENT_CLASS(UObject);
 // Load configuration.
 //warning: Must be safe on class-default metaobjects.
 //
+//
+// ufront (2026-10-12): a localized property's text, from the class's own section of <Package>.<language> (e.g.
+// [UnrealMainMenu] of UnrealI.frt), the key falling back to <Package>.int as Localize() does. Unlike Localize(), a key
+// neither file has gives FALSE rather than a "<?...?>" placeholder, so the property keeps its compiled default.
+//
+static UBOOL LocalizedPropertyText( const char* Section, const char* Key, const char* Package, char* Value, INT Size )
+{
+	char Filename[256];
+	appSprintf( Filename, "%s%s.%s", appBaseDir(), Package, GetLanguage() );
+	if( GetConfigString( Section, Key, Value, Size, Filename ) )
+		return 1;
+	if( appStricmp( GetLanguage(), "int" )==0 )
+		return 0;
+	appSprintf( Filename, "%s%s.int", appBaseDir(), Package );
+	return GetConfigString( Section, Key, Value, Size, Filename );
+}
+
 void UObject::LoadConfig( FName Type, UClass* Class, const char* Filename )
 {
 	guard(UObject::LoadConfig);
+	// ufront (2026-10-12): v200 as received returned here for NAME_Localized, so NO localized property was ever read:
+	// not the English .int sections either (the compiled English defaults showed instead), and a language other than
+	// int changed only the few strings code fetches with Localize() (measured: with Language=frt only Core.frt was
+	// read, and `GET GameInfo DefaultPlayerName` answered "Player" with Engine.frt's [GameInfo] saying "Joueur").
+	// The menus are localized properties ([UnrealMainMenu] MenuList/HelpMessage of UnrealI.<lang>), so the shipped
+	// German/French/Italian/Spanish files did nothing. Loaded now as engine-ut99's UObject::LoadLocalized does: every
+	// localized property (inherited ones included) from the class's own section of its package's file; the class
+	// default starts from its parent's already-localized values, so a key the section lacks keeps those.
 	if( Type==NAME_Localized )
+	{
+		if( !Class )
+			Class = GetClass();
+		if( !(Class->ClassFlags & CLASS_Localized) || GIsEditor )
+			return;
+		for( TFieldIterator<UProperty> It(Class); It; ++It )
+		{
+			if( It->PropertyFlags & CPF_Localized )
+			{
+				for( INT i=0; i<It->ArrayDim; i++ )
+				{
+					char TempKey[256], Value[1024]="";
+					const char* Key = It->GetName();
+					if( It->ArrayDim!=1 )
+					{
+						appSprintf( TempKey, "%s[%i]", It->GetName(), i );
+						Key = TempKey;
+					}
+					if( LocalizedPropertyText( Class->GetName(), Key, Class->GetParent()->GetName(), Value, ARRAY_COUNT(Value) ) )
+						It->ImportText( Value, (BYTE*)this + It->Offset + i*It->GetElementSize(), 1 );
+				}
+			}
+		}
 		return;
+	}
 	DWORD ClassFlags = Type==NAME_Config ? CLASS_Config : CLASS_Localized;
 	DWORD Flags      = Type==NAME_Config ? CPF_Config   : CPF_Localized;
 	if( !Class )

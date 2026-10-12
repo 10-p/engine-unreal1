@@ -93,6 +93,19 @@ The same commands, settings and log lines in every engine (ufront's UC2 merge; e
   `timeOrigin + now` there, so that every worker agrees), which a `FLOAT` holds in 128-second steps: the time step was
   0 on nearly every frame and a held stick moved nothing. `TickInput` keeps the time in a `DOUBLE` now.
 
+### Localized properties are read (2026-10-12)
+
+v200 as received returned at the top of `UObject::LoadConfig` for `NAME_Localized`, so no localized property was ever
+read: not the `.int` sections (the compiled English defaults showed instead) and not a translation. A language other
+than `int` changed only the strings code asks for with `Localize()`; Unreal's menus (`[UnrealMainMenu]` `MenuList`,
+`HelpMessage` of `UnrealI.<lang>`) are localized properties, so the original CD's German, French, Italian and Spanish
+files (added to the tree 2026-10-12) did nothing. Found by the frontend's language E2E: with `Language=frt` only
+`Core.frt` was read and `GET GameInfo DefaultPlayerName` answered `Player`. `LoadConfig(NAME_Localized)` now does what
+engine-ut99's `UObject::LoadLocalized` does: every localized property (inherited ones included) from the class's own
+section of `<Package>.<lang>`, a key falling back to `<Package>.int` per key (`Localize()`'s rule), a key neither file
+has leaving the value alone (no `<?...?>` placeholder). With French the engine reads `Engine.frt` and `UnrealI.frt`
+and answers `Joueur`. `Core/Src/UnObj.cpp`.
+
 ## The web port (what it took — the portable UE1→web lessons, `docs/10`)
 
 A baked `EMSCRIPTEN` branch in `Source/CMakeLists.txt` forces the web-safe config; the per-file changes:
