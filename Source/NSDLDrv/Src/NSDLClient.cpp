@@ -100,8 +100,9 @@ void UNSDLClient::Init( UEngine* InEngine )
 
 	Controller = NULL;
 
-	// ufront: UseJoystick (registered, never read before) decides whether pads are used at all.
-	if ( SDL_Init( SDL_INIT_VIDEO | (UseJoystick ? SDL_INIT_GAMECONTROLLER : 0) ) < 0 )
+	// ufront 2.91: the game-controller subsystem is always up; whether a pad is USED is UseJoystick, which the
+	// viewport reads every tick (UNSDLViewport::TickInput), so the game's own option takes effect at once.
+	if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
 	{
 		appErrorf( "SDL_Init failed: %s", SDL_GetError() );
 		appExit();
@@ -111,11 +112,11 @@ void UNSDLClient::Init( UEngine* InEngine )
 
 	// A pad already connected (on the web: one pressed on the launcher page). Later ones arrive through
 	// SDL_CONTROLLERDEVICEADDED (UNSDLViewport::UpdateInput): there was no hot-plug before.
+	SDL_GameControllerEventState( SDL_ENABLE );
 	if( UseJoystick )
 	{
 		for( INT i=0; i<SDL_NumJoysticks() && !Controller; i++ )
 			OpenPad( i, NULL );
-		SDL_GameControllerEventState( SDL_ENABLE );
 	}
 	else debugf( NAME_Init, "NSDLClient: UseJoystick=False: no game pads" );
 

@@ -78,8 +78,11 @@ The same commands, settings and log lines in every engine (ufront's UC2 merge; e
   case-insensitive, `*.*` = everything. It took `*.ext` as a substring test (`*.u` also returned `.uax/.umx/.utx`).
 - **Saves are deterministic** (`Core/Src/UnObj.cpp`, engine-uc2's S2): `SavePackage` sorts names, imports and
   exports with a stable merge sort, and `CacheDrivers` reads the `.int` files in Windows' (NTFS) order.
-- **Game pads** (`Source/NSDLDrv`, one pad: the first connected): `[NSDLDrv.NSDLClient] UseJoystick` decides
-  whether pads are used (it was read by nothing); a pad connected after start opens on `SDL_CONTROLLERDEVICEADDED`
+- **Game pads** (`Source/NSDLDrv`, one pad: the first connected): `[NSDLDrv.NSDLClient] UseJoystick` (on by default) is a
+  real switch (ufront 2.91, the owner: "on by default, but it can still be disabled"): the game-controller subsystem
+  is always up and the viewport reads the key every tick, so the game's own option (`set ini:Engine.Engine.
+  ViewportManager UseJoystick …`) closes the pad (every key released) or opens the first one present at once,
+  logged `NSDLClient: game pads on|off (UseJoystick)`; a pad connected after start opens on `SDL_CONTROLLERDEVICEADDED`
   and closes on `REMOVED`, releasing every pad key (there was no hot-plug, so on the web a pad practically never
   worked); on the web the press that made the browser list the pad, never reported by SDL, is read from
   `navigator.getGamepads()` once at the connect and given to the game (engine-uc2's H-3). Log lines: `NSDLClient:
