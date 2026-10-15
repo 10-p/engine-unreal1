@@ -448,8 +448,13 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				// SDL2 still owns the window and ALL input; the only SDL call replaced is context creation.
 				EmscriptenWebGLContextAttributes Attrs;
 				emscripten_webgl_init_context_attributes( &Attrs );
-				// v200 is a GLES2/WebGL1 engine (NOpenGLESDrv); majorVersion 1 == WebGL 1.0.
-				Attrs.majorVersion              = 1;
+				// ufront 2.92: WebGL 2 (majorVersion 2), on which NOpenGLESDrv's GLES2 calls run unchanged, for its
+				// antialiasing (msaa-backbuffer.js needs multisampled renderbuffers); benchmarked against WebGL 1
+				// at no cost (docs: steps/2.92). -WEBGL=1 asks for WebGL 1, and a browser without WebGL 2 gets it.
+				INT WebGLMajor = 2;
+				if( Parse( appCmdLine(), "WEBGL=", WebGLMajor ) && WebGLMajor != 1 )
+					WebGLMajor = 2;
+				Attrs.majorVersion              = WebGLMajor;
 				Attrs.minorVersion              = 0;
 				Attrs.alpha                     = 0;
 				Attrs.depth                     = 1;
@@ -461,6 +466,12 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				Attrs.explicitSwapControl       = 1;
 				Attrs.renderViaOffscreenBackBuffer = 1;
 				EMSCRIPTEN_WEBGL_CONTEXT_HANDLE WebGLCtx = emscripten_webgl_create_context( "#canvas", &Attrs );
+				if( WebGLCtx <= 0 && Attrs.majorVersion == 2 )
+				{
+					debugf( NAME_Init, "No WebGL 2 context (handle %i): WebGL 1, without antialiasing", (INT)WebGLCtx );
+					Attrs.majorVersion = 1;
+					WebGLCtx = emscripten_webgl_create_context( "#canvas", &Attrs );
+				}
 				if( WebGLCtx <= 0 )
 				{
 					appErrorf( "Could not create WebGL context on the worker (handle %i)", (INT)WebGLCtx );
@@ -471,7 +482,7 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				}
 				// Stash it where the rest of the viewport already tests for "do we have GL".
 				GLCtx = (SDL_GLContext)(intptr_t)WebGLCtx;
-				debugf( NAME_Init, "Created WebGL context on the worker (handle %i)", (INT)WebGLCtx );
+				debugf( NAME_Init, "Created WebGL %i.0 context on the worker (handle %i)", (INT)Attrs.majorVersion, (INT)WebGLCtx );
 #else
 				GLCtx = SDL_GL_CreateContext( hWnd );
 				if( !GLCtx )

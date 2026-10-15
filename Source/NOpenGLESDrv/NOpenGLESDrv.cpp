@@ -95,6 +95,9 @@ UNOpenGLESRenderDevice::UNOpenGLESRenderDevice()
 // answer here. Ask the live context's extension string instead — correct on native and web alike, and the
 // same lesson as XOpenGL's S3TC bug: query the context you actually render into.
 #include <string.h>
+#ifdef __EMSCRIPTEN__
+extern "C" int ufront_backbuffer_samples( int Samples ); // msaa-backbuffer.js
+#endif
 static UBOOL NOpenGLESHasExtension( const char* Name )
 {
 	const char* Exts = (const char*)glGetString( GL_EXTENSIONS );
@@ -208,11 +211,24 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 		}
 	}
 
-	// NumAASamples is nominal on the web: WebGL selects MSAA with a boolean `antialias` context attribute at
-	// CREATION time, and the viewport made the context before this driver ran. Say so rather than implying a
-	// sample count we cannot honour.
+#ifdef __EMSCRIPTEN__
+	// ufront 2.92: antialiasing on the web is a multisampled emulated back buffer (msaa-backbuffer.js), which needs
+	// WebGL 2 (multisampled renderbuffers); asked for or given back on every Init, since a context outlives a device.
+	{
+		const INT Got = ufront_backbuffer_samples( NumAASamples > 1 ? NumAASamples : 0 );
+		if( Got > 1 )
+			debugf( "GLES2: antialiasing %dx (multisampled back buffer)", Got );
+		else if( NumAASamples > 1 )
+			debugf( "GLES2: antialiasing (%d samples) unavailable on this context (WebGL 1)", NumAASamples );
+		else
+			debugf( "GLES2: antialiasing off" );
+	}
+#else
+	// NumAASamples is nominal: the context was made before this driver ran. Report what we were asked for so
+	// the log does not imply a sample count we cannot honour.
 	if( NumAASamples > 0 )
-		debugf( "GLES2: AA requested (%d samples nominal; WebGL decides the count at context creation)", NumAASamples );
+		debugf( "GLES2: AA requested (%d samples nominal)", NumAASamples );
+#endif
 
 	if( UseBGRA )
 	{

@@ -144,6 +144,12 @@ if(EMSCRIPTEN)
     # lands (2.6c), so it's dead-stripped now — harmless.
     "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
     "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
+    # ufront 2.92: WebGL 2 (NOpenGLESDrv's GLES2 calls run on it unchanged), for the multisampled emulated back buffer
+    # (msaa-backbuffer.js: ufront_backbuffer_samples) that is NOpenGLESDrv's antialiasing; WebGL 1 stays the fallback
+    # of a browser without WebGL 2 (NSDLViewport.cpp).
+    -sMAX_WEBGL_VERSION=2
+    -sMIN_WEBGL_VERSION=1
+    "SHELL:--js-library ${CMAKE_CURRENT_SOURCE_DIR}/msaa-backbuffer.js"
   )
   if(UT_WEB_PERF)
     # ufront 2.57 -- --emit-symbol-map costs the SHIPPED build NOTHING: the map is a SIDE FILE
@@ -179,7 +185,8 @@ if(EMSCRIPTEN)
   # class of trap as the preloaded ini above, same fix.
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
-    "${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js")
+    "${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
+    "${CMAKE_CURRENT_SOURCE_DIR}/msaa-backbuffer.js")
   # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html. Output into a build-<cfg>/SDLLaunch/ subdir so the
   # artifact path matches engine-ut2004's convention (engine-<target>/build-wasm-perf/SDLLaunch/), which is
   # what the monorepo's packages/build derives per target.

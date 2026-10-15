@@ -95,6 +95,16 @@ The same commands, settings and log lines in every engine (ufront's UC2 merge; e
   copy of `appSeconds()`. On the threaded web build that is an epoch-sized number (`emscripten_get_now()` is
   `timeOrigin + now` there, so that every worker agrees), which a `FLOAT` holds in 128-second steps: the time step was
   0 on nearly every frame and a held stick moved nothing. `TickInput` keeps the time in a `DOUBLE` now.
+- **Antialiasing on the web** (ufront 2.92; the launcher's Advanced "Antialiasing" sets `NumAASamples`): the WebGL
+  context is **WebGL 2** (`NSDLViewport.cpp`; linked `-sMAX_WEBGL_VERSION=2`; NOpenGLESDrv's GLES2 calls run on it
+  unchanged). NOpenGLESDrv draws into framebuffer 0, which under `-sOFFSCREEN_FRAMEBUFFER` is Emscripten's emulated,
+  single-sample framebuffer: `Source/Unreal/msaa-backbuffer.js` (`ufront_backbuffer_samples(n)`, a `--js-library`, the
+  same as engine-ut99's) swaps it for a multisampled one (RGBA8 + DEPTH24_STENCIL8), resolved at the present and before
+  any read of framebuffer 0 (`SHOT`); NOpenGLESDrv asks for it at Init or gives it back. Log lines: `GLES2: antialiasing
+  4x (multisampled back buffer)` / `GLES2: antialiasing off`. `-WEBGL=1` asks for WebGL 1 (no antialiasing), and a
+  browser without WebGL 2 falls back to it (`No WebGL 2 context …`). Benchmarked (the frontend's opt-in
+  `renderer-benchmark`, steps/2.92): WebGL 2 costs nothing (10% more frames, 5% less CPU a frame); 4x costs about
+  20% more GPU time a frame.
 
 ### Localized properties are read (2026-10-12)
 
