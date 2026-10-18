@@ -72,7 +72,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: unreal1-linux
-          path: build-native/Unreal/Unreal.bin
+          # The binary loads the bundled libopenal.so.1 from its own directory ($ORIGIN): ship them together.
+          path: |
+            build-native/Unreal/Unreal.bin
+            build-native/Unreal/libopenal.so.1
           if-no-files-found: error
           # A short retention keeps the artifacts under the storage quota (a full quota fails the upload);
           # the newest build of main stays downloadable from the `latest` release.
