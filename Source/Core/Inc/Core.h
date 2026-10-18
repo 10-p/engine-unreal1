@@ -31,11 +31,8 @@
 #include "UnGcc.h"
 #endif
 
-// Pointer width, taken from the compiler (never from a build-system flag) so it cannot disagree with the code
-// being compiled. UE1 was written for 32-bit; PLATFORM_64BITS marks the few places where LP64 needs a different answer.
-#if defined(_WIN64) || (defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 8)
-	#define PLATFORM_64BITS 1
-#endif
+// Pointer-sized values use PTRINT/UPTRINT, whose width comes from the compiler, so it cannot disagree with the code
+// being compiled.
 static_assert(sizeof(PTRINT) == sizeof(void*) && sizeof(UPTRINT) == sizeof(void*), "PTRINT must be pointer-sized.");
 
 // Global constants.

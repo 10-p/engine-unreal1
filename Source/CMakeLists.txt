@@ -33,7 +33,7 @@ option(UE_BUNDLED_OPENAL "Native Linux: build openal-soft (the ufront fork) and 
 option(BUILD_WINDRV "Build WinDrv" OFF)
 option(BUILD_STATIC "Link everything into a single binary" OFF)
 # A 64-bit (LP64) build. OFF demotes an x86_64 compiler to -m32; ON builds x86_64 as x86_64. An arm64 compiler
-# always builds 64-bit. The C++ side does not read this option: PLATFORM_64BITS comes from the compiler (Core.h).
+# always builds 64-bit. The C++ side does not read this option: its pointer-sized types come from the compiler.
 option(UE_ALLOW_64BIT "Build x86_64 as a 64-bit (LP64) engine instead of demoting to -m32" OFF)
 
 # Emscripten / WebAssembly build. Emscripten cannot load UE1's .so/.dll packages, has no x86 inline asm, and
