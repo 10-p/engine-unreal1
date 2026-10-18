@@ -28,8 +28,7 @@ IMPLEMENT_PACKAGE(WebRTCDrv);
 
 /*-----------------------------------------------------------------------------
 	extern "C" transport bridge (WASM <-> JS).
-	On Emscripten these resolve to the glue's baked shim, which forwards to
-	Module.UE.net.*. On native they are inline no-op stubs.
+	They resolve to the glue's baked shim, which forwards to Module.UE.net.*.
 	UE1 does not use the deferred-connect pair (webrtc_deferred_open /
 	webrtc_check_pending_connect) — the guest joins via the startup-URL flow
 	(the frontend passes "<room>?connect" as the engine's first argument), so no
@@ -48,16 +47,6 @@ extern "C"
 	int  webrtc_get_connection_state( int connId );
 	void webrtc_set_listen_status( const char* name, const char* map, int players, int maxPlayers, const char* gametype );
 }
-#else
-inline void webrtc_init_listen( const char* ) {}
-inline void webrtc_connect( const char* ) {}
-inline int  webrtc_send( int, const void*, int ) { return 0; }
-inline int  webrtc_recv( int, void*, int ) { return 0; }
-inline int  webrtc_accept_connection() { return 0; }
-inline void webrtc_close( int ) {}
-inline void webrtc_destroy() {}
-inline int  webrtc_get_connection_state( int ) { return WEBRTC_STATE_INVALID; }
-inline void webrtc_set_listen_status( const char*, const char*, int, int, const char* ) {}
 #endif
 
 // The running engine, for the listen-server status push (set in SDLLaunch.cpp after InitEngine).

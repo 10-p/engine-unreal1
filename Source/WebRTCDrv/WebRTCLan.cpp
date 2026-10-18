@@ -27,8 +27,6 @@
 #include "UnNet.h"
 #include "WebRTCLan.h"
 
-#ifdef __EMSCRIPTEN__
-
 // Discovery bridge: the glue's discovery imports, resolved at the wasm link.
 extern "C"
 {
@@ -356,19 +354,6 @@ void WebRTCLan_SetLocalRoom( const char* Room )
 {
 	GLocalRoom = Room ? FString(Room) : FString("");
 }
-
-#else  // !__EMSCRIPTEN__
-
-// Native builds have real UDP and a real LAN; the stock menu needs no help.
-void    WebRTCLan_Bind( const void*, INT ) {}
-void    WebRTCLan_Unbind( const void* ) {}
-UBOOL   WebRTCLan_Send( const void*, DWORD, INT, const char* ) { return 0; }
-UBOOL   WebRTCLan_NextReply( const void*, DWORD*, INT*, FString& ) { return 0; }
-FString WebRTCLan_HostForRoom( const char* ) { return FString(""); }
-FString WebRTCLan_RoomForHost( const char* ) { return FString(""); }
-void    WebRTCLan_SetLocalRoom( const char* ) {}
-
-#endif // __EMSCRIPTEN__
 
 /*-----------------------------------------------------------------------------
 	The End.
