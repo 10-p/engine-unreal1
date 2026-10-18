@@ -1051,12 +1051,9 @@ CORE_API void VARARGS appThrowf( const char* Fmt, ... )
 {
 	static char TempStr[4096];
 	GET_VARARGS(TempStr,Fmt);
-#ifdef __EMSCRIPTEN__
-	// The web build's engine code cannot catch exceptions, so every throw aborts: print the message first
-	// (stdout reaches the browser console) so the abort names its cause.
+	// Print the message before throwing, so a throw that nothing catches still names its cause.
 	fprintf( stdout, "[appThrowf] %s\n", TempStr );
 	fflush( stdout );
-#endif
 	throw( TempStr );
 }
 

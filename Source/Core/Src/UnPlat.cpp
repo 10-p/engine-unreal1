@@ -1088,14 +1088,12 @@ void FGlobalPlatform::WriteBinary( const void* Data, INT Length, EName Event )
 				fwrite( Data, strlen((char*)Data), 1, GLogFile );
 				fwrite( "\n", 1, 1, GLogFile );
 			}
-#ifdef __EMSCRIPTEN__
-			// Mirror each log line (what Unreal.log gets) to stdout, which the host forwards to the browser console.
-			// The trailing '\n' flushes Emscripten's line-buffered stdout.
+			// Mirror each log line (what Unreal.log gets) to stdout, for a terminal, a test harness or the host page.
+			// The trailing '\n' flushes a line-buffered stdout.
 			fputs( *EventName, stdout );
 			fputs( ": ", stdout );
 			fputs( (const char*)Data, stdout );
 			fputc( '\n', stdout );
-#endif
 			if( GLogHook )
 			{
 				GLogHook->WriteBinary( Data, Length, Event );
