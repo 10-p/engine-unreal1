@@ -44,6 +44,10 @@ done
 find "$BUILD" -name '*.so' -not -path '*_deps*' -exec \
     cp -f --remove-destination {} "$RUN/System/" \;
 cp -f --remove-destination "$BUILD/Unreal/Unreal.bin" "$RUN/System/"
+# The bundled openal-soft, which the binary finds beside itself ($ORIGIN).
+if [ -e "$BUILD/Unreal/libopenal.so.1" ]; then
+    cp -f --remove-destination "$BUILD/Unreal/libopenal.so.1" "$RUN/System/"
+fi
 chmod +x "$RUN/System/Unreal.bin"
 
 echo "$RUN ready: $(ls "$RUN"/System/*.so | wc -l) modules from $BUILD"
