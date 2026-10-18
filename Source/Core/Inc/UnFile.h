@@ -406,20 +406,24 @@ CORE_API void appDumpAllocs( class FOutputDevice* Out );
 // pre-init allocator that returns NULL (on the web, WasmFS's static initialiser). The placement form
 // `operator new(size_t, const char*)` is not a replacement and stays a plain inline.
 //
-#define UT_REPLACEMENT_ALLOC __attribute__((always_inline))
+#ifdef _MSC_VER
+#define UT_REPLACEMENT_ALLOC __forceinline
+#else
+#define UT_REPLACEMENT_ALLOC inline __attribute__((always_inline))
+#endif
 inline void* operator new( size_t Size, const char* Tag )
 {
 	guard( "operator new" );
 	return appMalloc( Size, Tag );
 	unguard;
 }
-UT_REPLACEMENT_ALLOC inline void* operator new(size_t Size )
+UT_REPLACEMENT_ALLOC void* operator new(size_t Size )
 {
 	guard( "operator new" );
 	return appMalloc( Size, "new" );
 	unguard;
 }
-UT_REPLACEMENT_ALLOC inline void operator delete( void* Ptr )
+UT_REPLACEMENT_ALLOC void operator delete( void* Ptr )
 {
 	guard( "operator delete" );
 	appFree( Ptr );
