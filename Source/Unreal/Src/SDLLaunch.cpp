@@ -231,32 +231,53 @@ static UBOOL IsHardwareDefaultEligible( const char* Device )
 	return 0;
 }
 
-#ifndef __EMSCRIPTEN__
-// Replaces a configured subsystem this build does not contain (the retail ini names Galaxy.GalaxyAudioSubsystem;
-// the engine loads it with LOAD_NoFail, so a missing one is a fatal error) with the first present entry of
-// Preference. A present one is left alone.
-// Not compiled on Emscripten, where InitEngine sets the web subsystems outright.
-static void NormalizeSubsystem( const char* Section, const char* Key, const char* const* Preference, INT Num )
+// The subsystems InitEngine checks before Engine->Init loads them from [Engine.Engine] with LOAD_NoFail (a missing
+// class is a fatal error): the drivers that may replace a configured one, best first, and a driver this build
+// contains but cannot use.
+struct FSubsystemChoice
 {
-	char Configured[256] = "";
-	if( GetConfigString( Section, Key, Configured, ARRAY_COUNT(Configured) ) && Configured[0]
-	    && IsPackageClassAvailable( Configured ) )
-		return;	// what the user asked for is here — do not touch it
+	const char* Key;
+	const char* Preference[2];
+	const char* Unusable;
+};
+static const FSubsystemChoice GSubsystemChoices[] =
+{
+	{ "ViewportManager", { "NSDLDrv.NSDLClient" },                                             NULL },
+	// SoundDrv's silent subsystem comes last, for a build without NOpenALDrv.
+	{ "AudioDevice",     { "NOpenALDrv.NOpenALAudioSubsystem", "SoundDrv.NullAudioSubsystem" }, NULL },
+#ifdef __EMSCRIPTEN__
+	// IpDrv is linked (its UdpLink serves the synthetic LAN), but a browser has no sockets for TcpNetDriver.
+	{ "NetworkDevice",   { "WebRTCDrv.WebRTCNetDriver" },                                       "IpDrv.TcpNetDriver" },
+#else
+	{ "NetworkDevice",   { "IpDrv.TcpNetDriver" },                                              NULL },
+#endif
+};
 
-	for( INT i=0; i<Num; i++ )
+// Replaces a configured subsystem this build does not contain or cannot use (a retail ini names
+// Galaxy.GalaxyAudioSubsystem) with the first present entry of its preference list. A present, usable one is
+// left alone. So the same binary boots from a retail ini, from this repo's inis or from a user's own.
+static void NormalizeSubsystem( const FSubsystemChoice& Choice )
+{
+	const char* Section = "Engine.Engine";
+	char Configured[256] = "";
+	GetConfigString( Section, Choice.Key, Configured, ARRAY_COUNT(Configured) );
+	const UBOOL Unusable = Choice.Unusable && appStricmp( Configured, Choice.Unusable )==0;
+	if( Configured[0] && !Unusable && IsPackageClassAvailable( Configured ) )
+		return;	// what the user asked for is here: do not touch it
+
+	for( INT i=0; i<ARRAY_COUNT(Choice.Preference) && Choice.Preference[i]; i++ )
 	{
-		if( IsPackageClassAvailable( Preference[i] ) )
+		if( IsPackageClassAvailable( Choice.Preference[i] ) )
 		{
-			debugf( "ufront: [%s] %s=%s is not in this build -> %s",
-				Section, Key, Configured[0] ? Configured : "(unset)", Preference[i] );
-			SetConfigString( Section, Key, Preference[i] );
+			debugf( "ufront: [%s] %s=%s %s in this build -> %s", Section, Choice.Key,
+				Configured[0] ? Configured : "(unset)", Unusable ? "cannot work" : "is not", Choice.Preference[i] );
+			SetConfigString( Section, Choice.Key, Choice.Preference[i] );
 			return;
 		}
 	}
 	debugf( NAME_Warning, "ufront: [%s] %s=%s is not in this build and no replacement is either",
-		Section, Key, Configured[0] ? Configured : "(unset)" );
+		Section, Choice.Key, Configured[0] ? Configured : "(unset)" );
 }
-#endif
 
 static void SetRenderDeviceConfig( const char* Device )
 {
@@ -357,33 +378,13 @@ UEngine* InitEngine()
 	UBOOL FirstRun=0;
 	GetConfigBool( "FirstRun", "FirstRun", FirstRun );
 
-#ifdef __EMSCRIPTEN__
-	// Audio: NOpenALDrv on openal-soft (EFX, HRTF), as on native; only the music decoder thread is absent, so
-	// the libxmp stream is pumped from Update().
-	SetConfigString( "Engine.Engine", "AudioDevice", "NOpenALDrv.NOpenALAudioSubsystem" );
-	// BSD sockets do not work in a browser: the net driver is the WebRTC driver (its transport is the host's
-	// webrtc_* ABI).
-	SetConfigString( "Engine.Engine", "NetworkDevice", "WebRTCDrv.WebRTCNetDriver" );
-#endif
-
 	// CaptureMouse=True whatever the ini says (NSDLDrv has no click-drag look, so False would leave no mouse look):
 	// UGameEngine::Tick captures the pointer during play and releases it in a menu or pause.
 	SetConfigString( "NSDLDrv.NSDLClient", "CaptureMouse", "True" );
 
-#ifndef __EMSCRIPTEN__
-	// Replace any subsystem this build cannot load with the best one it has (NormalizeSubsystem), so the same
-	// binary boots from a retail ini, from this repo's web-configured asset tree or from a user's own. Lists are
-	// best-first; SoundDrv's silent subsystem comes last, for a build without NOpenALDrv.
-	{
-		static const char* const ViewportPreference[] = { "NSDLDrv.NSDLClient" };
-		static const char* const AudioPreference[]    = { "NOpenALDrv.NOpenALAudioSubsystem",
-		                                                  "SoundDrv.NullAudioSubsystem" };
-		static const char* const NetPreference[]      = { "IpDrv.TcpNetDriver" };
-		NormalizeSubsystem( "Engine.Engine", "ViewportManager", ViewportPreference, ARRAY_COUNT(ViewportPreference) );
-		NormalizeSubsystem( "Engine.Engine", "AudioDevice",     AudioPreference,    ARRAY_COUNT(AudioPreference) );
-		NormalizeSubsystem( "Engine.Engine", "NetworkDevice",   NetPreference,      ARRAY_COUNT(NetPreference) );
-	}
-#endif
+	// Replace any subsystem this build cannot load or use with the best one it has.
+	for( INT i=0; i<ARRAY_COUNT(GSubsystemChoices); i++ )
+		NormalizeSubsystem( GSubsystemChoices[i] );
 
 	// Render-device selection, before Engine->Init() loads the subsystems.
 	SelectRenderDevice();
