@@ -15,7 +15,8 @@
 #include "CorePrivate.h"
 
 #if defined(PLATFORM_PSVITA) || defined(__EMSCRIPTEN__)
-// PS Vita, Emscripten: the thread name is not set.
+// The thread name is not set: PS Vita has no pthread_setname_np, and Emscripten's threaded libc declares it
+// but does not define it (the link fails with an undefined symbol).
 #define pthread_setname_np(t, n) do { } while(0)
 #endif
 
