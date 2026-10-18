@@ -398,7 +398,7 @@ CORE_API void appDumpAllocs( class FOutputDevice* Out );
 //
 // C++ style memory allocation.
 //
-// UT_REPLACEMENT_ALLOC: `operator new(size_t)` and `operator delete(void*)` are the replaceable global forms.
+// UE_REPLACEMENT_ALLOC: `operator new(size_t)` and `operator delete(void*)` are the replaceable global forms.
 // Declared inline, they are emitted out of line as weak symbols wherever the compiler does not inline them
 // (at -O0, everywhere), and the linker then makes one of those the program-wide operator new. Forced inline,
 // they never are: engine code allocates through appMalloc at every optimisation level, while system code keeps
@@ -407,9 +407,9 @@ CORE_API void appDumpAllocs( class FOutputDevice* Out );
 // `operator new(size_t, const char*)` is not a replacement and stays a plain inline.
 //
 #ifdef _MSC_VER
-#define UT_REPLACEMENT_ALLOC __forceinline
+#define UE_REPLACEMENT_ALLOC __forceinline
 #else
-#define UT_REPLACEMENT_ALLOC inline __attribute__((always_inline))
+#define UE_REPLACEMENT_ALLOC inline __attribute__((always_inline))
 #endif
 inline void* operator new( size_t Size, const char* Tag )
 {
@@ -417,13 +417,13 @@ inline void* operator new( size_t Size, const char* Tag )
 	return appMalloc( Size, Tag );
 	unguard;
 }
-UT_REPLACEMENT_ALLOC void* operator new(size_t Size )
+UE_REPLACEMENT_ALLOC void* operator new(size_t Size )
 {
 	guard( "operator new" );
 	return appMalloc( Size, "new" );
 	unguard;
 }
-UT_REPLACEMENT_ALLOC void operator delete( void* Ptr )
+UE_REPLACEMENT_ALLOC void operator delete( void* Ptr )
 {
 	guard( "operator delete" );
 	appFree( Ptr );

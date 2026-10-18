@@ -56,8 +56,6 @@ if(EMSCRIPTEN)
   # storage, WebRTC) at run time. Baked in are only the thin --js-library forwarders: vendor/glue/webrtc-shim.js,
   # vendor/glue/wasmfs-shim.js and msaa-backbuffer.js. Renderers: NOpenGLESDrv (GLES2 -> WebGL), SoftDrv and
   # NullDrv, in the --whole-archive static set. SDL2 comes from the Emscripten port.
-  set(UNREAL_ASSETS_DIR "/home/ion/unreal-assets" CACHE PATH
-      "Unreal v200 assets (System/*.ini preloaded into MEMFS; the rest streams via FetchFS)")
   target_link_options(${PROJECT_NAME} PRIVATE
     -sASYNCIFY
     -sASYNCIFY_STACK_SIZE=262144
@@ -124,7 +122,7 @@ if(EMSCRIPTEN)
     -sMIN_WEBGL_VERSION=1
     "SHELL:--js-library ${CMAKE_CURRENT_SOURCE_DIR}/msaa-backbuffer.js"
   )
-  if(UT_WEB_PERF)
+  if(UE_WEB_PERF)
     # --emit-symbol-map writes a side file (SDLLaunch.js.symbols) and leaves the wasm as it is; with it a crash
     # offset in the shipped wasm resolves to a function name offline. DWARF cannot ride along (it limits
     # binaryen's optimizations), so line numbers stay a debug-build job.
@@ -197,7 +195,7 @@ if(EMSCRIPTEN)
       --target=unreal1 --abi=${UE_ABI_VERSION}
       --gitSha=${META_GIT_SHA} --builtAt=${META_BUILT_AT} --emcc=${META_EMCC}
       ${META_DEPS}
-    COMMENT "Emitting artifact meta.json (docs/05 §4)"
+    COMMENT "Emitting artifact meta.json"
     VERBATIM
   )
 endif()
@@ -241,7 +239,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE UNREAL_EXPORTS UPACKAGE_NAME=
 # Tell the launcher whether NOpenGLDrv is linked, so its -*RENDERER switches and preference order offer it only
 # then. Keyed off the CMake option rather than the platform.
 if(BUILD_NOPENGLDRV)
-  target_compile_definitions(${PROJECT_NAME} PRIVATE UT_HAS_NOPENGLDRV=1)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UE_HAS_NOPENGLDRV=1)
 endif()
 
 # OpenAL Soft is the one library the Windows build ships as a DLL (cmake/OpenALMingw.cmake). The build puts it

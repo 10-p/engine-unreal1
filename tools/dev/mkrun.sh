@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # mkrun.sh -- assemble a scratch run tree for the native build.
 #
-#   tools/dev/mkrun.sh <build-dir> <run-dir>
-#   tools/dev/mkrun.sh build-soft /tmp/u1soft
+#   UE_ASSETS_DIR=<game folder> tools/dev/mkrun.sh <build-dir> <run-dir>
+#   UE_ASSETS_DIR=~/games/Unreal tools/dev/mkrun.sh build-native /tmp/u1
 #
-# Symlinks the read-only asset trees from $UNREAL_ASSETS_DIR, gives the run tree its own Save and Cache,
-# copies the config files (the engine rewrites them) and installs the built modules.
+# Symlinks the read-only asset trees from $UE_ASSETS_DIR (an Unreal v200 install: Maps, System, ...), gives the
+# run tree its own Save and Cache, copies the config files (the engine rewrites them) and installs the built
+# modules.
 #
 # Every copy into System uses --remove-destination: the System entries are symlinks into
-# $UNREAL_ASSETS_DIR, and a plain `cp` follows a symlink and writes through into the asset tree.
+# $UE_ASSETS_DIR, and a plain `cp` follows a symlink and writes through into the asset tree.
 set -eu
 
 BUILD="${1:?usage: mkrun.sh <build-dir> <run-dir>}"
 RUN="${2:?}"
-A="${UNREAL_ASSETS_DIR:-/home/ion/unreal-assets}"
+A="${UE_ASSETS_DIR:?set UE_ASSETS_DIR to the Unreal game folder}"
 
 rm -rf "$RUN"
 mkdir -p "$RUN/System"

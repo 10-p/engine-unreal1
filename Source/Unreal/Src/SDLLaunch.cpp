@@ -169,7 +169,7 @@ void HandleError()
 struct FRenderSwitch { const char* Param; const char* Device; };
 static const FRenderSwitch GRenderSwitches[] =
 {
-#ifdef UT_HAS_NOPENGLDRV
+#ifdef UE_HAS_NOPENGLDRV
 	// Desktop GL (NOpenGLDrv), present when BUILD_NOPENGLDRV is on (the native and Windows targets).
 	{ "NOPENGLRENDERER",   "NOpenGLDrv.NOpenGLRenderDevice" },     // desktop OpenGL 1.4 compatibility
 #endif
@@ -180,7 +180,7 @@ static const FRenderSwitch GRenderSwitches[] =
 // Default when nothing is chosen: the hardware render devices, best first.
 static const char* GRenderPreference[] =
 {
-#if defined(UT_HAS_NOPENGLDRV) && defined(PLATFORM_WIN32)
+#if defined(UE_HAS_NOPENGLDRV) && defined(PLATFORM_WIN32)
 	// On Windows desktop GL leads: a GLES2 context there needs a driver that exposes ES contexts through WGL
 	// or ANGLE's libEGL/libGLESv2 beside the exe, whereas opengl32 is always present. The shipped ini's SoftDrv
 	// is not hardware-eligible, so this list is what a fresh Windows install lands on.
@@ -189,7 +189,7 @@ static const char* GRenderPreference[] =
 #else
 	// Elsewhere GLES2 leads, so a native build runs the web's renderer unless asked otherwise.
 	"NOpenGLESDrv.NOpenGLESRenderDevice",
-#ifdef UT_HAS_NOPENGLDRV
+#ifdef UE_HAS_NOPENGLDRV
 	"NOpenGLDrv.NOpenGLRenderDevice",
 #endif
 #endif

@@ -53,7 +53,7 @@ module, generalised — `ufront_openal_soft(PLATFORM WEB|NATIVE …)`) FetchCont
 **a run tree that takes the binary must take `libopenal.so.1` with it** (the loader stops before `main`
 otherwise). Backends are whatever this host's headers allowed at configure time — e.g. PulseAudio, ALSA,
 OSS, each dlopen'd at run time — and the configure log says which
-(`Building OpenAL with support for the following backends`). `-DUT_BUNDLED_OPENAL=OFF` restores the system
+(`Building OpenAL with support for the following backends`). `-DUE_BUNDLED_OPENAL=OFF` restores the system
 library. Why: the system library is whatever the distro built, so the native binary carries the fork to play
 what the web plays.
 
@@ -243,7 +243,7 @@ message box (`play.sh` stops at a `Critical:` line).
 folder linked beside `System`); a 64-bit `-MAKE` of it must match but for the GUID. **Run the layout sweep in both
 hosts** — a reflected layout can exist in only one process. **Coverage census:** `tools/dev/census/` (engine-ut99's
 BUILD.md "Coverage census" has the recipe; the binary here is `Unreal.bin`). A run tree's `Save` and `Cache` are its
-own (`mkrun.sh`); never write into `$UNREAL_ASSETS_DIR`.
+own (`mkrun.sh`); never write into `$UE_ASSETS_DIR`.
 
 ## Windows builds (MinGW-w64) — ufront step 2.33
 

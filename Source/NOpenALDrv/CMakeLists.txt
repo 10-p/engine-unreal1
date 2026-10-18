@@ -37,7 +37,7 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOM
     message(FATAL_ERROR "libxmp: expected static target 'xmp_static' was not created.")
   endif()
   # OpenAL. Native Linux keeps the parent's OPENAL_LIBRARY: the fork's bundled libopenal.so.1 when
-  # UT_BUNDLED_OPENAL is ON (the default), else the system libopenal. MinGW keeps the prebuilt OpenAL Soft
+  # UE_BUNDLED_OPENAL is ON (the default), else the system libopenal. MinGW keeps the prebuilt OpenAL Soft
   # import library from OpenALMingw.cmake.
   if(EMSCRIPTEN)
     # the openal-soft `OpenAL` target the parent builds with Source/cmake/OpenALSoft.cmake (EFX and HRTF included)

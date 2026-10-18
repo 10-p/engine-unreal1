@@ -4,7 +4,7 @@
 # an MSYS2 prompt on Windows needs no toolchain file; this file supplies only what a cross build cannot infer.
 #
 # The Windows build is 32-bit (i686). Source/CMakeLists.txt demotes an x86_64 compiler to -m32 unless
-# UT_ALLOW_64BIT is ON; a 64-bit (LLP64) Windows build is untested.
+# UE_ALLOW_64BIT is ON; a 64-bit (LLP64) Windows build is untested.
 #
 # Usage: `cmake --preset windows` (the preset points here). Standalone:
 #   cmake -S Source -B build-windows -DCMAKE_TOOLCHAIN_FILE=Source/cmake/toolchain-mingw-w64.cmake

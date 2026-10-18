@@ -16,25 +16,25 @@ endif()
 # Options
 
 option(USE_SDL "Use NSDLDrv instead of WinDrv" ON)
-# Web build mode (Emscripten only; see the build-mode table below). UT_WEB_PERF sets the link flags in
-# Unreal/CMakeLists.txt; UT_WEB_DEBUG compiles at -O0 instead of -O2.
-option(UT_WEB_PERF "Emscripten: shipping build — link at -O3 -g0, assertions off" OFF)
-option(UT_WEB_DEBUG "Emscripten: -O0 instead of the -O2 dev default (nothing inlined, every local live)" OFF)
+# Web build mode (Emscripten only; see the build-mode table below). UE_WEB_PERF sets the link flags in
+# Unreal/CMakeLists.txt; UE_WEB_DEBUG compiles at -O0 instead of -O2.
+option(UE_WEB_PERF "Emscripten: shipping build — link at -O3 -g0, assertions off" OFF)
+option(UE_WEB_DEBUG "Emscripten: -O0 instead of the -O2 dev default (nothing inlined, every local live)" OFF)
 # The Editor package is needed to play: game content (maps, meshes, skins) references its classes, and without
 # it a map such as Dug.unr fails to load. It is the stripped, no-GUI NullEdHook variant (Engine+Core only).
-option(BUILD_EDITOR "Build the Editor package (a RUNTIME dependency — see above)" ON)
-option(BUILD_SOFTDRV "Build SoftDrv (x86/MSVC only)" OFF)
+option(BUILD_EDITOR "Build the Editor package (game content needs it at run time)" ON)
+option(BUILD_SOFTDRV "Build SoftDrv (the software renderer; its portable C path builds everywhere)" OFF)
 option(BUILD_NULLDRV "Build NullDrv (GPU-free no-op render device; -NULLRENDERER). No GL context -> headless / dedicated-server run." OFF)
 option(BUILD_NOPENGLDRV "Build NOpenGLDrv" OFF)
 option(BUILD_NOPENGLESDRV "Build NOpenGLESDrv" ON)
 option(BUILD_NULLSOUNDDRV "Build SoundDrv (Null driver)" ON)
 option(BUILD_NOPENALDRV "Build NOpenALDrv" ON)
-option(UT_BUNDLED_OPENAL "Native Linux: build openal-soft (the ufront fork) and ship libopenal.so.1 beside the binary, instead of linking whatever libopenal the system has (ufront 2.70)" ON)
+option(UE_BUNDLED_OPENAL "Native Linux: build openal-soft (the ufront fork) and ship libopenal.so.1 beside the binary, instead of linking the system libopenal" ON)
 option(BUILD_WINDRV "Build WinDrv" OFF)
 option(BUILD_STATIC "Link everything into a single binary" OFF)
 # A 64-bit (LP64) build. OFF demotes an x86_64 compiler to -m32; ON builds x86_64 as x86_64. An arm64 compiler
 # always builds 64-bit. The C++ side does not read this option: PLATFORM_64BITS comes from the compiler (Core.h).
-option(UT_ALLOW_64BIT "Build x86_64 as a 64-bit (LP64) engine instead of demoting to -m32" OFF)
+option(UE_ALLOW_64BIT "Build x86_64 as a 64-bit (LP64) engine instead of demoting to -m32" OFF)
 
 # Emscripten / WebAssembly build. Emscripten cannot load UE1's .so/.dll packages, has no x86 inline asm, and
 # gets SDL2/GLES2 from its own ports; the web configuration is forced here, so `emcmake cmake` (or a wasm
@@ -124,8 +124,8 @@ if(TARGET_IS_64BIT)
     # LLP64 (Windows x64): `long` is 32-bit there, which the typedefs cover, but the build is untested.
     # Refuse rather than produce an unverified binary.
     message(FATAL_ERROR "64-bit MSVC builds are not supported. Use -A Win32.")
-  elseif(TARGET_IS_X86 AND NOT UT_ALLOW_64BIT)
-    message(STATUS "Building x86 binary with x86_64 compiler (pass -DUT_ALLOW_64BIT=ON for x86_64)")
+  elseif(TARGET_IS_X86 AND NOT UE_ALLOW_64BIT)
+    message(STATUS "Building x86 binary with x86_64 compiler (pass -DUE_ALLOW_64BIT=ON for x86_64)")
     set(TARGET_IS_64BIT FALSE)
     set(TARGET_ARCH "x86")
     add_compile_options(-m32)
@@ -209,7 +209,7 @@ else()
   if(EMSCRIPTEN)
     # The three web build modes:
     #
-    #   preset        UT_WEB_PERF  UT_WEB_DEBUG  compile   what it is for
+    #   preset        UE_WEB_PERF  UE_WEB_DEBUG  compile   what it is for
     #   wasm-perf     ON           -             -O2       shipping: link-time -O3 -g0, no assertions
     #   wasm          OFF          OFF           -O2 -g    the dev default: named stacks, DWARF, assertions
     #   wasm-debug    OFF          ON            -O0 -g    last resort: every local live, nothing inlined
@@ -217,9 +217,9 @@ else()
     # -O0 is for when the optimiser is the suspect: a bug that shows at one -O level and not another is almost
     # always undefined behaviour. It is not the smaller build: DWARF makes Emscripten run only limited binaryen
     # optimizations, so -O2's inlining is never cleaned up. The dev default buys speed, not size.
-    if(UT_WEB_DEBUG)
+    if(UE_WEB_DEBUG)
       add_compile_options(-O0 -g)
-    elseif(UT_WEB_PERF)
+    elseif(UE_WEB_PERF)
       # No compile-side DWARF in the shipping build: -O2 here, -O3 -g0 at link (Unreal/CMakeLists.txt).
       # -g would grow every object and make emcc run only limited binaryen optimizations.
       add_compile_options(-O2)
@@ -295,7 +295,7 @@ if(BUILD_NOPENALDRV)
         # Cross-building for Windows: no system OpenAL to link against, so fetch OpenAL Soft's official
         # prebuilt Windows binaries (cmake/OpenALMingw.cmake).
         include(OpenALMingw)
-      elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UT_BUNDLED_OPENAL)
+      elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UE_BUNDLED_OPENAL)
         # Native Linux links the fork's own libopenal.so.1 (the `OpenAL` target, built below by
         # cmake/OpenALSoft.cmake NATIVE and copied beside the binary), not the system library.
         set(OPENAL_LIBRARY OpenAL)
@@ -382,7 +382,7 @@ if(BUILD_NOPENALDRV)
     # engine's own objects keep the default (see the exceptions note above).
     include(OpenALSoft)
     ufront_openal_soft(PLATFORM WEB EAX OFF)
-  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UT_BUNDLED_OPENAL)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UE_BUNDLED_OPENAL)
     # Native Linux carries the same fork as a shared library beside the binary (cmake/OpenALSoft.cmake), so it
     # plays through the same library as the web rather than the distro's.
     include(OpenALSoft)
