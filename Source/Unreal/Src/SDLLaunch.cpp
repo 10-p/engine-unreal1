@@ -364,16 +364,11 @@ UEngine* InitEngine()
 	// BSD sockets do not work in a browser: the net driver is the WebRTC driver (its transport is the host's
 	// webrtc_* ABI).
 	SetConfigString( "Engine.Engine", "NetworkDevice", "WebRTCDrv.WebRTCNetDriver" );
-	// CaptureMouse=True: UGameEngine::Tick captures the pointer during play and releases it in a menu or pause;
-	// SDL2's Emscripten port takes the browser pointer lock on the next click.
-	SetConfigString( "NSDLDrv.NSDLClient", "CaptureMouse", "True" );
 #endif
 
-#if defined(PLATFORM_SDL) && !defined(__EMSCRIPTEN__)
 	// CaptureMouse=True whatever the ini says (NSDLDrv has no click-drag look, so False would leave no mouse look):
 	// UGameEngine::Tick captures the pointer during play and releases it in a menu or pause.
 	SetConfigString( "NSDLDrv.NSDLClient", "CaptureMouse", "True" );
-#endif
 
 #ifndef __EMSCRIPTEN__
 	// Replace any subsystem this build cannot load with the best one it has (NormalizeSubsystem), so the same
