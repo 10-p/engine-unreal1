@@ -169,7 +169,6 @@ if(EMSCRIPTEN)
   string(REGEX MATCH "([0-9]+)" UE_ABI_VERSION "${_ue_abi_line}")
   execute_process(COMMAND git -C ${CMAKE_SOURCE_DIR}/.. rev-parse --short HEAD
     OUTPUT_VARIABLE META_GIT_SHA OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-  string(TIMESTAMP META_BUILT_AT "%Y-%m-%dT%H:%M:%SZ" UTC)
   # The Emscripten version comes from the toolchain's EMSCRIPTEN_ROOT_PATH: a preset build has only $EMSDK
   # set, so emcc need not be on PATH.
   set(META_EMCC "unknown")
@@ -192,7 +191,7 @@ if(EMSCRIPTEN)
     COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs
       --out=$<TARGET_FILE_DIR:${PROJECT_NAME}>
       --target=unreal1 --abi=${UE_ABI_VERSION}
-      --gitSha=${META_GIT_SHA} --builtAt=${META_BUILT_AT} --emcc=${META_EMCC}
+      --gitSha=${META_GIT_SHA} --emcc=${META_EMCC}
       ${META_DEPS}
     COMMENT "Emitting artifact meta.json"
     VERBATIM

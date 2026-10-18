@@ -3,8 +3,8 @@
 // Run by the Unreal launcher's POST_BUILD after SDLLaunch.js is final, so the js checksum is of the served
 // file. Node stdlib only, so the artifact and its descriptor travel together; the host's build validates it
 // against the glue ABI_VERSION and the host loader contract.
-//   node emit-artifact-meta.mjs --out=<dir> --target=<id> --abi=<n> --gitSha=<sha> --builtAt=<time>
-//        --emcc=<version> [--dep-<label>=<repo>@<ref> ...]
+//   node emit-artifact-meta.mjs --out=<dir> --target=<id> --abi=<n> --gitSha=<sha> --emcc=<version>
+//        [--dep-<label>=<repo>@<ref> ...]
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -65,6 +65,7 @@ const meta = {
     // OffscreenCanvas.
     '-sASYNCIFY', '-sFULL_ES2', '-sUSE_SDL=2', '-sALLOW_MEMORY_GROWTH', '-sFORCE_FILESYSTEM', '-sWASMFS',
     '-pthread', '-sPROXY_TO_PTHREAD', '-sOFFSCREENCANVAS_SUPPORT', '-sOFFSCREENCANVASES_TO_PTHREAD=#canvas',
+    '-sOFFSCREEN_FRAMEBUFFER', '-sMAX_WEBGL_VERSION=2', '-sMIN_WEBGL_VERSION=1', '-sNO_DISABLE_EXCEPTION_CATCHING',
   ],
     exports: { symbolContract: 1 },
     checksums,
