@@ -62,8 +62,7 @@ class DLL_EXPORT UNOpenGLESRenderDevice : public URenderDevice
 	UBOOL NoFiltering;
 	// Image quality.
 	//   MaxAnisotropy (EXT_texture_filter_anisotropic): clamped at Init to the level the driver advertises.
-	//   NumAASamples: on the web Init passes it to the multisampled back buffer (ufront_backbuffer_samples) and
-	//     it takes effect; natively the context exists before Init, so the value is only logged.
+	//   NumAASamples (0 or 1 = off): the multisample count of the surface this device draws into (see Init).
 	FLOAT MaxAnisotropy;
 	INT NumAASamples;
 	UBOOL UseBGRA;

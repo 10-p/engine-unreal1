@@ -221,10 +221,18 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 			debugf( "GLES2: antialiasing off" );
 	}
 #else
-	// NumAASamples is nominal: the context was made before this driver ran. Report what we were asked for so
-	// the log does not imply a sample count we cannot honour.
-	if( NumAASamples > 0 )
-		debugf( "GLES2: AA requested (%d samples nominal)", NumAASamples );
+	// The samples belong to the window's surface, which NSDLViewport requested from NumAASamples before this
+	// driver ran: report what the surface has.
+	{
+		GLint Samples = 0;
+		glGetIntegerv( GL_SAMPLES, &Samples );
+		if( Samples > 1 )
+			debugf( "GLES2: antialiasing %dx (multisampled window)", (INT)Samples );
+		else if( NumAASamples > 1 )
+			debugf( "GLES2: antialiasing (%d samples) unavailable on this window", NumAASamples );
+		else
+			debugf( "GLES2: antialiasing off" );
+	}
 #endif
 
 	if( UseBGRA )

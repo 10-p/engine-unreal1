@@ -291,6 +291,30 @@ void UNSDLViewport::UpdateWindow()
 	unguard;
 }
 
+#if !defined(__EMSCRIPTEN__) || !defined(__EMSCRIPTEN_PTHREADS__)
+//
+// The sample count a render device will run with: its NumAASamples (the compiled default, then the ini), read
+// from a probe instance of the device class; 0 for a device without the option.
+//
+static INT RenderDeviceAASamples( const char* Device )
+{
+	UClass* Class = Device[0] ? GObj.LoadClass( URenderDevice::StaticClass, NULL, Device, NULL, LOAD_NoWarn | LOAD_KeepImports, NULL ) : NULL;
+	if( !Class )
+		return 0;
+	for( TFieldIterator<UIntProperty> It( Class ); It; ++It )
+	{
+		if( appStricmp( It->GetName(), "NumAASamples" )==0 )
+		{
+			UObject* Probe = ConstructClassObject<UObject>( Class );
+			const INT Samples = *(INT*)( (BYTE*)Probe + It->Offset );
+			delete Probe;
+			return Samples;
+		}
+	}
+	return 0;
+}
+#endif
+
 //
 // Open a viewport window.
 //
@@ -303,17 +327,21 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 	UBOOL DoOpenGL=0;
 	UBOOL NoHard=ParseParam( appCmdLine(), "nohard" );
 	SDL_GLprofile GLProfile = SDL_GL_CONTEXT_PROFILE_COMPATIBILITY;
+	char Device[256] = "";	// the render device about to load, as configured
+	INT AASamples = 0;		// the multisampling asked of the window's GL surface
 	NewX = Align(NewX,4);
 
 	if( !Temporary && !GIsEditor && !NoHard )
 	{
 		// HACK: Just check if we're about to load OpenGLDrv. Not sure how else you would know to add the GL flag.
 		char Temp[256] = "";
-		GetConfigString( "Engine.Engine", "GameRenderDevice", Temp, ARRAY_COUNT(Temp) );
+		GetConfigString( "Engine.Engine", "GameRenderDevice", Device, ARRAY_COUNT(Device) );
+		appStrcpy( Temp, Device );
 		appStrupr( Temp );
 		if( !appStrstr( Temp, "OPENGL" ) )
 		{
-			GetConfigString( "Engine.Engine", "WindowedRenderDevice", Temp, ARRAY_COUNT(Temp) );
+			GetConfigString( "Engine.Engine", "WindowedRenderDevice", Device, ARRAY_COUNT(Device) );
+			appStrcpy( Temp, Device );
 			appStrupr( Temp );
 			if( appStrstr( Temp, "OPENGL" ) )
 				DoOpenGL = 1;
@@ -378,6 +406,13 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 0 );
 			}
 			SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, GLProfile );
+#if !defined(__EMSCRIPTEN__) || !defined(__EMSCRIPTEN_PTHREADS__)
+			// Multisampling belongs to the window's GL surface, so it is requested before the window and its
+			// context exist, from the render device's NumAASamples. It holds for the life of the window.
+			AASamples = RenderDeviceAASamples( Device );
+			SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, AASamples > 1 ? 1 : 0 );
+			SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, AASamples > 1 ? AASamples : 0 );
+#endif
 		}
 
 		// Set position and size.
@@ -397,6 +432,15 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		{
 			// Creating new viewport.
 			hWnd = SDL_CreateWindow( "", OpenX, OpenY, NewX, NewY, Flags );
+			if( !hWnd && DoOpenGL && AASamples > 1 )
+			{
+				// Try without multisampling.
+				debugf( NAME_Warning, "Could not create a %ix multisampled OpenGL window: %s. Trying without multisampling.", AASamples, SDL_GetError() );
+				SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 0 );
+				SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 0 );
+				AASamples = 0;
+				hWnd = SDL_CreateWindow( "", OpenX, OpenY, NewX, NewY, Flags );
+			}
 			if( !hWnd && DoOpenGL )
 			{
 				// Try without GL.

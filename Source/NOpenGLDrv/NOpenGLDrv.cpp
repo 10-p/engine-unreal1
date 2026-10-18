@@ -43,6 +43,8 @@ void UNOpenGLRenderDevice::InternalClassInitializer( UClass* Class )
 	new(Class, "UseMultiTexture",     RF_Public)UBoolProperty( CPP_PROPERTY(UseMultiTexture),     "Options", CPF_Config );
 	new(Class, "UseWindowBrightness", RF_Public)UBoolProperty( CPP_PROPERTY(UseWindowBrightness), "Options", CPF_Config );
 	new(Class, "SwapInterval",        RF_Public)UIntProperty ( CPP_PROPERTY(SwapInterval),        "Options", CPF_Config );
+	new(Class, "MaxAnisotropy",       RF_Public)UFloatProperty( CPP_PROPERTY(MaxAnisotropy),      "Options", CPF_Config );
+	new(Class, "NumAASamples",        RF_Public)UIntProperty ( CPP_PROPERTY(NumAASamples),        "Options", CPF_Config );
 	unguardSlow;
 }
 
@@ -56,7 +58,34 @@ UNOpenGLRenderDevice::UNOpenGLRenderDevice()
 	UseWindowBrightness = true;
 	CurrentBrightness = -1.f;
 	SwapInterval = 1;
+	MaxAnisotropy = 16.f;   // clamped at Init to what the driver reports
+	NumAASamples = 4;
 }
+
+// Whether the context's extension string lists Name (glad's table for this driver has no anisotropic entry).
+static UBOOL NOpenGLHasExtension( const char* Name )
+{
+	const char* Exts = (const char*)glGetString( GL_EXTENSIONS );
+	if( !Exts || !Name || !*Name )
+		return 0;
+	const size_t Len = strlen( Name );
+	for( const char* P = Exts; ( P = strstr( P, Name ) ) != NULL; P += Len )
+	{
+		const char Before = ( P == Exts ) ? ' ' : P[-1];
+		const char After  = P[Len];
+		if( Before == ' ' && ( After == ' ' || After == '\0' ) )
+			return 1;
+	}
+	return 0;
+}
+
+// Texture filter anisotropic tokens (the EXT and ARB spellings share them), defined where the headers do not.
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
+#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#endif
 
 UBOOL UNOpenGLRenderDevice::Init( UViewport* InViewport )
 {
@@ -103,6 +132,50 @@ UBOOL UNOpenGLRenderDevice::Init( UViewport* InViewport )
 	}
 
 	debugf( NAME_Log, "Got OpenGL %d.%d", GLVersion.major, GLVersion.minor );
+
+	// Anisotropic filtering: clamp to what the driver advertises instead of trusting the ini; 1.0 is isotropic
+	// (the GL default), so "off" needs no special case.
+	if( MaxAnisotropy > 1.f )
+	{
+		if( GL_CHECK_VER( 4, 6 ) || NOpenGLHasExtension( "GL_EXT_texture_filter_anisotropic" )
+		||	NOpenGLHasExtension( "GL_ARB_texture_filter_anisotropic" ) )
+		{
+			GLfloat DriverMax = 1.f;
+			glGetFloatv( GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &DriverMax );
+			if( DriverMax < 1.f )
+				DriverMax = 1.f;
+			if( MaxAnisotropy > DriverMax )
+				MaxAnisotropy = DriverMax;
+			debugf( NAME_Log, "OpenGL: anisotropic filtering %.0fx (driver max %.0fx)", MaxAnisotropy, DriverMax );
+		}
+		else
+		{
+			debugf( NAME_Log, "OpenGL: anisotropic filtering requested but unsupported; disabling" );
+			MaxAnisotropy = 1.f;
+		}
+	}
+
+	// Antialiasing: the samples belong to the window's surface, which NSDLViewport requested from NumAASamples
+	// before this driver ran. GL_MULTISAMPLE turns them on or off, so NumAASamples 0 is honoured on a
+	// multisampled window too.
+	{
+		GLint Samples = 0;
+		glGetIntegerv( GL_SAMPLES, &Samples );
+		if( Samples > 1 && NumAASamples > 1 )
+		{
+			glEnable( GL_MULTISAMPLE );
+			debugf( NAME_Log, "OpenGL: antialiasing %dx (multisampled window)", (INT)Samples );
+		}
+		else
+		{
+			if( Samples > 1 )
+				glDisable( GL_MULTISAMPLE );
+			if( NumAASamples > 1 )
+				debugf( NAME_Log, "OpenGL: antialiasing (%d samples) unavailable on this window", NumAASamples );
+			else
+				debugf( NAME_Log, "OpenGL: antialiasing off" );
+		}
+	}
 
 	ComposeSize = 256 * 256 * 4;
 	Compose = (BYTE*)appMalloc( ComposeSize, "GLComposeBuf" );
@@ -783,6 +856,9 @@ void UNOpenGLRenderDevice::SetTexture( INT TMU, FTextureInfo& Info, DWORD PolyFl
 		{
 			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( Info.NumMips > 1 ) ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR );
 			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+			// Anisotropy only applies on the smooth path, and only with mips to sample across.
+			if( MaxAnisotropy > 1.f && Info.NumMips > 1 )
+				glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, MaxAnisotropy );
 		}
 	}
 

@@ -27,6 +27,11 @@ class DLL_EXPORT UNOpenGLRenderDevice : public URenderDevice
 	UBOOL UseMultiTexture;
 	UBOOL UseWindowBrightness;
 	INT SwapInterval;
+	// Image quality.
+	//   MaxAnisotropy (EXT/ARB_texture_filter_anisotropic): clamped at Init to the level the driver advertises.
+	//   NumAASamples (0 or 1 = off): the multisample count NSDLViewport requests for the window's GL surface.
+	FLOAT MaxAnisotropy;
+	INT NumAASamples;
 
 	// All currently cached textures.
 	struct FCachedTexture
