@@ -349,16 +349,14 @@ UBOOL UGameEngine::Browse( FURL URL, char* Error256 )
 	debugf( "Browse: %s", StringURL );
 	unguard;
 
-#ifdef __EMSCRIPTEN__
-	// The web frontend forms a client-connect URL as "<host>?connect", which puts the host in URL.Map with no
-	// URL.Host (a local map load). With the connect option and no Host, the map token becomes the Host, so
-	// Browse takes the network path (UPendingLevel, WebRTCNetDriver).
+	// A client-connect URL "<host>?connect" puts the host in URL.Map with no URL.Host (a local map load). With
+	// the connect option and no Host, the map token becomes the Host, so Browse takes the network path
+	// (UPendingLevel and the net driver). Without the option nothing changes.
 	if( URL.HasOption("connect") && URL.Host.Length()<=0 && URL.Map.Length()>0 )
 	{
 		URL.Host = URL.Map;
 		debugf( "[ufront] connect URL: promoted map '%s' to host", *URL.Host );
 	}
-#endif
 	if( !URL.Valid )
 	{
 		// Unknown URL.
