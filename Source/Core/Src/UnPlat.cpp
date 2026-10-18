@@ -43,6 +43,9 @@
 #ifndef PLATFORM_MSVC
 #include <unistd.h>
 #endif
+#if !defined(PLATFORM_WIN32) && !defined(__EMSCRIPTEN__) && !defined(PLATFORM_PSVITA)
+#include <signal.h>
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -225,6 +228,92 @@ CORE_API void appRequestExit()
 }
 
 /*-----------------------------------------------------------------------------
+	Exit signals.
+-----------------------------------------------------------------------------*/
+
+#if !defined(__EMSCRIPTEN__) && !defined(PLATFORM_PSVITA)
+//
+// SIGTERM, SIGHUP and SIGINT (on Windows: a console's Ctrl-C, Ctrl-Break or close) request a clean exit, which
+// the main loop carries out. The handlers make async-signal-safe calls only (write and the exit flag). A second
+// request is reported and ignored; SIGKILL still ends the process at once.
+//
+static const char* volatile GExitSignalName = NULL;
+static volatile INT GExitSignals = 0;
+
+static void WriteExitSignalLine( const char* Name, const char* Text )
+{
+#ifdef PLATFORM_WIN32
+	HANDLE Out = GetStdHandle( STD_OUTPUT_HANDLE );
+	DWORD Written;
+	if( Out && Out!=INVALID_HANDLE_VALUE )
+	{
+		WriteFile( Out, Name, (DWORD)strlen(Name), &Written, NULL );
+		WriteFile( Out, Text, (DWORD)strlen(Text), &Written, NULL );
+	}
+#else
+	if( write( 1, Name, strlen(Name) ) >= 0 )
+		(void)!write( 1, Text, strlen(Text) );
+#endif
+}
+
+static void RequestExitFromSignal( const char* Name )
+{
+	if( GExitSignals++ )
+	{
+		WriteExitSignalLine( Name, ": exit already requested, ignored (SIGKILL ends the process now)\n" );
+		return;
+	}
+	GExitSignalName = Name;
+	WriteExitSignalLine( Name, ": exit requested\n" );
+	GIsRequestingExit = 1;
+}
+
+#ifdef PLATFORM_WIN32
+static BOOL WINAPI HandleConsoleControl( DWORD Type )
+{
+	switch( Type )
+	{
+		case CTRL_C_EVENT:
+			RequestExitFromSignal( "Ctrl-C" );
+			return TRUE;
+		case CTRL_BREAK_EVENT:
+			RequestExitFromSignal( "Ctrl-Break" );
+			return TRUE;
+		case CTRL_CLOSE_EVENT:
+			// The process ends when this returns: give the engine the few seconds Windows allows to shut down.
+			RequestExitFromSignal( "Console close" );
+			for( INT i=0; i<45 && GIsStarted; i++ )
+				Sleep( 100 );
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+#else
+static void HandleExitSignal( int Signal )
+{
+	RequestExitFromSignal( Signal==SIGTERM ? "SIGTERM" : Signal==SIGHUP ? "SIGHUP" : "SIGINT" );
+}
+#endif
+
+static void InstallExitSignalHandlers()
+{
+#ifdef PLATFORM_WIN32
+	SetConsoleCtrlHandler( HandleConsoleControl, TRUE );
+#else
+	// Installed before SDL starts, which then leaves these signals alone.
+	struct sigaction Action;
+	memset( &Action, 0, sizeof(Action) );
+	Action.sa_handler = HandleExitSignal;
+	sigemptyset( &Action.sa_mask );
+	sigaction( SIGTERM, &Action, NULL );
+	sigaction( SIGHUP,  &Action, NULL );
+	sigaction( SIGINT,  &Action, NULL );
+#endif
+}
+#endif
+
+/*-----------------------------------------------------------------------------
 	Clipboard.
 -----------------------------------------------------------------------------*/
 
@@ -381,6 +470,10 @@ void appInit()
 	// Init.
 	appOpenLog( NULL );
 	strcpy( GErrorHist, "General protection fault!\r\n\r\nHistory: " );
+
+#if !defined(__EMSCRIPTEN__) && !defined(PLATFORM_PSVITA)
+	InstallExitSignalHandlers();
+#endif
 
 	// Command line.
 	debugf( NAME_Init, "Compiled: " __DATE__ " " __TIME__ );
@@ -608,6 +701,10 @@ void appEnableFastMath( UBOOL Enable )
 //
 void appExit()
 {
+#if !defined(__EMSCRIPTEN__) && !defined(PLATFORM_PSVITA)
+	if( GExitSignalName )
+		debugf( NAME_Exit, "Exit requested by %s", GExitSignalName );
+#endif
 	debugf( NAME_Exit, "appExit" );
 	appDumpAllocs( GSystem );
 	appCloseLog();
