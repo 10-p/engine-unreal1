@@ -11,7 +11,7 @@ Source/UnrealED/obj
 /build-wasm-debug/
 /build-native/
 /build-windows/
-__smoke.html__pycache__/
+__pycache__/
 /build-soft/
 tools/asmport/oracle/oracle
 # The 64-bit and Android build trees, and script packages compiled from tools/test
