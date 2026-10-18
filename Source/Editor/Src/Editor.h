@@ -11,7 +11,7 @@
 -----------------------------------------------------------------------------*/
 
 #include "Engine.h"
-#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
+#pragma pack (push,4) /* 4-byte packing on every target: these classes mirror UnrealScript's layout */
 
 /*-----------------------------------------------------------------------------
 	Editor public.
@@ -303,7 +303,7 @@ class EDITOR_API UEditorEngine : public UEngine, public FNotifyHook
 	FLOAT FovAngle;
 	DWORD GodMode:1;
 	DWORD AutoSave:1;
-	BYTE AutosaveTimeMinutes GCC_ALIGN(4);	// ufront 2.84: GCC packed it into the bitfield word above (321, script 324)
+	BYTE AutosaveTimeMinutes GCC_ALIGN(4);	// word-aligned as in script; GCC would pack it into the bitfield word
 	char GameCommandLine[240];
 	char EditPackages[32][96];
 

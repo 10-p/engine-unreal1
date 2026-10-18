@@ -152,7 +152,7 @@ void ATcpLink::execGetIPByName( FFrame& Stack, BYTE*& Result )
 			{
 				// success
 				DWORD HostAddr;
-				appMemcpy( &HostAddr, lpstHost->h_addr, sizeof(HostAddr) );	// ufront 2.84: the address is 4 bytes, not a long
+				appMemcpy( &HostAddr, lpstHost->h_addr, sizeof(HostAddr) );	// an IPv4 address is 4 bytes, not a long
 				IpSetInt( inAddrStr, HostAddr );
 				appSprintf( IpAddr, "%u.%u.%u.%u",
 					IPBYTE(inAddrStr, 1), IPBYTE(inAddrStr, 2), IPBYTE(inAddrStr, 3), IPBYTE(inAddrStr, 4));

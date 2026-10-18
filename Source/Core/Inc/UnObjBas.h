@@ -5,7 +5,7 @@
 	Revision history:
 		* Created by Tim Sweeney
 =============================================================================*/
-#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
+#pragma pack (push,4) /* 4-byte packing on every target: these classes mirror UnrealScript's layout */
 
 /*-----------------------------------------------------------------------------
 	Core enumerations.
@@ -460,17 +460,17 @@ public:
 	// Accessors.
 	virtual UBOOL GetInitialized() {return Initialized;}
 
-	// Script object references (ufront 2.84, as engine-ut99 2.83). Compiled UnrealScript keeps a 4-byte slot
-	// for every object it names (a property, function, struct, class or object constant), and the retail
-	// packages computed every jump, skip, label and saved state offset around slots of that size. So in memory
-	// a slot holds the object's index in the object table rather than its address: the stream has the same
-	// layout on every pointer width, and no code offset ever moves. UStruct::SerializeExpr converts on load
-	// and save; the VM and the script compiler go through these two. INDEX_NONE is None.
+	// Script object references. Compiled UnrealScript keeps a 4-byte slot for every object it names (a property,
+	// function, struct, class or object constant), and the packages compute every jump, skip, label and saved
+	// state offset around slots of that size. So in memory a slot holds the object's index in the object table
+	// rather than its address: the stream has the same layout on every pointer width, and no code offset moves.
+	// UStruct::SerializeExpr converts on load and save; the VM and the script compiler go through these two.
+	// INDEX_NONE is None.
 	static inline UObject* GetScriptObject( INT Ref );
 	static inline INT GetScriptRef( UObject* Obj );
 	// The C++ size of the object header before Parent -- vtable, Index, HashNext, MainFrame, Linker,
 	// LinkerIndex -- which script declares as ObjectInternal[6] (24 bytes, 32-bit pointers). Taken from the
-	// type, never summed by hand (ufront 2.84).
+	// type, never summed by hand.
 	static inline INT ObjectHeaderSize();
 	virtual UPackage* GetTransientPackage() {return TransientPackage;}
 	FName GetTempState() {return TempState;}//oldver

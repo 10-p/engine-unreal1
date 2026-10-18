@@ -11,7 +11,7 @@
 ----------------------------------------------------------------------------*/
 
 #include "Engine.h"
-#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
+#pragma pack (push,4) /* 4-byte packing on every target: these classes mirror UnrealScript's layout */
 
 /*----------------------------------------------------------------------------
 	General structures.
@@ -507,7 +507,7 @@ class DLL_EXPORT UIceTexture : public UFractalTexture
 	BYTE        Frequency;
 	BYTE        Amplitude;
 
-	DWORD       MoveIce:1 GCC_PACK(4);   // Mirrored as BOOLEAN in C++. ufront 2.84: GCC packed it into the BYTEs' word above (208, script 212)
+	DWORD       MoveIce:1 GCC_PACK(4);   // Mirrored as BOOLEAN in C++. On its own word, as in script.
 	FLOAT       MasterCount;
 	FLOAT       UDisplace;
 	FLOAT 		VDisplace;

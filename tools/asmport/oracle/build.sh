@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build and run the fog oracle.
+# Build and run the fog oracle: regenerate gen_samplefoglight.inc with emit.py, compile oracle.cpp, run it.
 #
-# The flags are not optional -- see tools/asmport/NOTES.md:
+# The flags are required:
 #   -m32                 the kernels are 32-bit throughout
 #   -masm=intel          or GCC substitutes AT&T operands into the intel blocks
 #   -fno-pic             ebx is the PIC register in 32-bit PIC; the kernels use it freely

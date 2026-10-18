@@ -756,13 +756,9 @@ FSceneNode* URender::CreateChildFrame
 	World polygon rasterizer.
 -----------------------------------------------------------------------------*/
 
-// ufront 2.12: was [1200]. This shared-Render per-scanline span table is indexed by scanline Y up to
-// Viewport->SizeY (see SetupRaster) and is used by ALL render devices — including the default
-// NOpenGLESDrv — so any SizeY>1200 (1440p/4K/…) overran it, stomping the heap: BSP polys flickered /
-// vanished, adjacent globals (e.g. Fire procedural textures) corrupted, then a wasm "memory access out
-// of bounds". Sized for 8K in any orientation (portrait 8K = 7680 tall) with margin; SetupRaster also
-// hard-clamps EndY to this capacity so NO resolution can ever overflow it (fail-soft, like SoftDrv's
-// MaximumYScreenSize guard). (UT99 bumped the same array to 2880; this goes to 8K and adds the clamp.)
+// The per-scanline span table, indexed by scanline Y up to Viewport->SizeY (see SetupRaster) and shared by every
+// render device. Sized for 8K in any orientation (portrait 8K is 7680 tall) with margin; SetupRaster also clamps
+// EndY to this capacity, so no resolution can overflow it.
 #define MAX_RASTER_Y 8192
 FRasterSpan HackRaster[MAX_RASTER_Y];//max y res MAX_RASTER_Y
 INT RasterStartY, RasterEndY, RasterStartX, RasterEndX;
@@ -770,8 +766,8 @@ static UBOOL SetupRaster( FTransform** Pts, INT NumPts, FSpanBuffer* Span, INT E
 {
 	guard(SetupRaster);
 
-	// Clamp to the span-table capacity so a very tall viewport can never index HackRaster out of bounds
-	// (heap corruption / wasm OOB). A no-op at every realistic resolution (<= MAX_RASTER_Y, incl. 8K).
+	// Clamp to the span-table capacity so a very tall viewport cannot index HackRaster out of bounds. A no-op
+	// at every resolution up to MAX_RASTER_Y, 8K included.
 	EndY = Min( EndY, MAX_RASTER_Y - 1 );
 
 	// Compute integer coords.
@@ -2296,14 +2292,13 @@ void URender::DrawWorld( FSceneNode* Frame )
 		Actor->Weapon->bHidden = 0;
 		Actor->XLevel->SetActorZone( Actor->Weapon, 1, 0 );
 
-		// AutoFOV, viewmodel pass (step 2.16). The weapon shares the world's scene node, so by default it
-		// already rides the corrected FOV — which is exactly what preserves its reference-aspect
-		// proportions, and ufrontWeaponFov returns the world value so this costs nothing. Only when the
-		// player has dialled AutoFOVWeapon away from 1.0 do we redraw it at a different FOV: write the new
-		// value and refresh the frame, which is all the invalidation needed because every driver
-		// dirty-compares Viewport->Actor->FovAngle before rebuilding its projection and re-enters
-		// SetSceneNode at the top of each primitive. Do NOT "invalidate" with SetSceneNode(NULL) — only the
-		// N*Drv family null-checks the frame; XOpenGLDrv and UTGLR dereference it immediately and crash.
+		// AutoFOV, viewmodel pass. The weapon shares the world's scene node, so by default it rides the
+		// corrected FOV, which preserves its reference-aspect proportions (ufrontWeaponFov returns the world
+		// value and this costs nothing). Only when WeaponScale is not 1.0 is it drawn at a different FOV:
+		// write the new value and refresh the frame, which is all the invalidation needed: the GL devices
+		// re-enter SetSceneNode at the top of each primitive and rebuild their projection when
+		// Viewport->Actor->FovAngle changed, and SoftDrv reads it directly. Do not "invalidate" with
+		// SetSceneNode(NULL): not every render device accepts a NULL frame.
 		FLOAT SavedWeaponFov = Frame->Viewport->Actor->FovAngle;
 		FLOAT WeaponFov      = ufrontWeaponFov( GAutoFovFrameBase, SavedWeaponFov );
 		UBOOL bWeaponFovPass = Abs( WeaponFov - SavedWeaponFov ) > 0.01f;

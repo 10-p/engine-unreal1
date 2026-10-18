@@ -422,7 +422,7 @@ CORE_API const char* appFExt( const char* fname )
 // Example Result = "test.ext"
 //
 #ifndef PLATFORM_WIN32
-// ufront: '*'/'?' glob with single-star backtracking, case-insensitive (engine-hp2's FFileManagerLinux::WildcardMatch).
+// '*'/'?' glob with single-star backtracking, case-insensitive.
 static UBOOL FindFilesWildcardMatch( const char* Pattern, const char* Name )
 {
 	const char *Star=NULL, *Resume=NULL;
@@ -473,7 +473,7 @@ CORE_API TArray<FString> appFindFiles( const char* Spec )
 	char *Cur;
 	UBOOL Match;
 
-	// Initialize Path to Filename (bounded: a char[256] filled by appStrcpy before).
+	// Initialize Path to Filename, bounded to the buffer.
 	appStrncpy( Path, Spec, ARRAY_COUNT(Path) );
 
 	// Separate path and filename.
@@ -499,9 +499,8 @@ CORE_API TArray<FString> appFindFiles( const char* Spec )
 	// Check each entry.
 	while( Direntp != NULL )
 	{
-		// ufront (engine-hp2's fix of the same stock code, ported to UT99 too): a real wildcard match, '*' and '?'
-		// anywhere, case-insensitive, "*.*" = everything: the semantics of the Win32 _findfirst above. The stock
-		// matcher took "*.ext" as a substring test ("*.u" also returned .uax/.umx/.utx/.unr) and knew a few shapes.
+		// A wildcard match with the semantics of the Win32 _findfirst above: '*' and '?' anywhere, case-insensitive,
+		// "*.*" = everything.
 		Match = appStrcmp( File, "*.*" ) == 0 || FindFilesWildcardMatch( File, Direntp->d_name );
 
 		// Does this entry match the Filename?
@@ -954,7 +953,7 @@ CORE_API DWORD GCRCTable[256] =
 DWORD appMemCrc( const unsigned char* Data, int Length )
 {
 	guard(appMemCrc);
-	DWORD CRC = 0xFFFFFFFF;	// ufront 2.84: a CRC32, not a long (~CRC set the upper half on LP64)
+	DWORD CRC = 0xFFFFFFFF;	// a CRC32: 32 bits on every target, not a long
 	for( int i=0; i<Length; i++ )
 	{
 		int Index = (CRC ^ *(Data++)) & 0x000000FF;
@@ -1053,10 +1052,8 @@ CORE_API void VARARGS appThrowf( const char* Fmt, ... )
 	static char TempStr[4096];
 	GET_VARARGS(TempStr,Fmt);
 #ifdef __EMSCRIPTEN__
-	// step 2.6f: exception CATCHING is disabled in the web build (-fexceptions overflows V8's stack on
-	// UnrealI.u's deep loader; -fwasm-exceptions is incompatible with ASYNCIFY). So every appThrowf — even
-	// ones UE1's guard/unguard would normally catch + recover from — propagates uncaught and aborts. Log the
-	// message first (Module.print -> console) so a web abort is diagnosable instead of a bare "Aborted()".
+	// The web build's engine code cannot catch exceptions, so every throw aborts: print the message first
+	// (stdout reaches the browser console) so the abort names its cause.
 	fprintf( stdout, "[appThrowf] %s\n", TempStr );
 	fflush( stdout );
 #endif
@@ -1426,11 +1423,7 @@ CORE_API void ParseNext( const char** Stream )
 }
 
 //
-// Grab the next space-delimited string from the input stream.
-// If quoted, gets entire quoted string.
-//
-//
-// Is this command-line token a global option (Key=Value) rather than a URL? See UnFile.h.
+// Is this command-line token a global option (Key=Value) rather than a URL?
 //
 CORE_API UBOOL appIsGlobalOptionToken( const char* Token )
 {
@@ -1449,16 +1442,8 @@ CORE_API UBOOL appIsGlobalOptionToken( const char* Token )
 }
 
 //
-// Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line. See UnFile.h.
-//
-// ★★ ufront 2.38 — the shipped launcher has been emitting `-ini:User:[DefaultPlayer]:Name=<player>` for
-// the Network panel's Player Name box, and NOTHING in any of the four engines read it. The name only
-// ever took effect through a travel URL's `?Name=`, so booting to the menu and then hosting or joining
-// from the game's own multiplayer menus always logged you in as "Player". Measured on the ut99 sibling:
-// argv carried the switch and the engine logged `ScriptLog: Login: Player`.
-//
-// The file part is passed through to the config cache, which appends ".ini" — so `User` resolves to this
-// game's User.ini and nothing hardcodes a path. Applied straight after the cache is initialised.
+// Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line to the config cache, which
+// appends ".ini" to File. Call once, after the cache is initialised.
 //
 CORE_API void appApplyIniOverrides()
 {
@@ -1486,11 +1471,8 @@ CORE_API void appApplyIniOverrides()
 		*Open = 0; *Close = 0; *Eq = 0;
 		if( !*File || !*Section )
 			continue;
-		// ⚠ v200 HAS ONE INI, and `[DefaultPlayer]` lives in it (Unreal.ini) — the User.ini sitting in a
-		// retail install is a later-engine convention this one never reads. The UT99/UE2 config caches
-		// translate the generic name `User` to a real second file; there is nothing here to translate it
-		// TO, so both generic names mean "the default ini". Measured 2.38: writing to a literal `User.ini`
-		// applied cleanly and changed nothing, because no class reads that file.
+		// This engine has one ini (Unreal.ini), and `[DefaultPlayer]` lives in it; no class reads a User.ini.
+		// So the generic names `User` and `System` both mean the default ini.
 		const char* Filename = File;
 		if( appStricmp( File, "User" )==0 || appStricmp( File, "System" )==0 )
 			Filename = NULL;
@@ -1500,6 +1482,10 @@ CORE_API void appApplyIniOverrides()
 	unguard;
 }
 
+//
+// Grab the next space-delimited string from the input stream.
+// If quoted, gets entire quoted string.
+//
 CORE_API UBOOL ParseToken( const char*& Str, char* Result, INT MaxLen, UBOOL UseEscape )
 {
 	guard(ParseToken);

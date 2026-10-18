@@ -16,25 +16,12 @@ endif()
 # Options
 
 option(USE_SDL "Use NSDLDrv instead of WinDrv" ON)
-# Web build mode (EMSCRIPTEN only) — see the three-mode block further down. UT_WEB_PERF is read by
-# Source/Unreal/CMakeLists.txt for the link flags; UT_WEB_DEBUG selects -O0 over the -O2 dev default.
+# Web build mode (Emscripten only; see the build-mode table below). UT_WEB_PERF sets the link flags in
+# Unreal/CMakeLists.txt; UT_WEB_DEBUG compiles at -O0 instead of -O2.
 option(UT_WEB_PERF "Emscripten: shipping build — link at -O3 -g0, assertions off" OFF)
 option(UT_WEB_DEBUG "Emscripten: -O0 instead of the -O2 dev default (nothing inlined, every local live)" OFF)
-# ★ ufront 2.39 — BUILD_EDITOR IS NOT OPTIONAL FOR A PLAYABLE GAME, on any platform.
-#
-# UE1 ships game CONTENT that references classes living in the Editor package, so "the editor" here is
-# not a tool you are choosing to build — it is a runtime dependency of maps and meshes. The web build has
-# forced it ON since 2.6f; the NATIVE and WINDOWS presets still said OFF, and the symptom is exactly what
-# the owner reported:
-#
-#     Warning: Failed to load 'Editor': Can't find Class Editor.TransBuffer in file '../System/Editor.u'
-#     Warning: Failed to load 'Level None.MyLevel':
-#
-# — Dug.unr silently falls back to the default map. (Editor.u, the SCRIPT half, ships with the game; it is
-# the NATIVE half that was missing. Same shape as UT99's UWeb crash in 2.38.) The Editor built here is the
-# stripped, no-GUI NullEdHook variant that links only Engine+Core, so this costs a static library and
-# nothing at runtime. Verified natively: before, Dug fell back to Unreal.unr; after,
-# "Bringing Level Dug.MyLevel up for play".
+# The Editor package is needed to play: game content (maps, meshes, skins) references its classes, and without
+# it a map such as Dug.unr fails to load. It is the stripped, no-GUI NullEdHook variant (Engine+Core only).
 option(BUILD_EDITOR "Build the Editor package (a RUNTIME dependency — see above)" ON)
 option(BUILD_SOFTDRV "Build SoftDrv (x86/MSVC only)" OFF)
 option(BUILD_NULLDRV "Build NullDrv (GPU-free no-op render device; -NULLRENDERER). No GL context -> headless / dedicated-server run." OFF)
@@ -45,54 +32,41 @@ option(BUILD_NOPENALDRV "Build NOpenALDrv" ON)
 option(UT_BUNDLED_OPENAL "Native Linux: build openal-soft (the ufront fork) and ship libopenal.so.1 beside the binary, instead of linking whatever libopenal the system has (ufront 2.70)" ON)
 option(BUILD_WINDRV "Build WinDrv" OFF)
 option(BUILD_STATIC "Link everything into a single binary" OFF)
-# ufront 2.84 — a 64-bit (LP64) build (2.83 did the same for UT99). OFF keeps the historical behaviour: an
-# x86_64 compiler is demoted to -m32, because until 2.84 the engine could only run 32-bit. ON builds x86_64 as
-# x86_64. An arm64 compiler has nothing to demote to, so it always builds 64-bit. The C++ side does not read
-# this option: PLATFORM_64BITS comes from the compiler (Core.h), so it can never disagree with the code built.
+# A 64-bit (LP64) build. OFF demotes an x86_64 compiler to -m32; ON builds x86_64 as x86_64. An arm64 compiler
+# always builds 64-bit. The C++ side does not read this option: PLATFORM_64BITS comes from the compiler (Core.h).
 option(UT_ALLOW_64BIT "Build x86_64 as a 64-bit (LP64) engine instead of demoting to -m32" OFF)
 
-# ufront step 2.6a — Emscripten / WebAssembly build (the web port). Emscripten can't load UE1's
-# .so/.dll packages, has no x86 inline asm, and gets SDL2/GLES2 from its own ports. Force the web-safe
-# configuration here so `emcmake cmake` (or the wasm/wasm-perf presets) needs no extra -D flags.
+# Emscripten / WebAssembly build. Emscripten cannot load UE1's .so/.dll packages, has no x86 inline asm, and
+# gets SDL2/GLES2 from its own ports; the web configuration is forced here, so `emcmake cmake` (or a wasm
+# preset) needs no extra -D flags.
 if(EMSCRIPTEN)
   set(BUILD_STATIC ON)            # single binary via UNREAL_STATIC + --whole-archive (like PSVita)
   set(USE_SDL ON)                 # NSDLDrv (SDL2 window/GL context -> WebGL)
-  set(BUILD_EDITOR ON)            # step 2.6f: the stripped (NullEdHook, no-GUI) Editor package — links only
-                                  # Engine+Core. UE1 loads some game content (bot/character meshes+skins,
-                                  # e.g. Male3Skins) through classes that live in the Editor package; without
-                                  # it, spawning DM bots aborts on package load. This is the known UE1-funkey
-                                  # "Included the Editor package. Without it Dug can't load." fix (owner-confirmed).
+  set(BUILD_EDITOR ON)            # the stripped Editor package, which game content needs (see BUILD_EDITOR)
   set(BUILD_WINDRV OFF)
   set(BUILD_NOPENGLDRV OFF)       # desktop GL — not used on the web
-  set(BUILD_NOPENGLESDRV ON)      # GLES2 -> WebGL: the default web renderer (D3)
-  set(BUILD_SOFTDRV ON)           # software renderer (portable non-x86 C path) (D3)
+  set(BUILD_NOPENGLESDRV ON)      # GLES2 -> WebGL: the default web renderer
+  set(BUILD_SOFTDRV ON)           # software renderer (portable non-x86 C path)
   set(BUILD_NULLDRV ON)           # null render device (GPU-free, no GL context) — -NULLRENDERER
   set(BUILD_NULLSOUNDDRV ON)      # keep the null AudioDevice as a selectable fallback
-  set(BUILD_NOPENALDRV ON)        # ufront 2.12 (web audio): Emscripten's built-in OpenAL (SFX) + a
-                                  # FetchContent'd libxmp (tracker music) — see NOpenALDrv/CMakeLists.txt
-                                  # and NOpenALDrv.cpp NOPENAL_WEB. Reused for UT99's web audio port.
-  # ufront 2.13.2 — -pthread must be a COMPILE option, not just a link option. It defines
-  # __EMSCRIPTEN_PTHREADS__, which is what the threaded code paths (e.g. NSDLViewport's direct WebGL
-  # context creation) are guarded on; with it only at link time those guards silently compile their
-  # SINGLE-THREADED branch, SDL creates a GL context after all, and Emscripten proxies eglCreateContext to
-  # a main thread whose canvas has been transferred away -> InvalidStateError (Emscripten #24792). It also
-  # gives every object the atomics/bulk-memory features a shared-memory link expects.
+  set(BUILD_NOPENALDRV ON)        # openal-soft (cmake/OpenALSoft.cmake, below) + libxmp for tracker music
+  # -pthread at compile time too: it defines __EMSCRIPTEN_PTHREADS__, which guards the threaded code paths
+  # (NSDLViewport creates the WebGL context itself on the engine thread instead of through SDL's EGL), and
+  # gives every object the atomics/bulk-memory features a shared-memory link needs.
   add_compile_options(-pthread)
-  # The SDL2 port must be requested at COMPILE time too: Core/NSDLDrv include <SDL2/SDL.h>, which only
-  # exists in the Emscripten cache once the port is installed. As a link-only flag a fresh emsdk fails
-  # with "'SDL2/SDL.h' file not found".
+  # The SDL2 port is requested at compile time too: Core/NSDLDrv include <SDL2/SDL.h>, which exists in the
+  # Emscripten cache only once the port is installed.
   add_compile_options(-sUSE_SDL=2)
   add_definitions(-DASM=0)        # Core/SoftDrv use their portable (non-x86) code paths
   # clang (Emscripten) makes passing a non-POD FString through variadic debugf/appErrorf a hard error;
-  # GCC/MSVC tolerate it. Downgrade to a warning (these are mostly script-export/debug paths).
+  # GCC/MSVC tolerate it. Silence it (these are mostly script-export/debug paths).
   add_compile_options(-Wno-error=non-pod-varargs -Wno-non-pod-varargs)
-  # Exceptions: rely on Emscripten's default (exception CATCHING disabled). UE1 guards functions with
-  # try/catch (DO_GUARD) and its error handler catches, but -fexceptions is unusable here — its JS invoke_
-  # trampolines nest through the deeply-recursive package/object loader (UnrealI.u ~37 MB) until V8's
-  # call-stack limit ("Maximum call stack size exceeded"), and -fwasm-exceptions is incompatible with
-  # ASYNCIFY (which we need for the main-loop yield). With catching disabled there are no invoke_
-  # trampolines: normal boot never throws, so it proceeds; error paths (appError) abort loudly instead of
-  # being caught — acceptable for the web build. (This is why the 2.6a build compiled+ran before -fexceptions.)
+  # Exceptions: the engine's objects keep Emscripten's default (-fignore-exceptions, no invoke_ trampolines),
+  # so UE1's try/catch (DO_GUARD, main's handler) never catches on the web: a throw (appError) propagates
+  # uncaught. -fexceptions would nest invoke_ trampolines through the deeply recursive package loader past
+  # V8's call-stack limit, and -fwasm-exceptions does not work with ASYNCIFY (the frame yield). The link
+  # enables catching (-sNO_DISABLE_EXCEPTION_CATCHING, Unreal/CMakeLists.txt) for openal-soft's -fexceptions
+  # objects.
 endif()
 
 if(VITA)
@@ -147,8 +121,8 @@ message(STATUS "64-bit: ${TARGET_IS_64BIT}")
 
 if(TARGET_IS_64BIT)
   if(MSVC)
-    # LLP64 (Windows x64) is not part of ufront 2.84: `long` is 32-bit there, which the typedefs cover, but
-    # nothing has been built or run. Refuse rather than produce an unverified binary.
+    # LLP64 (Windows x64): `long` is 32-bit there, which the typedefs cover, but the build is untested.
+    # Refuse rather than produce an unverified binary.
     message(FATAL_ERROR "64-bit MSVC builds are not supported. Use -A Win32.")
   elseif(TARGET_IS_X86 AND NOT UT_ALLOW_64BIT)
     message(STATUS "Building x86 binary with x86_64 compiler (pass -DUT_ALLOW_64BIT=ON for x86_64)")
@@ -175,9 +149,6 @@ message(STATUS "Windows target: ${TARGET_IS_WINDOWS}")
 
 # Common compiler options
 
-# (ufront 2.84: the PLATFORM_32BIT/PLATFORM_64BIT definitions that stood here were read by nothing. The
-# width macro the code uses is PLATFORM_64BITS, derived from the compiler in Core/Inc/Core.h.)
-
 if(TARGET_IS_X86)
   add_definitions(-DPLATFORM_X86)
 elseif(TARGET_IS_ARM)
@@ -201,10 +172,8 @@ if(TARGET_IS_WINDOWS)
   add_definitions(-DWIN32)
   add_definitions(-DWINDOWS_IGNORE_PACKING_MISMATCH)
   if(MINGW)
-    # ufront 2.33 — link GCC's runtime statically. Without this the .exe imports libgcc_s_dw2-1.dll and
-    # libstdc++-6.dll, which live in the toolchain (or MSYS2's /mingw32/bin), NOT in a Windows install:
-    # the binary runs on the build machine and dies with "not found" everywhere else. With it, the only
-    # imports left are stock system DLLs, so the static build really is a single self-contained file.
+    # Link GCC's runtime statically: otherwise the .exe imports libgcc_s_dw2-1.dll and libstdc++-6.dll,
+    # which a Windows install does not have. The imports left are system DLLs and OpenAL32.dll.
     add_link_options(-static-libgcc -static-libstdc++)
     # A posix-thread-model MinGW (MSYS2, Arch/Fedora packages) also pulls in libwinpthread-1.dll through
     # libstdc++; link it statically too, or the exe does not start outside the build machine.
@@ -238,42 +207,28 @@ if(MSVC)
 else()
   message(STATUS "Building ${CMAKE_BUILD_TYPE} with GCC or Clang")
   if(EMSCRIPTEN)
-    # ★ THE THREE WEB BUILD MODES (ufront 2.19d), identical in all four engine repos:
+    # The three web build modes:
     #
     #   preset        UT_WEB_PERF  UT_WEB_DEBUG  compile   what it is for
-    #   wasm-perf     ON           -             -O2 (*)   shipping: link-time -O3 -g0, no assertions
-    #   wasm          OFF          OFF           -O2 -g    THE DEV DEFAULT: named stacks, DWARF, assertions
+    #   wasm-perf     ON           -             -O2       shipping: link-time -O3 -g0, no assertions
+    #   wasm          OFF          OFF           -O2 -g    the dev default: named stacks, DWARF, assertions
     #   wasm-debug    OFF          ON            -O0 -g    last resort: every local live, nothing inlined
     #
-    # (*) This engine's perf build differs from the dev build at LINK only (see Source/Unreal/CMakeLists);
-    #     ut2004 additionally compiles its perf build at -O3. That divergence is recorded, not fixed here —
-    #     changing it would alter a shipping build's codegen and needs its own verification.
-    #
-    # -O0 is what you switch to when the OPTIMISER is the suspect: a bug that appears at one -O level and
-    # not another is almost always undefined behaviour rather than a logic error. It is NOT the smaller
-    # build — measured on ut2004, -O2 -g came out LARGER than -O0 -g, because DWARF forces Emscripten to
-    # "run only limited binaryen optimizations" so -O2's inlining is never cleaned up. Speed is what the
-    # dev default buys, not size.
+    # -O0 is for when the optimiser is the suspect: a bug that shows at one -O level and not another is almost
+    # always undefined behaviour. It is not the smaller build: DWARF makes Emscripten run only limited binaryen
+    # optimizations, so -O2's inlining is never cleaned up. The dev default buys speed, not size.
     if(UT_WEB_DEBUG)
       add_compile_options(-O0 -g)
     elseif(UT_WEB_PERF)
-      # UNCHANGED from before the three-mode split: the shipping build carries no compile-side DWARF.
-      # (It is -O2 at compile and -O3 -g0 at link — see Unreal/CMakeLists.txt. Adding -g here would grow
-      # every object and make emcc "run only limited binaryen optimizations".)
+      # No compile-side DWARF in the shipping build: -O2 here, -O3 -g0 at link (Unreal/CMakeLists.txt).
+      # -g would grow every object and make emcc run only limited binaryen optimizations.
       add_compile_options(-O2)
     else()
       add_compile_options(-O2 -g)
     endif()
-  # ★ ufront 2.54 — CHECKED, AND THIS ENGINE IS CLEAN; DO NOT "TIDY" IT. CMake injects
-  # CMAKE_<LANG>_FLAGS_<CONFIG> ahead of anything add_compile_options() appends and the compiler takes
-  # the LAST -O, which on engine-ut2004 silently compiled every native build at -O0 (its native branch
-  # appended -O0 to every configuration). Here the appended level MATCHES the injected one, so a
-  # RelWithDebInfo TU reads `-O2 … -O2` — redundant on the line, identical in effect. Measured with
-  # compile_commands.json rather than reasoned about.
-  #
-  # ⚠ The per-config variables are deliberately NOT blanked here. They are where -DNDEBUG comes from on
-  # this engine — the branches below never add it — so clearing them to remove a harmless duplicate -O
-  # would switch assert() back on across the whole engine for no gain.
+  # CMake puts CMAKE_<LANG>_FLAGS_<CONFIG> ahead of the add_compile_options() flags and the compiler takes the
+  # last -O, so the level added in these branches is the one in effect (a RelWithDebInfo TU reads `-O2 … -O2`).
+  # The per-config variables are not blanked: they are where -DNDEBUG comes from, which these branches never add.
   elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-D_DEBUG)
     add_compile_options(-O0)
@@ -301,16 +256,13 @@ if(USE_SDL)
     endif()
     if(NOT DEFINED SDL2_LIBRARY)
       if(EMSCRIPTEN)
-        # ufront 2.13.2 — the -sUSE_SDL=2 PORT supplies SDL2 (and picks the right variant per build:
-        # libSDL2.a normally, libSDL2-mt.a under -pthread). An explicit -lSDL2 on top of that resolves to
-        # the NON-threaded archive, and the threaded link then dies with
-        #   "--shared-memory is disallowed by SDL_atomic.c.o because it was not compiled with 'atomics'"
-        # because the two archives disagree about features. Leave it to the port.
+        # The -sUSE_SDL=2 port supplies SDL2 (libSDL2-mt.a under -pthread). An explicit -lSDL2 would resolve
+        # to the non-threaded archive and fail the shared-memory link, so it is left to the port.
         set(SDL2_LIBRARY )
       elseif(MINGW AND CMAKE_CROSSCOMPILING)
-        # ufront 2.33 — cross-building for Windows from Linux: no system SDL2 to link against, so fetch
-        # SDL2's official prebuilt MinGW binaries. Under MSYS2 on real Windows this branch is skipped
-        # (not cross-compiling) and pacman's mingw-w64-i686-SDL2 answers -lSDL2 as usual.
+        # Cross-building for Windows from Linux: no system SDL2 to link against, so fetch SDL2's official
+        # prebuilt MinGW binaries. Under MSYS2 on Windows this branch is skipped (not cross-compiling) and
+        # pacman's mingw-w64-i686-SDL2 answers -lSDL2.
         include(SDL2Mingw)
       else()
         set(SDL2_LIBRARY "-lSDL2")
@@ -340,12 +292,11 @@ if(BUILD_NOPENALDRV)
     endif()
     if(NOT DEFINED OPENAL_LIBRARY)
       if(MINGW AND CMAKE_CROSSCOMPILING)
-        # ufront 2.34 — cross-building for Windows: no system OpenAL to link against, so fetch OpenAL
-        # Soft's official prebuilt Windows binaries (same pattern as SDL2Mingw). Real audio, because a
-        # null audio subsystem is not a usable default.
+        # Cross-building for Windows: no system OpenAL to link against, so fetch OpenAL Soft's official
+        # prebuilt Windows binaries (cmake/OpenALMingw.cmake).
         include(OpenALMingw)
       elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UT_BUNDLED_OPENAL)
-        # ufront 2.70: native Linux links the fork's own libopenal.so.1 (the `OpenAL` target, built below by
+        # Native Linux links the fork's own libopenal.so.1 (the `OpenAL` target, built below by
         # cmake/OpenALSoft.cmake NATIVE and copied beside the binary), not the system library.
         set(OPENAL_LIBRARY OpenAL)
       else()
@@ -373,7 +324,7 @@ add_subdirectory(Render)
 add_subdirectory(IpDrv)
 add_subdirectory(Fire)
 
-# ufront step 2.6c — the WebRTC net driver is a WEB-ONLY package (its transport is the glue webrtc_* ABI).
+# The WebRTC net driver is a web-only package (its transport is the host's webrtc_* ABI).
 if(EMSCRIPTEN)
   add_subdirectory(WebRTCDrv)
   list(APPEND INSTALL_TARGETS WebRTCDrv)
@@ -402,8 +353,7 @@ if(BUILD_SOFTDRV)
   list(APPEND INSTALL_TARGETS SoftDrv)
 endif()
 
-# ufront (null render device): NullDrv (no-op URenderDevice) — GPU-free, no GL context. Selected via
-# -NULLRENDERER for a headless / "poor-man's dedicated server" run. Additive like SoftDrv.
+# NullDrv: a no-op URenderDevice with no GL context, selected with -NULLRENDERER for a headless run.
 if(BUILD_NULLDRV)
   add_subdirectory(NullDrv)
   list(APPEND INSTALL_TARGETS NullDrv)
@@ -426,15 +376,15 @@ endif()
 
 if(BUILD_NOPENALDRV)
   if(EMSCRIPTEN)
-    # ufront 2.61: openal-soft instead of Emscripten's built-in OpenAL (5.1/HRTF/EFX reverb on the web).
-    # EAX OFF: NOpenALDrv never calls the EAX API — its "EAX" reverb is EFX's AL_EFFECT_EAXREVERB, which
-    # openal-soft always has. openal-soft throws for every AL error, so its objects are -fexceptions and the
-    # link enables catching (Unreal/CMakeLists.txt); the engine's own objects are unchanged (see above).
+    # The web plays through openal-soft (5.1, HRTF, EFX reverb). EAX OFF: NOpenALDrv never calls the EAX API;
+    # its "EAX" reverb is EFX's AL_EFFECT_EAXREVERB, which openal-soft always has. openal-soft throws for every
+    # AL error, so its objects are -fexceptions and the link enables catching (Unreal/CMakeLists.txt); the
+    # engine's own objects keep the default (see the exceptions note above).
     include(OpenALSoft)
     ufront_openal_soft(PLATFORM WEB EAX OFF)
   elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UT_BUNDLED_OPENAL)
-    # ufront 2.70: native Linux carries the same fork, SHARED, beside the binary (cmake/OpenALSoft.cmake) —
-    # the system libopenal is whatever the distro built, and this way native plays through what the web does.
+    # Native Linux carries the same fork as a shared library beside the binary (cmake/OpenALSoft.cmake), so it
+    # plays through the same library as the web rather than the distro's.
     include(OpenALSoft)
     ufront_openal_soft(PLATFORM NATIVE EAX OFF)
   endif()

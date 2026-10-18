@@ -317,8 +317,8 @@ UStruct::UStruct( EIntrinsicConstructor, INT InSize, FName InName, FName InPacka
 ,	TextPos( 0 )
 ,	Line( 0 )
 {
-	// Layout guard (ufront 2.84, engine-ut99's since 2.32): record the native C++ sizeof (InSize) keyed by
-	// object pointer, so LinkOffsets can compare it with the size derived from the LOADED .u property offsets.
+	// Layout guard: record the native C++ sizeof (InSize) keyed by object pointer, so LinkOffsets can compare
+	// it with the size derived from the loaded .u property offsets.
 	// Plain globals (BSS): safe at the static-init time these intrinsic constructors run. The names are the
 	// ones tools/dev/layout-sweep.gdb reads.
 	extern UStruct* GLayoutStructs[]; extern INT GLayoutSizes[]; extern INT GLayoutCount;
@@ -332,21 +332,19 @@ UStruct::UStruct( UStruct* InSuperStruct )
 {}
 
 //
-// Native placeholders (ufront 2.84, as engine-ut99 2.83). A few script variables stand in for C++ data that
-// script never touches: the object header, the vtable pointer of a secondary C++ base, a private pointer. The
-// retail packages declare them as ints -- sized for 32-bit pointers -- so on LP64 the C++ data is larger than
-// its script stand-in and every later member would sit at a different offset in C++ than in script. LinkOffsets
-// gives each one the size of its C++ counterpart on this target instead. Sizes come from the C++ types wherever
-// Core can see them; on every 32-bit target each entry equals the script's own size, so nothing changes there.
+// Native placeholders. A few script variables stand in for C++ data that script never touches: the object
+// header, the vtable pointer of a secondary C++ base, a private pointer. The packages declare them as ints, sized
+// for 32-bit pointers, so on LP64 the C++ data is larger than its script stand-in. LinkOffsets gives each one the
+// size of its C++ counterpart on this target, so every later member sits at the same offset in C++ and script.
+// Sizes come from the C++ types wherever Core can see them; on 32-bit targets each equals the script's own size.
 // The layout guard in LinkOffsets and tools/dev/layout-sweep.gdb verify the result. The lookup compares
 // strings: a name cached here could be purged by garbage collection when unreferenced and its index reused.
 //
 static INT NativePlaceholderSize( UStruct* Owner, UProperty* Property )
 {
-	// Object.DynamicString is an EMPTY script struct standing in for a C++ FString (Player.TravelItems): script
-	// gives it 0 bytes, C++ 12 (16 on LP64), so Player's script layout was 12 bytes short of its C++ class on
-	// every width. It occupies an FString in the class layout; its element size stays 0, so script's
-	// struct copies still copy nothing -- a byte copy of an FString would share its buffer.
+	// Object.DynamicString is an empty script struct standing in for a C++ FString (Player.TravelItems): script
+	// gives it 0 bytes, C++ 12 (16 on LP64). It occupies an FString in the class layout; its element size stays
+	// 0, so script's struct copies still copy nothing -- a byte copy of an FString would share its buffer.
 	UStructProperty* StructProperty = Cast<UStructProperty>( Property );
 	if
 	(	StructProperty
@@ -380,9 +378,9 @@ static INT NativePlaceholderSize( UStruct* Owner, UProperty* Property )
 }
 
 //
-// The compiled-script (32-bit) layout (ufront 2.84). Packages are the 32-bit format every engine reads: an
-// object reference is 4 bytes there, a struct holding one or a DynamicArray correspondingly small. The runtime
-// layout is LinkOffsets'; wherever a size or offset is WRITTEN into a package or into bytecode (the compiler's
+// The compiled-script (32-bit) layout. Packages are the 32-bit format every engine reads: an object reference
+// is 4 bytes there, a struct holding one or a DynamicArray correspondingly small. The runtime layout is
+// LinkOffsets'; wherever a size or offset is written into a package or into bytecode (the compiler's
 // None-context and switch sizes, EX_BeginFunction, a function's ParmsSize and ReturnValueOffset) it must be
 // this one, so a 64-bit engine writes the bytes a 32-bit one does. It replays LinkOffsets' walk with the
 // format's element sizes; exact because every alignment is at most 4.
@@ -472,7 +470,7 @@ void UStruct::LinkOffsets( FArchive& Ar )
 
 	// Object.DynamicArray {Num,Max,Ptr} is script's stand-in for a C++ TArray (Palette.Colors, Texture.Mips,
 	// FireTexture.Sparks, EditorEngine.Tools); script never reads its fields. Its size is FArray's -- 12 on
-	// 32-bit, as the script declares, 16 on LP64 (ufront 2.84).
+	// 32-bit, as the script declares, 16 on LP64.
 	if
 	(	appStricmp( GetName(), "DynamicArray" )==0
 	&&	GetParent() && appStricmp( GetParent()->GetName(), "Object" )==0
@@ -482,9 +480,9 @@ void UStruct::LinkOffsets( FArchive& Ar )
 	// Layout guard: an intrinsic class's C++ sizeof must equal the size derived from the loaded .u property
 	// offsets; otherwise C++ and script read the same object through two layouts. Necessary, not sufficient:
 	// a member can move inside a class while the size still matches (tools/dev/layout-sweep.gdb compares
-	// every offset). FATAL (ufront 2.84, as engine-ut99 034eb9b): past the first difference every access is
-	// silent corruption, and an object allocated at the script size is smaller than the class C++ writes
-	// through. The packages are fixed, so a mismatch is always our header or the placeholder table.
+	// every offset). Fatal: past the first difference every access is silent corruption, and an object
+	// allocated at the script size is smaller than the class C++ writes through. The packages are fixed, so a
+	// mismatch is always a C++ header or the placeholder table.
 	{
 		extern UStruct* GLayoutStructs[]; extern INT GLayoutSizes[]; extern INT GLayoutCount;
 		for( INT li=0; li<GLayoutCount; li++ )
@@ -1084,12 +1082,11 @@ void UClass::Serialize( FArchive& Ar )
 	Ar << ClassRecordSize << ClassFlags << ClassGuid;
 	Ar << Dependencies << PackageImports;
 
-	// ClassRecordSize is a UDatabase class's record size -- sizeof its C++ BaseDataType, a layout value
-	// (ufront 2.84). The package holds the compiling engine's: 4 for ULevel's AActor* records, a 32-bit
-	// FBspSurf or FPoly. UDatabase::Realloc allocates DbMax records of it while Element() strides by the C++
-	// type, so on LP64 every level's actor list and BSP surfaces were allocated at the 32-bit size and
-	// overrun. A class loaded from a package keeps its C++ size if it is intrinsic, and takes its
-	// superclass's otherwise (as the compiler sets it). Saving writes the running size: on LP64 a larger
+	// ClassRecordSize is a UDatabase class's record size -- sizeof its C++ BaseDataType, a layout value. The
+	// package holds the compiling engine's (4 for ULevel's AActor* records, a 32-bit FBspSurf or FPoly), but
+	// UDatabase::Realloc allocates DbMax records of it while Element() strides by the C++ type, so the record
+	// size must be the C++ size. A class loaded from a package keeps its C++ size if it is intrinsic, and takes
+	// its superclass's otherwise (as the compiler sets it). Saving writes the running size: on LP64 a larger
 	// one, which any engine only over-allocates by.
 	if( Ar.IsLoading() )
 	{
@@ -1269,11 +1266,11 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 	EExprToken Expr=(EExprToken)0;
 	guard(SerializeExpr);
 	#define XFER(T) {Ar << *(T*)&Script(iCode); iCode += sizeof(T); }
-	// A script object reference (ufront 2.84, as engine-ut99 2.83): the stream keeps a 4-byte slot holding the
-	// object's index (FObjectManager::GetScriptRef), never an address, so no code offset depends on the
-	// pointer width. The archive always sees the object itself -- a loader resolves it, a saver writes the
-	// package's reference, the garbage collector marks it, a replacing archive may hand back another -- and
-	// its index goes back into the slot.
+	// A script object reference: the stream keeps a 4-byte slot holding the object's index
+	// (FObjectManager::GetScriptRef), never an address, so no code offset depends on the pointer width. The
+	// archive always sees the object itself -- a loader resolves it, a saver writes the package's reference,
+	// the garbage collector marks it, a replacing archive may hand back another -- and its index goes back
+	// into the slot.
 	#define XFER_OBJ \
 	{ \
 		UObject* Obj = NULL; \
@@ -1458,7 +1455,7 @@ EExprToken UStruct::SerializeExpr( INT& iCode, FArchive& Ar )
 		}
 		case EX_Case:
 		{
-			// Read back AFTER the transfer (loading fills it) and by copy: the slot is unaligned (ufront 2.84).
+			// Read back after the transfer (loading fills it), by copy: the slot is unaligned.
 			XFER(_WORD);; // Code offset.
 			_WORD W;
 			appUnalignedCopy( &W, &Script(iCode-sizeof(_WORD)), sizeof(W) );
@@ -1553,11 +1550,11 @@ void UFunction::Serialize( FArchive& Ar )
 	guard(UFunction::Serialize);
 	UStruct::Serialize( Ar );
 
-	// Function info. ParmsSize and ReturnValueOffset are layout values (ufront 2.84): a package carries them
-	// in the script format's 32-bit layout, while the running engine needs its own (an object parameter is 8
-	// bytes on LP64, so ProcessEvent copied too few bytes and a call read its result at the wrong offset). So
-	// saving writes the script format and loading recomputes them from the linked properties, as the
-	// compiler does. On 32-bit targets both are the values the package already holds.
+	// Function info. ParmsSize and ReturnValueOffset are layout values: a package carries them in the script
+	// format's 32-bit layout, while the running engine needs its own (an object parameter is 8 bytes on LP64;
+	// ProcessEvent copies ParmsSize bytes and reads the result at ReturnValueOffset). So saving writes the
+	// script format and loading recomputes them from the linked properties, as the compiler does. On 32-bit
+	// targets both are the values the package already holds.
 	INT RunParmsSize = ParmsSize, RunReturnValueOffset = ReturnValueOffset;
 	if( Ar.IsSaving() )
 	{

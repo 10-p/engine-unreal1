@@ -60,10 +60,8 @@ UInput::UInput()
 	{
 		UClass* Class=GetClass();
 
-		// Create input alias struct. Its layout comes from FAlias itself (ufront 2.84): engine-ut99 described
-		// the same struct by arithmetic -- sizeof(FName)+sizeof(FString), Command at sizeof(FName) -- which held
-		// only without padding, and on LP64 every key bound to an alias crashed (engine-ut99 65e2f5a). Here
-		// Command is a char[64], so the sum happened to be right; it stays right by construction now.
+		// Create input alias struct. Its size and offsets come from FAlias itself, never summed by hand, so
+		// padding on any target is accounted for.
 		UStruct* AliasStruct = new(Class,"Alias")UStruct( NULL );
 		AliasStruct->SetPropertiesSize( sizeof(FAlias) );
 		new(AliasStruct,"Alias",  RF_Public)UNameProperty  ( EC_CppProperty, STRUCT_OFFSET(FAlias,Alias),   "", CPF_Config );

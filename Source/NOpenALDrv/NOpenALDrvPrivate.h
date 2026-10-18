@@ -45,8 +45,8 @@ class DLL_EXPORT UNOpenALAudioSubsystem : public UAudioSubsystem
 	FLOAT DopplerFactor;
 	UBOOL UseReverb;
 	UBOOL UseHRTF;
-	// ufront 2.76: REVERB_NONE is an OpenAL with no EFX at all (a core 1.1 library). Decided at Init from what
-	// the LINKED library offers, never at build time.
+	// REVERB_NONE: no reverb, because the OpenAL has no EFX (a core 1.1 library) or the build had no EFX headers.
+	// Decided at Init.
 	enum EReverbKind { REVERB_EAX=0, REVERB_NONE=1 };
 	INT ReverbKind;			// resolved at Init
 

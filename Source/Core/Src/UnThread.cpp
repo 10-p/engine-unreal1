@@ -15,7 +15,7 @@
 #include "CorePrivate.h"
 
 #if defined(PLATFORM_PSVITA) || defined(__EMSCRIPTEN__)
-// ufront 2.6a (web port): Emscripten's libc has no pthread_setname_np (single-threaded). No-op it.
+// PS Vita, Emscripten: the thread name is not set.
 #define pthread_setname_np(t, n) do { } while(0)
 #endif
 

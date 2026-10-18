@@ -2,13 +2,13 @@
 """
 emit.py -- re-emit extracted MSVC `__asm` blocks as GCC inline assembly (GAS intel syntax).
 
-The 1998 MMX kernels in SoftDrv are complete, working code; they are excluded from every non-MSVC
-build only because of *syntax* (`__asm{}`, Intel operands) plus `UnGcc.h` forcing `ASM 0`. GCC will
-happily assemble and run them, which makes them usable as an oracle: feed the original kernel and
-the portable C twin the same inputs, compare the output byte for byte.
+SoftDrv's MMX kernels are kept out of non-MSVC builds by their *syntax* (`__asm{}`, Intel operands)
+and by `UnGcc.h` setting `ASM 0`. Re-emitted, they assemble and run under GCC, which makes them
+usable as an oracle: feed the MMX kernel and the portable C twin the same inputs and compare the
+outputs byte for byte.
 
-Verified requirements (see NOTES.md):
-  * -m32                      the kernels are 32-bit throughout (the native build is already -m32)
+Requirements for the generated code:
+  * -m32                      the kernels are 32-bit throughout
   * -masm=intel               otherwise GCC substitutes AT&T operands into an intel block
   * -fno-pic                  ebx is the PIC register in 32-bit shared objects; the kernels use it
   * -fomit-frame-pointer      ebp is used as a general register (saved/restored via SavedEBP)
@@ -26,6 +26,9 @@ Labels are prefixed per kernel so several converted kernels can coexist in one o
 Usage:
     python3 emit.py <file.cpp> <function> [...]        # emit a C function per kernel
     python3 emit.py --offsets                          # dump the struct offsets it assumes
+
+    --sub <label>      emit only the local subroutine starting at <label>, up to its `ret`
+    --alphafog <n>     value for the `#if ALPHAFOG` arms (default 0)
 """
 
 import sys
@@ -33,12 +36,12 @@ import sys
 import extract
 
 # SoftDrv's asm carries `#if ALPHAFOG` arms inline; without resolving them both would be emitted
-# back to back. UE1 v200 sets ALPHAFOG 0, UT99 v400 sets it 1 -- override with --alphafog.
+# back to back. DrawSurf.cpp defines ALPHAFOG 0; --alphafog overrides it.
 DEFINES = {"ALPHAFOG": 0}
 
-# Offsets the emitter substitutes for MSVC struct-relative operands.  The generated harness carries
-# a static_assert for every one of these, so a layout drift is a compile error rather than a
-# silently wrong render.
+# Offsets the emitter substitutes for MSVC struct-relative operands (32-bit layout).  A harness
+# static_asserts the ones it uses (oracle.cpp does for FLightMipSetup), so a layout drift is a
+# compile error rather than a silently wrong render.
 STRUCT_OFFSETS = {
     # struct FTexSetup { INT X; void* CoSetup; FMMX Tex, Lit; }        -- 24 bytes (3*8)
     ("FTexSetup", "X"):        0,
@@ -67,8 +70,7 @@ STRUCT_OFFSETS = {
     ("FLightMipSetup", "FogData"): 32,
 }
 
-# Bare identifiers that are C globals reached as memory operands.  Anything not here and not a
-# register is treated as an immediate/constant expression.
+# Operand size (as extract.py records it) -> the GAS intel size prefix.
 SIZE_KEYWORD = {"qword": "qword ptr", "dword": "dword ptr",
                 "word": "word ptr", "byte": "byte ptr"}
 

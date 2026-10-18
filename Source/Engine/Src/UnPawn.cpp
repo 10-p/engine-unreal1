@@ -79,26 +79,17 @@ void APlayerPawn::execUpdateURL( FFrame& Stack, BYTE*& Result )
 
 	UGameEngine* GameEngine = (UGameEngine*)GetLevel()->Engine;
 	GameEngine->LastURL.AddOption(NewOption);
-	// ★★ ufront 2.39d — AND PERSIST IT, which v200 never did. This only ever touched the in-memory
-	// LastURL, so a player renaming themselves in game (`PlayerPawn.SetName` -> `UpdateURL "Name=<x>"`)
-	// kept it for the session and lost it on the next launch; the launcher, which reads the engine's own
-	// ini to show the current name, could never see it either.
-	//
-	// v400 does exactly this, gated on a `bSaveDefault` flag its script passes. v200's script signature
-	// takes ONE combined "Key=Value" string and has no such flag — and the .u is frozen retail, so it
-	// cannot gain one. Persisting unconditionally is right here anyway: every v200 caller of UpdateURL
-	// (name, skin, face, class) is a `[DefaultPlayer]` PROFILE field, which is precisely the set v400
-	// passes bSaveDefault=true for.
+	// And persist it into [DefaultPlayer], so an in-game rename (`PlayerPawn.SetName` -> `UpdateURL "Name=<x>"`)
+	// survives the next launch and the launcher sees it. Unconditionally: every script caller of UpdateURL
+	// (name, skin, face, class) passes a [DefaultPlayer] profile field, and the call has no "save" flag.
 	char Key[1024];
 	appStrncpy( Key, NewOption, ARRAY_COUNT(Key) );
 	char* Eq = appStrstr( Key, "=" );
 	if( Eq )
 	{
 		*Eq = 0;
-		// ufront 2.39d — say what happened. The ONLY route to SetName is the viewport console
-		// (ULevel::Exec forwards to the NetDriver and nothing else, so ue_exec_command cannot reach a
-		// PlayerPawn exec), which the test harness cannot feed — so this line is how a real play session
-		// answers whether the rename reached the config at all, and under which key.
+		// Say what was persisted, and under which key: SetName is reached only from the viewport console
+		// (ue_exec_command cannot reach a PlayerPawn exec), so the log is where a rename shows.
 		debugf( NAME_Log, "[ufront/profile] UpdateURL '%s' -> [DefaultPlayer] %s (default ini)", NewOption, Key );
 		GameEngine->LastURL.SaveURLConfig( "DefaultPlayer", Key );
 	}

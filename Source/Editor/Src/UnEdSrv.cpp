@@ -1863,7 +1863,7 @@ UBOOL UEditorEngine::Exec( const char* Stream, FOutputDevice* Out )
 			}
 			check(Viewport->Actor!=NULL);
 
-			QWORD hWndParent=0; // ufront 2.84: a window handle is pointer-sized
+			QWORD hWndParent=0; // a window handle is pointer-sized
 			Parse(Str,"HWND=",hWndParent);
 
 			INT NewX=Viewport->SizeX, NewY=Viewport->SizeY;

@@ -91,10 +91,10 @@ typedef signed __int64		SQWORD;		// 64-bit signed.
 typedef signed int			UBOOL;		// Boolean 0 (false) or 1 (true).
 typedef float				FLOAT;		// 32-bit IEEE floating point.
 typedef double				DOUBLE;		// 64-bit IEEE double.
-typedef INT_PTR				PTRINT;		// Pointer-sized signed (ufront 2.84).
+typedef INT_PTR				PTRINT;		// Pointer-sized signed.
 typedef UINT_PTR			UPTRINT;	// Pointer-sized unsigned.
-#define appUnalignedCopy(Dest,Src,Count) memcpy(Dest,Src,Count)	/* ufront 2.84: an intrinsic for a constant count, see UnGcc.h */
-#define ALWAYS_INLINE __forceinline			/* ufront 2.84: see UnGcc.h */
+#define appUnalignedCopy(Dest,Src,Count) memcpy(Dest,Src,Count)	/* an intrinsic for a constant count */
+#define ALWAYS_INLINE __forceinline			/* inlined at every optimisation level */
 
 // Unwanted VC++ level 4 warnings to disable.
 #pragma warning(disable : 4244) /* conversion to float, possible loss of data							*/

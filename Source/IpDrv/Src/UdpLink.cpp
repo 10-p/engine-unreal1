@@ -7,8 +7,8 @@ Revision history:
 =============================================================================*/
 
 #include "IpDrvPrivate.h"
-// ufront 2.38 — the synthetic LAN (engine-local WebRTCDrv). Header only: the call is resolved at the
-// final --whole-archive link, so IpDrv does not link WebRTCDrv and there is no module cycle.
+// The synthetic LAN in WebRTCDrv. Header only: the calls are resolved at the final --whole-archive link,
+// so IpDrv does not link WebRTCDrv (no module cycle).
 #include "WebRTCLan.h"
 
 /*-----------------------------------------------------------------------------
@@ -35,7 +35,7 @@ void AUdpLink::Destroy()
 {
 	guard(AUdpLink::Destroy);
 #ifdef __EMSCRIPTEN__
-	WebRTCLan_Unbind( this );   // ufront 2.38 — drop any queued synthetic packets for this link
+	WebRTCLan_Unbind( this );   // drop any queued synthetic packets for this link
 #endif
 	if( GetSocket() )
 		closesocket(GetSocket());
@@ -68,13 +68,10 @@ void AUdpLink::execBindPort( FFrame& Stack, BYTE*& Result )
 	P_GET_INT_OPT(Port,0);
 	P_FINISH;
 #ifdef __EMSCRIPTEN__
-	// ★ ufront 2.38 — a browser has no UDP, so there is no socket to bind and no point pretending
-	// otherwise halfway. Bind is answered by the synthetic LAN instead: report success and register the
-	// link, and Tick is served from WebRTCLan.
-	//
-	// ⚠ This REPLACES the bind rather than falling back after it, because ClientBeaconReceiver treats a
-	// zero return as fatal ("beacon port in use") and never starts — and under Emscripten's virtual
-	// socket layer the real result is not reliably one thing or the other.
+	// A browser has no UDP: the synthetic LAN answers the bind (it registers the link, and Tick delivers
+	// its packets) and the result is success. It replaces the bind rather than falling back after one,
+	// because ClientBeaconReceiver treats a zero return as fatal ("beacon port in use") and never starts,
+	// and Emscripten's virtual socket layer does not return a dependable result.
 	{
 		static INT GNextSyntheticPort = 40000;
 		const INT Bound = Port ? Port : GNextSyntheticPort++;
@@ -129,8 +126,8 @@ void AUdpLink::execSendText( FFrame& Stack, BYTE*& Result )
 	P_GET_STRING(Str);
 	P_FINISH;
 #ifdef __EMSCRIPTEN__
-	// ufront 2.38 — hand the datagram to the synthetic LAN. ⚠ Success is ZERO here (v200 inverts the
-	// convention its UT99 descendant uses); returning 1 would make every send read as a failure.
+	// Hand the datagram to the synthetic LAN. Zero is success here (the socket path below returns 1 for a
+	// failed send), so returning 1 would make every send read as a failure.
 	WebRTCLan_Send( this, IpAddr.Addr, IpAddr.Port, Str );
 	*(DWORD*)Result = 0;
 	return;
@@ -192,10 +189,9 @@ UBOOL AUdpLink::Tick( FLOAT DeltaTime, enum ELevelTick TickType )
 	guard(AUdpLink::Tick);
 
 #ifdef __EMSCRIPTEN__
-	// ufront 2.38 — deliver synthetic LAN packets through the STOCK receive path, so
-	// ClientBeaconReceiver's own handler, its beacon table and the menu that reads it all run
-	// unmodified. Outside the GetSocket() guard on purpose: on the web there is no socket at all
-	// (see execBindPort).
+	// Deliver synthetic LAN packets through the stock receive path, so ClientBeaconReceiver's handler, its
+	// beacon table and the menu that reads it run unmodified. Outside the GetSocket() guard: this build
+	// binds no socket (execBindPort).
 	{
 		FIpAddr From;
 		FString Text;

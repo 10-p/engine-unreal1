@@ -731,13 +731,9 @@ IMPLEMENT_CLASS(UObject);
 -----------------------------------------------------------------------------*/
 
 //
-// Load configuration.
-//warning: Must be safe on class-default metaobjects.
-//
-//
-// ufront (2026-10-12): a localized property's text, from the class's own section of <Package>.<language> (e.g.
-// [UnrealMainMenu] of UnrealI.frt), the key falling back to <Package>.int as Localize() does. Unlike Localize(), a key
-// neither file has gives FALSE rather than a "<?...?>" placeholder, so the property keeps its compiled default.
+// A localized property's text, from the class's own section of <Package>.<language> (e.g. [UnrealMainMenu] of
+// UnrealI.frt), the key falling back to <Package>.int as Localize() does. Unlike Localize(), a key neither file
+// has gives FALSE rather than a "<?...?>" placeholder, so the property keeps its compiled default.
 //
 static UBOOL LocalizedPropertyText( const char* Section, const char* Key, const char* Package, char* Value, INT Size )
 {
@@ -751,17 +747,16 @@ static UBOOL LocalizedPropertyText( const char* Section, const char* Key, const 
 	return GetConfigString( Section, Key, Value, Size, Filename );
 }
 
+//
+// Load configuration.
+//warning: Must be safe on class-default metaobjects.
+//
 void UObject::LoadConfig( FName Type, UClass* Class, const char* Filename )
 {
 	guard(UObject::LoadConfig);
-	// ufront (2026-10-12): v200 as received returned here for NAME_Localized, so NO localized property was ever read:
-	// not the English .int sections either (the compiled English defaults showed instead), and a language other than
-	// int changed only the few strings code fetches with Localize() (measured: with Language=frt only Core.frt was
-	// read, and `GET GameInfo DefaultPlayerName` answered "Player" with Engine.frt's [GameInfo] saying "Joueur").
-	// The menus are localized properties ([UnrealMainMenu] MenuList/HelpMessage of UnrealI.<lang>), so the shipped
-	// German/French/Italian/Spanish files did nothing. Loaded now as engine-ut99's UObject::LoadLocalized does: every
-	// localized property (inherited ones included) from the class's own section of its package's file; the class
-	// default starts from its parent's already-localized values, so a key the section lacks keeps those.
+	// Localized: every localized property (inherited ones included), from the class's own section of its package's
+	// localization file (the menus' text lives there). The class default starts from its parent's already-localized
+	// values, so a key the section lacks keeps those.
 	if( Type==NAME_Localized )
 	{
 		if( !Class )
@@ -855,19 +850,8 @@ void UObject::SaveConfig( DWORD Flags, const char* Filename )
 			if( It->IsChildOf(BaseClass) )
 				It->GetDefaultObject()->LoadConfig( NAME_Config );
 
-	// ufront 2.28: WRITE THROUGH, like every later engine in the family.
-	//
-	// v200's SaveConfig stopped at SetConfigString, i.e. at the IN-MEMORY cache; the bytes reached disk
-	// only when FConfigCache::Exit() ran at shutdown. On a desktop that is invisible — the process exits
-	// and the ini is written. In a browser tab there is no such exit, so EVERY setting the engine saved
-	// (video options, key binds, player name) was lost, while the call reported success.
-	//
-	// MEASURED before the fix: `brightness` answered "Brightness level 7/10" — so UClient::Exec ran and
-	// SaveConfig() with it — and a full walk of the filesystem showed NOT ONE byte changed anywhere.
-	//
-	// v400 (ut99) and UE2 (ut2004) both end SaveConfig with GConfig->Flush(0); this is the v200 spelling
-	// of the same thing, so all four engines now persist a saved setting at the moment it is saved. It
-	// costs one write per SaveConfig call, not per property — the loop above has already finished.
+	// Write through: a saved setting reaches disk now, not only when FConfigCache::Exit() runs at shutdown,
+	// which a process may never reach. One write per SaveConfig call, not per property: the loop above is done.
 	GConfigCache.SaveAllConfigs();
 	unguard;
 }
@@ -1108,8 +1092,7 @@ void FObjectManager::PreRegister( UObject* InObject, FName InPackageName )
 	{
 		// Add to the autoregistry chain. Until the object manager starts, the chain waits in Linker (a
 		// pointer) and the package name in LinkerIndex (4 bytes, an FName's size); StaticInit gives both back
-		// their real meaning. (ufront 2.84: it was the other way round -- the chain in the 4-byte LinkerIndex,
-		// which held a pointer only while pointers were 4 bytes.)
+		// their real meaning.
 		static_assert( sizeof(FName)<=sizeof(DWORD), "the package name waits in the 4-byte LinkerIndex" );
 		*(UObject**)&InObject->Linker    = AutoRegister;
 		*(FName*   )&InObject->LinkerIndex = InPackageName;
@@ -1641,11 +1624,9 @@ void FObjectManager::SafeLoadError( DWORD LoadFlags, const char* Error, const ch
 #ifndef __EMSCRIPTEN__
 	if( LoadFlags & LOAD_Throw     ) appThrowf( "%s", Error   );
 #else
-	// step 2.6f: do NOT re-throw on LOAD_Throw. Exception catching is disabled in the web build and a
-	// throw cannot unwind across Asyncify-transformed frames, so a re-thrown load error escapes every
-	// caller's catch and aborts the WASM module. Each loader already reported/handled locally before
-	// calling us; not re-throwing lets the load resolve to NULL, which callers turn into a graceful
-	// failure. Mirrors engine-ut2004's Emscripten fix.
+	// No re-throw on LOAD_Throw: the web build's engine code cannot catch exceptions, so a re-thrown load
+	// error would abort the module. The error is reported above, and the load resolves to NULL, which callers
+	// handle as a failure.
 	(void)Error;
 #endif
 	if( LoadFlags & LOAD_NoFail    ) appErrorf( "%s", TempStr );
@@ -1685,7 +1666,7 @@ ULinkerLoad* FObjectManager::GetPackageLinker
 			// Resolve filename from package name.
 			if( !InParent )
 #ifdef __EMSCRIPTEN__
-				return NULL; // step 2.6f: fail soft (catching off — a throw aborts across Asyncify frames)
+				return NULL; // fail soft: with no exception catching a throw would abort
 #else
 				appThrowf( LocalizeError("PackageResolveFailed") );
 #endif
@@ -1695,7 +1676,7 @@ ULinkerLoad* FObjectManager::GetPackageLinker
 				if( (LoadFlags & LOAD_AllowDll) && InParent->IsA(UPackage::StaticClass) && ((UPackage*)InParent)->DllHandle )
 					return NULL;
 #ifdef __EMSCRIPTEN__
-				return NULL; // step 2.6f: package not found -> NULL (callers handle it), not a hard abort
+				return NULL; // package not found: NULL (callers handle it), not an abort
 #else
 				appThrowf( LocalizeError("PackageNotFound"), InParent->GetName() );
 #endif
@@ -1706,7 +1687,7 @@ ULinkerLoad* FObjectManager::GetPackageLinker
 			// Verify that file exists.
 			if( !appFindPackageFile( InFilename, CompatibleGuid, NewFilename ) )
 #ifdef __EMSCRIPTEN__
-				return NULL; // step 2.6f: missing map/package file -> NULL (graceful), not a hard abort
+				return NULL; // missing map/package file: NULL (callers handle it), not an abort
 #else
 				appThrowf( LocalizeError("FileNotFound"), InFilename );
 #endif
@@ -1874,10 +1855,9 @@ UObject* FObjectManager::LoadObject( UClass* ObjectClass, UObject* InParent, con
 #ifdef __EMSCRIPTEN__
 		if( !Result )
 		{
-			// step 2.6f: don't throw — catching is disabled and a throw can't unwind across Asyncify
-			// frames, so it would escape the catch below and abort the module. Return NULL, which is
-			// exactly what the native local-catch path yields here; callers already handle a NULL load
-			// (e.g. an absent/None skin texture on a bot mesh). Mirrors engine-ut2004.
+			// No throw: with exception catching off it would escape the catch below and abort the module.
+			// Return NULL, which is what the native catch path yields here; callers handle a NULL load (e.g.
+			// an absent skin texture on a bot mesh).
 			EndLoad();
 			return NULL;
 		}
@@ -2098,9 +2078,8 @@ INT CDECL LinkerExportSort( const void* A, const void* B )
 	return GTempSave->MapObject(((FObjectExport*)B)->_Object) - GTempSave->MapObject(((FObjectExport*)A)->_Object);
 }
 
-// ufront (from engine-uc2's S2, UC2StableSort; ported to UT99 too): SavePackage's three sorts by usage count must not
-// depend on the C library. appQsort is qsort, which leaves the order of equal keys to the library, so the same save on
-// two platforms gave different tables. A stable merge sort gives every platform the order glibc gives.
+// SavePackage's three sorts by usage count must not depend on the C library: appQsort is qsort, which leaves the
+// order of equal keys to the library. A stable merge sort gives every platform the same tables (glibc's order).
 static void UfrontStableSort( void* Base, INT Num, INT Width, int(CDECL *Compare)(const void* A, const void* B) )
 {
 	if( Num < 2 )
@@ -2132,9 +2111,9 @@ static void UfrontStableSort( void* Base, INT Num, INT Width, int(CDECL *Compare
 		appMemcpy( Base, Src, Num*Width );
 }
 
-// ufront (from engine-uc2's S2, UC2SortLikeNTFS): the order Windows listed files in (NTFS: names compared after
-// upper-casing). readdir() order is the file system's, and CacheDrivers' reading order fixes the FName indices of the
-// localization keys, which decide the order of equal-usage names a save appends.
+// Sorts file names in the order Windows lists them (NTFS: names compared after upper-casing). readdir() order is
+// the file system's, and CacheDrivers' reading order fixes the FName indices of the localization keys, which decide
+// the order of equal-usage names a save appends.
 static void UfrontSortLikeNTFS( TArray<FString>& Files )
 {
 	for( INT i=1; i<Files.Num(); i++ )
@@ -3099,7 +3078,7 @@ void CacheDrivers( UBOOL ForceRefresh )
 				{
 					appStrcpy( Tmp, "*.int" );
 					TArray<FString> Files = appFindFiles( Filename );
-					UfrontSortLikeNTFS( Files );	// ufront: Windows' order, on every file system
+					UfrontSortLikeNTFS( Files );	// Windows' order, on every file system
 					for( INT j=0; j<Files.Num(); j++ )
 					{
 						appSprintf( Tmp, "%s%s", appBaseDir(), *Files(j) );
@@ -3144,7 +3123,7 @@ void CacheDrivers( UBOOL ForceRefresh )
 			}
 		}
 		TArray<FString> CoreLangs = appFindFiles( "Core.*" );
-		UfrontSortLikeNTFS( CoreLangs );	// ufront
+		UfrontSortLikeNTFS( CoreLangs );	// Windows' order, on every file system
 		for( i=0; i<CoreLangs.Num(); i++ )
 		{
 			if

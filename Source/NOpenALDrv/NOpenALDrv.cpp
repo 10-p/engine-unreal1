@@ -1,9 +1,7 @@
 #include <stdlib.h>
 
-// ufront 2.61: every platform plays through openal-soft now — the web too (cmake/OpenALSoftWeb.cmake: mixed on
-// a pthread, played by an AudioWorklet), where 2.12 had Emscripten's built-in OpenAL 1.1 core and so compiled
-// out EFX reverb, HRTF and AL_METERS_PER_UNIT here. Those guards are gone. NOPENAL_WEB now only means "no
-// background music decoder thread": on the web the libxmp stream is still pumped from Update() each frame.
+// NOPENAL_WEB means "no background music decoder thread": on the web the libxmp stream is pumped from Update()
+// each frame instead.
 #ifdef __EMSCRIPTEN__
 #define NOPENAL_WEB 1
 #endif
@@ -11,11 +9,9 @@
 #include "AL/al.h"
 #include "AL/alc.h"
 #include "AL/alext.h"
-// ufront 2.76: EFX IS RESOLVED AT RUN TIME AND NEVER LINKED. `AL_ALEXT_PROTOTYPES` used to be defined here,
-// which turns every EFX call into an ordinary linked symbol — seven of them (alGenEffects, alEffecti/f/fv,
-// alGenAuxiliaryEffectSlots, alDeleteAuxiliaryEffectSlots, alAuxiliaryEffectSloti). Against an OpenAL that
-// has no EFX that is a LINK error, not a fallback, and this driver is meant to run on whatever OpenAL a
-// platform has (the FunKey and other native builds). The pointers live in `Efx` below.
+// EFX is resolved at run time and never linked (no AL_ALEXT_PROTOTYPES): linked EFX calls would be a link error
+// against an OpenAL without EFX, and this driver runs on whatever OpenAL a platform has. The pointers live in
+// `Efx` below.
 #if defined(__has_include)
 #  if __has_include("AL/efx.h")
 #    define NOPENAL_HAVE_EFX_HEADERS 1
@@ -28,8 +24,8 @@
 #include "AL/efx-presets.h"
 #else
 // A core-only SDK (no <AL/efx.h>): spell out the handful of types and enums this driver uses, so it still
-// COMPILES. The EAX reverb preset table is efx-presets.h's and is not reproduced — without those headers the
-// EAX path compiles out and there is no reverb.
+// compiles. efx-presets.h's EAX reverb preset table is not reproduced, so the EAX path compiles out and there
+// is no reverb.
 #define NOPENAL_NO_EAX 1
 typedef void (AL_APIENTRY *LPALGENEFFECTS)( ALsizei, ALuint* );
 typedef void (AL_APIENTRY *LPALDELETEEFFECTS)( ALsizei, const ALuint* );
@@ -65,12 +61,12 @@ typedef void (AL_APIENTRY *LPALAUXILIARYEFFECTSLOTI)( ALuint, ALenum, ALint );
 	Global implementation.
 -----------------------------------------------------------------------------*/
 
-// ufront 2.76 — EFX's entry points, resolved once in Init and NEVER referenced at link time (see the include
-// block above). `Present` is the whole test the rest of the driver makes: the device advertises ALC_EXT_EFX
-// AND every pointer resolved. A library that has neither (a core OpenAL 1.1) plays everything except reverb.
+// EFX's entry points, resolved once in Init and never referenced at link time. `Present` is the whole test the
+// rest of the driver makes: the device advertises ALC_EXT_EFX and every pointer resolved. Without it (a core
+// OpenAL 1.1) everything except reverb plays.
 //
-// File-static on purpose: it is per-process state, and the audio subsystem is a NATIVE UE1 class whose layout
-// script depends on — this adds no member to it.
+// File-static: it is per-process state, and the audio subsystem is a native UE1 class whose layout script
+// depends on, so this adds no member to it.
 static struct FNOpenALEfx
 {
 	LPALGENEFFECTS                 GenEffects;
@@ -84,7 +80,7 @@ static struct FNOpenALEfx
 	UBOOL                          Present;
 } Efx;
 
-// Resolve them. Call with the context CURRENT: alGetProcAddress is context-dependent.
+// Resolve them. Call with the context current: alGetProcAddress is context-dependent.
 static UBOOL ResolveEfx( ALCdevice* InDevice )
 {
 	appMemset( &Efx, 0, sizeof(Efx) );
@@ -135,7 +131,7 @@ UNOpenALAudioSubsystem::UNOpenALAudioSubsystem()
 	MusicVolume = 63;
 	AmbientFactor = 0.6f;
 	DopplerFactor = 0.01f;
-	UseHRTF = false;	// ufront 2.61: the player's choice (see Init)
+	UseHRTF = false;	// the player's choice (see Init)
 	UseReverb = true;
 	ReverbKind = REVERB_EAX;
 	MusicInterpolation = XMP_INTERP_LINEAR;
@@ -168,12 +164,9 @@ UBOOL UNOpenALAudioSubsystem::Init()
 	if( MusicInterpolation > XMP_INTERP_SPLINE )
 		MusicInterpolation = XMP_INTERP_SPLINE;
 
-	// ufront 2.61 -- HRTF. This passed ALC_SOFT_HRTF, the extension's PRESENCE macro (value 1), as the attribute
-	// KEY where ALC_HRTF_SOFT (0x1992) belongs, so openal-soft ignored it and UseHRTF never did anything on any
-	// platform. And HRTF is a STEREO rendering: asked for alone, a 5.1/7.1 device renders surround and reports
-	// ALC_HRTF_UNSUPPORTED_FORMAT_SOFT (Firefox reports a 5.1 device's six channels to the page, measured in
-	// ufront 2.61 §3.1). So UseHRTF also asks for the stereo-HRTF output mode, and is off by default: it is the
-	// player's choice (the launcher's "Headphone audio"), because no browser can tell headphones from speakers.
+	// HRTF is requested with the ALC_HRTF_SOFT key. It is a stereo rendering: asked for alone, a 5.1/7.1 device
+	// renders surround and reports ALC_HRTF_UNSUPPORTED_FORMAT_SOFT, so UseHRTF also asks for the stereo-HRTF
+	// output mode. Off by default: only the player knows whether the output is headphones.
 	const ALint AttrList[] = {
 		ALC_FREQUENCY, OutputRate,
 		ALC_HRTF_SOFT, UseHRTF ? ALC_TRUE : ALC_FALSE,
@@ -192,8 +185,8 @@ UBOOL UNOpenALAudioSubsystem::Init()
 
 	alcMakeContextCurrent( Ctx );
 
-	// ufront 2.76: two tiers, decided here (context current, so the line below can report it) by what the LINKED
-	// library offers: EFX -> EFX's EAX reverb (the 2.61 path); no EFX at all -> everything except reverb plays.
+	// Reverb is decided here (context current, so the line below can report it) by what the linked library
+	// offers: with EFX, EFX's EAX reverb; without it, everything except reverb plays.
 	ResolveEfx( Device );
 	ReverbKind = REVERB_EAX;
 	if( UseReverb && !Efx.Present )
@@ -757,8 +750,8 @@ void UNOpenALAudioSubsystem::Update( FPointRegion Region, FCoords& Listener )
 	guard(UNOpenALAudioSubsystem::Update)
 
 #ifdef NOPENAL_WEB
-	// Single-threaded web build: pump the music stream here (replaces the native MusicThreadProc). Done
-	// before the realtime early-return so menu/title music keeps streaming when there's no live viewport.
+	// No music thread: pump the music stream here each frame instead of in MusicThreadProc. Done before the
+	// realtime early-return so menu/title music keeps streaming when there's no live viewport.
 	UpdateMusicBuffers();
 #endif
 
@@ -1027,7 +1020,7 @@ void UNOpenALAudioSubsystem::UpdateReverb( FPointRegion& Region )
 	guard(UNOpenALAudioSubsystem::UpdateReverb)
 
 	if( ReverbKind == REVERB_NONE )
-		return;   // ufront 2.76: no EFX in this library — there is no slot to point at a zone
+		return;   // no reverb: there is no slot to point at a zone
 
 	const UBOOL bNewReverb = ( Viewport->Actor && Viewport->Actor->Region.Zone && Viewport->Actor->Region.Zone->bReverbZone );
 
@@ -1054,7 +1047,7 @@ void UNOpenALAudioSubsystem::UpdateReverb( FPointRegion& Region )
 			Efx.AuxiliaryEffectSloti( ReverbSlot, AL_EFFECTSLOT_EFFECT, AL_EFFECT_NULL );
 			Efx.Effectf( ReverbEffect, AL_EAXREVERB_GAIN, ReverbZone->MasterGain / 255.f );
 			Efx.AuxiliaryEffectSloti( ReverbSlot, AL_EFFECTSLOT_EFFECT, ReverbEffect );
-			// ufront 2.61: reverb used to be unreachable on the web; say once that it really engages.
+			// Say once that reverb engages.
 			static UBOOL LoggedReverb = 0;
 			if( !LoggedReverb )
 			{
@@ -1071,8 +1064,8 @@ void UNOpenALAudioSubsystem::InitReverbEffect()
 {
 	guard(UNOpenALAudioSubsystem::InitReverbEffect)
 
-	// ufront 2.76: the calls go through the resolved EFX table, and REVERB_NONE never gets here (no effect
-	// object was created).
+	// The calls go through the resolved EFX table. Init calls this only when there is reverb (an effect object
+	// exists); REVERB_NONE returns.
 	if( ReverbKind == REVERB_NONE )
 		return;
 #if !NOPENAL_NO_EAX
@@ -1141,16 +1134,15 @@ void UNOpenALAudioSubsystem::StartMusicThread()
 	guard(UNOpenALAudioSubsystem::StartMusicThread)
 
 #ifdef NOPENAL_WEB
-	// Single-threaded web build: no background decoder thread — music is pumped from Update() via
-	// UpdateMusicBuffers() each frame instead. StopMusicThread() then no-ops (MusicThread stays null).
+	// No background decoder thread: music is pumped from Update() via UpdateMusicBuffers() each frame instead.
+	// StopMusicThread() then does nothing (MusicThread stays null).
 	MusicThreadRunning = false;
 	MusicThread = nullptr;
 #else
 	// This isn't an atomic because we only set it before the thread starts and before we wait on it to join.
 	MusicThreadRunning = true;
 
-	// Joinable (ufront 2.84): StopMusicThread() joins it, and joining a detached thread is undefined
-	// (AddressSanitizer aborts on it at every client exit).
+	// Joinable: StopMusicThread() joins it, and joining a detached thread is undefined.
 	MusicThread = appThreadSpawn( MusicThreadProc, (void*)this, "MusicThread", false, nullptr );
 	check(MusicThread);
 #endif

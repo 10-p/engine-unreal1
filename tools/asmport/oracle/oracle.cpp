@@ -1,16 +1,12 @@
-// oracle.cpp -- differential harness: UE1's original MMX fog sampler vs the portable C fog path.
+// oracle.cpp -- differential harness: UE1's MMX fog sampler vs the portable C fog path.
 //
-// SoftDrv's volumetric fog exists only in MSVC inline assembly, which no non-MSVC build can
-// compile -- so the portable C path has never had fog, and there has been nothing to check a
-// replacement against. GCC will in fact assemble those kernels (see NOTES.md), which makes the
-// original usable as ground truth.
+// Drives the MMXFogLight8 inner sampler (SampleFogLight, re-emitted by tools/asmport/emit.py into
+// gen_samplefoglight.inc) over a synthetic lightmap/fogmap and prints, for each fog density, the
+// additive fog term the kernel produces next to the one the portable path's FogShade[] model gives.
+// A second report prints the unfogged MMX vs Pentium brightness ratio per palette value.
 //
-// This drives the real MMXFogLight8 inner sampler (SampleFogLight, re-emitted verbatim by
-// tools/asmport/emit.py) over a synthetic lightmap/fogmap, and reports the final 8-bit pixel it
-// produces for each fog density. That curve is what the portable path's FogShade[] has to match.
-//
-//   Build:  make -C tools/asmport/oracle     (or see build.sh)
-//   Needs:  -m32 -masm=intel -fno-pic -fomit-frame-pointer
+//   Build and run:  tools/asmport/oracle/build.sh
+//   Needs:          -m32 -masm=intel -fno-pic -fomit-frame-pointer
 //
 #include <stdio.h>
 #include <string.h>
@@ -126,7 +122,7 @@ static void InitMMXFlashes(FLOAT Brightness, FLOAT FlashScaleRGB, FLOAT FlashFog
     MMX14Bits.Q = 0x3F803F803F803F80ull;
 }
 
-// The composite the render kernels perform (verified in MMX32FogRender8 / MMX32FogModulatedRender8):
+// The composite the render kernels perform (MMX32FogRender8 / MMX32FogModulatedRender8):
 //   out = packuswb( (pmulhw(light, MMXColor) + fog) >> FinalShift )
 #define FinalShift 4
 static INT MMXComposite(INT light14, INT mmxColor15)
@@ -141,7 +137,8 @@ static BYTE MMXFinal(INT lit, INT fog)
 }
 
 // ---------------------------------------------------------------------------
-// The portable C model, mirrored from DrawSurf.cpp so the two can be compared directly.
+// The portable C model, after DrawSurf.cpp's InitColorTables and FogAttenuate, so the two can be compared
+// directly. Unlike InitColorTables, its lit Scale is doubled.
 // ---------------------------------------------------------------------------
 
 #define LIGHTSHADES 128
@@ -160,7 +157,7 @@ static BYTE CFogShade[3 * 256];
 
 static void CInitColorTables(FLOAT Brightness, FLOAT FlashScaleRGB, FLOAT FlashFogRGB)
 {
-    FLOAT Scale = (0.50f + Brightness) * 16.0f / (128.0f * 128.0f);   // x2: 7-bit light index
+    FLOAT Scale = (0.50f + Brightness) * 16.0f / (128.0f * 128.0f);   // x2 for the 7-bit light index
     int Fog0     = appRound(FlashFogRGB * (DOUBLE)(1 << 20));
     int D_Scale  = appRound(Scale * FlashScaleRGB * (DOUBLE)(1 << 20));
     int Sc = 0;
@@ -235,8 +232,8 @@ int main()
         INT light14 = (INT)(SWORD)PhotonOut[0].R;
         INT fog13   = (INT)(SWORD)PhotonOut[1].R;
 
-        // Probe a MID-GREY texel at MID light: a fully lit white surface is far into
-        // saturation in both paths, where every fog level reads 255 and nothing is learnt.
+        // Probe a mid-grey texel at mid light: a fully lit white surface is far into
+        // saturation in both paths, where every fog level reads 255.
         INT asmPx = MMXFinal(MMXComposite(light14, 48 << 7), fog13);
         INT cPx   = CFinal(127, 12, fogByte);
         (void)asmPx; (void)cPx; (void)light14;
@@ -250,10 +247,9 @@ int main()
            worst == 0 ? "BIT-IDENTICAL to the original kernel" : "MISMATCH");
 
     // ---------------------------------------------------------------------
-    // Second report: unfogged brightness, MMX vs Pentium, over the whole
-    // (texel, light) space. This is the pre-existing mismatch -- InitMMXFlashes
-    // and InitColorTables use different Scale formulas -- and it needs measuring
-    // over the full range, not at one probe, before anyone "fixes" it.
+    // Second report: unfogged brightness, MMX vs Pentium, at full lightmap for
+    // palette values 8..248. InitMMXFlashes and InitColorTables use different
+    // Scale formulas; this prints the ratio of the MMX kernel to the C model.
     // ---------------------------------------------------------------------
     for (INT i = 0; i < LMSIZE * LMSIZE; i++) { LightBuf[i] = 0xFFFFFFFFu; FogBuf[i] = 0; }
     MMXLit.Q = ((QWORD)TestCoord.DH << 32) | TestCoord.DL;

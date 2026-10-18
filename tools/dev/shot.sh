@@ -3,8 +3,10 @@
 #
 #   tools/dev/shot.sh <Map.unr> <out.png> [seconds] [extra args...]
 #
-# Xvfb's -fbdir dump is used instead of the engine's SHOT command: SHOT needs a keypress,
-# and there is no key-injection tool on this box.
+#   U1RUN=<run-tree> (default /tmp/u1soft)  U1DISP=<display> (default :99)  U1RES=<WxH> (default 800x600)
+#
+# The frame comes from Xvfb's -fbdir dump rather than the engine's SHOT command, which needs a keypress.
+# The game's output goes to /tmp/u1run.log; its last lines are printed at the end.
 set -u
 
 MAP="${1:?usage: shot.sh <Map.unr> <out.png> [seconds] [args...]}"
@@ -23,7 +25,7 @@ sleep 1
 
 ( cd "$RUN/System" && DISPLAY="$DISP" SDL_VIDEODRIVER=x11 \
     exec ./Unreal.bin "$MAP" -log "$@" >/tmp/u1run.log 2>&1 ) &
-GPID=$!	# exec: the subshell BECOMES the game, so the kill below reaches it (ufront 2.84; it used to leave every game running)
+GPID=$!	# exec: the subshell becomes the game, so the kill below reaches it
 
 sleep "$SECS"
 

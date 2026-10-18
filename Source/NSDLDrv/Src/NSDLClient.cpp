@@ -48,21 +48,9 @@ UNSDLClient::UNSDLClient()
 	DeadZoneXYZ = 0.1f;
 	DeadZoneRUV = 0.1f;
 
-	// ★ COMPILED DEFAULTS FOR THE INHERITED UClient SETTINGS (ufront 2.35).
-	//
-	// UClient::InternalClassInitializer (Engine/Src/UnCamMgr.cpp) REGISTERS its nine display options and
-	// assigns none of them, so with no [NSDLDrv.NSDLClient] ini section they all fell back to a
-	// zero-initialised default: a 0x0 viewport, Brightness 0 (a black picture), CurvedSurfaces off. The six
-	// lines above already establish this driver's OWN defaults the same way -- the inherited half was simply
-	// never done.
-	//
-	// Every shipped config here does carry the section (Engine/Config/{Unreal,Default,web/Default}.ini), so
-	// nothing changes for a normal install; this is the floor under an install whose ini lacks it, which is
-	// exactly the state a retail Unreal .ini is in -- it has no section for a client class added decades
-	// later. Values mirror Engine/Config/Unreal.ini, the native reference; ini still overrides.
-	//
-	// ⚠ Unreal 1 has NO decal system -- UClient here has no `Decals` member at all (it arrives in the UT99
-	// v400 engine), so the decal half of this fix simply does not apply to this engine.
+	// Compiled defaults for the inherited UClient settings, for an ini with no [NSDLDrv.NSDLClient] section (a
+	// retail Unreal .ini has none): UClient::InternalClassInitializer (Engine/Src/UnCamMgr.cpp) registers its
+	// display options and assigns none of them. Values mirror Engine/Config/Unreal.ini; the ini still overrides.
 	ViewportX         = 800;
 	ViewportY         = 600;
 	Brightness        = 0.6f;
@@ -90,17 +78,14 @@ void UNSDLClient::Init( UEngine* InEngine )
 	// Init base.
 	UClient::Init( InEngine );
 
-	// ★ SAY WHAT THE CLIENT ACTUALLY RESOLVED TO (ufront 2.35). UnGame.cpp passes Client->ViewportX/Y
-	// straight into OpenWindow, so these values ARE the window -- and until now nothing said what they
-	// were, which is how a zero default (a 0x0 window, Brightness 0) could look like a broken renderer.
-	// Same one-line-at-Init treatment as engine-ut99's NSDLClient. (Unreal 1 has no decal system, so
-	// there is no Decals to report here -- that member arrives in the UT99 v400 engine.)
+	// Log what the client resolved to: UnGame.cpp passes Client->ViewportX/Y straight into OpenWindow, so
+	// these values are the window.
 	debugf( NAME_Init, "NSDLClient: %ix%i, Brightness=%.2f, CurvedSurfaces=%i, ScreenFlashes=%i, LowDetailTextures=%i",
 		ViewportX, ViewportY, Brightness, (INT)CurvedSurfaces, (INT)ScreenFlashes, (INT)LowDetailTextures );
 
 	Controller = NULL;
 
-	// ufront 2.91: the game-controller subsystem is always up; whether a pad is USED is UseJoystick, which the
+	// The game-controller subsystem is always up; whether a pad is used is UseJoystick, which the
 	// viewport reads every tick (UNSDLViewport::TickInput), so the game's own option takes effect at once.
 	if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
 	{
@@ -110,8 +95,8 @@ void UNSDLClient::Init( UEngine* InEngine )
 
 	atexit( SDL_Quit );
 
-	// A pad already connected (on the web: one pressed on the launcher page). Later ones arrive through
-	// SDL_CONTROLLERDEVICEADDED (UNSDLViewport::UpdateInput): there was no hot-plug before.
+	// Open a pad already connected. Later ones arrive through SDL_CONTROLLERDEVICEADDED
+	// (UNSDLViewport::TickInput).
 	SDL_GameControllerEventState( SDL_ENABLE );
 	if( UseJoystick )
 	{
@@ -135,10 +120,9 @@ void UNSDLClient::Destroy()
 {
 	guard(UNSDLClient::Destroy);
 
-	// ufront 2.84 -- close any viewport still open (`exit`, SIGTERM) while this client and SDL video are alive: a
-	// viewport's Destroy removes it from Viewports, clears FullscreenViewport and shuts its render device down.
-	// Left to the final purge, that ran after the engine had deleted this client (AddressSanitizer:
-	// heap-use-after-free at every exit, every width).
+	// Close any viewport still open (`exit`, SIGTERM) while this client and SDL video are alive: a viewport's
+	// Destroy removes it from Viewports, clears FullscreenViewport and shuts its render device down. Left to the
+	// final purge, that would run after the engine has deleted this client.
 	for( INT i=Viewports.Num()-1; i>=0; i-- )
 		delete Viewports(i);
 
@@ -423,15 +407,15 @@ void UNSDLClient::TryRenderDevice( UViewport* Viewport, const char* ClassName, U
 }
 
 /*-----------------------------------------------------------------------------
-	ufront: game pads (from the UC2 port's SDL2Drv/Src/SDL2Pads.cpp, one pad here; as engine-ut99).
+	Game pads (one open pad at a time).
 -----------------------------------------------------------------------------*/
 
 #ifdef __EMSCRIPTEN__
 //
-// H-3: the buttons pressed right now on the browser's first listed pad named Id (bit i = Gamepad.buttons[i].pressed,
+// The buttons pressed right now on the browser's first listed pad named Id (bit i = Gamepad.buttons[i].pressed,
 // the W3C "standard" layout), 0 if none: the press that made the browser list the pad, which SDL's Emscripten driver
 // keeps as the starting state and never reports. Runs on the page's main thread (the engine is on a worker).
-// (In the EM_ASM block: no top-level commas and no // comments.)
+// (In the EM_ASM block: no top-level commas.)
 //
 static DWORD WebPadPressed( const char* Id )
 {

@@ -1,34 +1,25 @@
 /*=============================================================================
-	WebRTCLan.cpp — make the STOCK Unreal 1 server browser work over WebRTC.
+	WebRTCLan.cpp: makes the stock Unreal 1 server browser work over WebRTC.
 
-	★ THE PROBLEM (ufront 2.38). The owner reported that the server browser had never
-	worked on any UE1 target, and that we had assumed UT2004's networking work covered
-	them. It did not: this engine had no discovery bridge at all — `webrtc_discover_servers`
-	and friends are exported by the baked glue shim and nothing here had ever called them.
-
-	★ WHY THIS IS A UDP SIMULATOR AND NOT A MENU PATCH. The menu is script, and the script
-	packages are FROZEN retail `.u` files we cannot recompile. So the fix has to meet the
-	stock code where it already is, and where it is is UDP:
+	It simulates UDP rather than patching the menu: the menu is script in the retail
+	`.u` packages, which are not recompiled, so this meets the stock code where it is.
 
 	  `UnrealI.UnrealListenMenu` ("Find Local Servers") spawns `IpDrv.ClientBeaconReceiver`,
-	  which binds the beacon port and LISTENS — it never sends anything. Servers broadcast
+	  which binds the beacon port and listens; it never sends anything. Servers broadcast
 	  "<Product> <address> <text>"; the receiver stores everything after the product, the
 	  menu lists `GetBeaconText()` (after the first space) and travels to
 	  `GetBeaconAddress()` (before it).
 
-	So: bind the beacon port, and we start manufacturing beacons.
+	So binding the beacon port starts discovery through the glue, and its results come
+	back as manufactured beacons.
 
-	★ HOW A JOIN GETS BACK TO A ROOM. The address in the beacon is synthetic — 10.199.0.N,
-	with N a stable index into a room table. `FURL` parses a dotted token as a HOST
-	(UnURL.cpp), so the travel takes the network path, and `UWebRTCNetDriver::Init` asks us
-	to translate it back. The room name survives a round trip through code that only
+	A join gets back to its room through the beacon's synthetic address, 10.199.0.N, with
+	N a stable index into a room table. `FURL` parses a dotted token as a host (UnURL.cpp),
+	so the travel takes the network path, and `UWebRTCNetDriver::Init` asks this file to
+	translate it back. The room name survives a round trip through code that only
 	understands IPv4.
 
-	The UT99 sibling of this file also answers "REPORTQUERY" and the GameSpy "\info\" query,
-	because UBrowser's LAN tab works that way. Unreal 1 has no UBrowser — the beacon text IS
-	the row — so none of that exists here.
-
-	Layering: this file lives in WebRTCDrv and uses NO IpDrv types; IpDrv calls in through
+	Layering: this file lives in WebRTCDrv and uses no IpDrv types; IpDrv calls in through
 	WebRTCLan.h. One-way, resolved at the final --whole-archive link, no module cycle.
 =============================================================================*/
 
@@ -38,7 +29,7 @@
 
 #ifdef __EMSCRIPTEN__
 
-// Discovery bridge (webrtc-net.js --js-library exports; resolved at WASM link).
+// Discovery bridge: the glue's discovery imports, resolved at the wasm link.
 extern "C"
 {
 	void webrtc_discover_servers( const char* room );
@@ -118,9 +109,9 @@ static FLanLink& TouchLink( const void* Id )
 }
 
 /**
- * Stable index for a room. Append-only — see GRooms.
+ * Stable index for a room. Append-only (see GRooms).
  *
- * ⚠ `new( Array )T( Item )`, NOT `Array.AddItem( Item )` — see the note in PumpDiscovery.
+ * `new( Array )T( Item )`, not `Array.AddItem( Item )`: see the note in PumpDiscovery.
  */
 static INT RoomIndex( const FString& Room )
 {
@@ -141,7 +132,7 @@ static UBOOL IsSyntheticAddr( DWORD Addr )
 	return (Addr & LAN_ADDR_MASK) == LAN_ADDR_BASE;
 }
 
-/** ⚠ ClientBeaconReceiver compares the product with `==`, which is CASE-SENSITIVE in UnrealScript, so
+/** ClientBeaconReceiver compares the product with `==`, which is case-sensitive in UnrealScript, so
  *  this is read from the ini rather than guessed: one wrong capital and every beacon is silently
  *  dropped with no error anywhere. */
 static FString BeaconProduct()
@@ -163,12 +154,10 @@ static void KickDiscovery()
 	debugf( NAME_DevNet, "[WebRTC-LAN] discovery started" );
 }
 
-// ★★ THROTTLED, AND THE THROTTLE IS NOT AN OPTIMISATION — IT IS THE DIFFERENCE BETWEEN RUNNING AND
-// ABORTING. Every webrtc_* call here is `__proxy: 'sync'`: a CROSS-THREAD round trip from the engine
-// pthread to the main thread, and this is reached from AUdpLink::Tick — once per link per FRAME.
-// ⚠ Under load that overflows Emscripten's proxy queue and the module dies with
-//     Aborted(… "emscripten_proxy_async failed" … _emscripten_run_callback_on_thread)
-// (measured on the ut99 sibling at 2.38). Ask four times a second instead.
+// Throttled, and the throttle is required, not an optimisation. Every webrtc_* call here is `__proxy: 'sync'`,
+// a cross-thread round trip from the engine pthread to the main thread, and this is reached from
+// AUdpLink::Tick once per link per frame. Under load that overflows Emscripten's proxy queue and the module
+// aborts ("emscripten_proxy_async failed"). Ask four times a second instead.
 static DOUBLE GLastPumpAt = 0.0;
 
 static void PumpDiscovery()
@@ -196,19 +185,16 @@ static void PumpDiscovery()
 		webrtc_get_server_map( i, mapBuf, sizeof(mapBuf) );
 		webrtc_get_server_gametype( i, gtBuf, sizeof(gtBuf) );
 
-		// ⚠⚠ COPY-CONSTRUCTED IN PLACE. `TArray<T>` is a POD container: `AddItem` is
+		// Copy-constructed in place. `TArray<T>` is a POD container: `AddItem` is
 		//     `INT Index=Add(); (*this)(Index)=Item;` and `FArray::Add` neither zeroes nor constructs, so
 		// assigning an FString into that slot reallocs whatever bit pattern the allocator left behind.
-		// FLanServer holds three FStrings, so one AddItem is three reallocs of three garbage pointers.
+		// FLanServer holds three FStrings, so one AddItem is three reallocs of three garbage pointers. Fresh
+		// heap pages come back zeroed and a zeroed FString survives the assignment, so the failure depends on
+		// the heap and looks like flakiness. Placement new is the only spelling that copy-constructs;
+		// `TArray::operator=` uses it.
 		//
-		// ★ It is HEAP LUCK, which is why it reads as flakiness: fresh dlmalloc pages come back zeroed and
-		// a zeroed FString survives the assignment. Measured 2.38 — the ut99 sibling (identical code, busier
-		// heap) died here 3 runs out of 3 with `memory access out of bounds`, while THIS engine drained 4
-		// for 4 and looked healthy. The tell is that the per-server line below prints and "discovery done"
-		// never does. Placement new is the only spelling that copy-constructs; `TArray::operator=` uses it.
-		//
-		// ⚠ v200 makes it worse than the ut99 case: FString's default ctor allocates a 1-byte "" here, so a
-		// ZEROED FString is not even a valid empty one — its Length() is ArrayNum-1 = -1.
+		// In v200, FString's default ctor allocates a 1-byte "", so a zeroed FString is not even a valid
+		// empty one: its Length() is ArrayNum-1 = -1.
 		FLanServer S;
 		S.Room       = Room;
 		S.Name       = nameBuf[0] ? FString(nameBuf) : Room;
@@ -230,15 +216,15 @@ static void QueueBeacons( const void* LinkId )
 	for( INT i=0; i<GServers.Num(); i++ )
 	{
 		const FLanServer& S = GServers(i);
-		// ⚠ The receiver splits on the FIRST space after the product: everything before it is the JOIN
-		// ADDRESS and the rest is the row label. So the address must contain no space, and the label
+		// The receiver splits on the first space after the product: everything before it is the join
+		// address and the rest is the row label. So the address must contain no space, and the label
 		// must not be empty or the row is unselectable.
 		FString Text;
 		Text.Setf( "%s %s %s (%s) %i/%i",
 			*Product, *WebRTCLan_HostForRoom( *S.Room ), *S.Name, *S.Map, S.Players, S.MaxPlayers );
-		// ⚠ Placement new, like every append in this file — see PumpDiscovery. A zeroed FString is not a
-		// valid empty one in v200 (its default ctor allocates a 1-byte ""), so AddZeroed-then-fill is a
-		// landmine here even where it happens to work.
+		// Placement new, like every append of an FString-holding struct in this file (see PumpDiscovery). A
+		// zeroed FString is not a valid empty one in v200 (its default ctor allocates a 1-byte ""), so
+		// AddZeroed-then-fill is unsafe here even where it happens to work.
 		new( GReplies )FLanReply( LinkId, AddrForIndex( RoomIndex( S.Room ) ), LAN_GAME_PORT, Text );
 	}
 }
@@ -252,8 +238,8 @@ void WebRTCLan_Bind( const void* LinkId, INT Port )
 	FLanLink& L = TouchLink( LinkId );
 	L.BoundPort = Port;
 
-	// ClientBeaconReceiver is PASSIVE — it binds and waits for servers to shout. Nothing will ever
-	// arrive to trigger us, so binding the beacon port IS the trigger.
+	// ClientBeaconReceiver is passive: it binds and waits for servers to broadcast. Nothing will ever
+	// arrive to trigger discovery, so binding the beacon port is the trigger.
 	INT BeaconPort = 7776;
 	GetConfigInt( "IpDrv.UdpBeacon", "BeaconPort", BeaconPort );
 	if( Port == BeaconPort )

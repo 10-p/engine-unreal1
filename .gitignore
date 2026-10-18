@@ -5,7 +5,7 @@ Bin
 Source/.vs
 Source/UnrealED/obj
 
-# ufront web port (step 2.6): out-of-tree build dirs + local smoke scratch (never tracked)
+# Out-of-tree build directories and local scratch files
 /build-wasm/
 /build-wasm-perf/
 /build-wasm-debug/
@@ -14,7 +14,7 @@ Source/UnrealED/obj
 __smoke.html__pycache__/
 /build-soft/
 tools/asmport/oracle/oracle
-# ufront 2.84: the 64-bit trees, and a script package compiled from tools/test (a build product)
+# The 64-bit and Android build trees, and script packages compiled from tools/test
 /build-native64/
 /build-native64-asan/
 /build-native64-cov/

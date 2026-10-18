@@ -1,12 +1,11 @@
 project(WebRTCDrv)
 
-# ufront step 2.6c — the UE1 WebRTC net driver (Emscripten/browser multiplayer). Engine-LOCAL; the
-# transport is the glue webrtc_* ABI (baked vendor/glue/webrtc-shim.js), not BSD sockets.
+# The UE1 WebRTC net driver (Emscripten/browser multiplayer). Its transport is the glue's webrtc_* ABI (a
+# shim baked in at link time), not BSD sockets.
 set(SRC_FILES
   "WebRTCDrv.cpp"
-  # ufront 2.38 — the synthetic LAN that makes the STOCK "Find Local Servers" menu work over WebRTC.
-  # IpDrv's AUdpLink calls into it (one-way; see WebRTCLan.h), so this package's root is a PUBLIC
-  # include dir below.
+  # The synthetic LAN that makes the stock "Find Local Servers" menu work over WebRTC. IpDrv's AUdpLink
+  # calls into it (one-way; see WebRTCLan.h), so this package's root is a PUBLIC include dir below.
   "WebRTCLan.cpp"
 )
 

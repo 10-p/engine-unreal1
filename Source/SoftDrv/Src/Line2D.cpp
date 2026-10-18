@@ -141,9 +141,8 @@ void USoftwareRenderDevice::Draw2DLine
 			#undef  DRAWPIXEL
 		}
 #else
-		// ufront 2.84: no line is drawn here, but the depth-cue table above was locked all the same; the unlock
-		// was inside the skipped code, so the next FMemCache::Tick stopped the game ("Cache item ... still
-		// locked"): `rmode 1` draws every mesh with depth-cued lines.
+		// No line is drawn here, but the depth-cue table above is locked all the same; a cache item left
+		// locked stops the game at the next FMemCache::Tick (`rmode 1` draws every mesh with depth-cued lines).
 		Item->Unlock();
 #endif
 	}

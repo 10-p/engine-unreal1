@@ -1,17 +1,15 @@
 /*=============================================================================
-	glad_symbol_prefix.h: give this (DESKTOP GL) glad loader a private symbol
+	glad_symbol_prefix.h: gives this (desktop GL) glad loader a private symbol
 	namespace.
 
-	ufront step 2.34. NOpenGLDrv (desktop GL) and NOpenGLESDrv (GLES2) vendor two
-	SEPARATE glad loaders — Thirdparty/glad and Thirdparty/glad_es — and both
-	generators emit the same external names for every entry point the two APIs
-	share (`glad_glClear`, `GLVersion`, ...). That is invisible while each driver
-	is its own .so, and a hard `multiple definition` link error the moment both
-	land in one static binary (BUILD_STATIC, i.e. every single-exe target).
+	NOpenGLDrv (desktop GL) and NOpenGLESDrv (GLES2) vendor two separate glad
+	loaders, Thirdparty/glad and Thirdparty/glad_es, and both generators emit the
+	same external names for every entry point the two APIs share (`glad_glClear`,
+	`GLVersion`, ...). Each driver as its own .so links fine; both in one static
+	binary (BUILD_STATIC, every single-exe target) is a `multiple definition` error.
 
-	Renaming happens HERE, on the desktop side, because glad_es is the WEB
-	renderer's loader: leaving it alone keeps the wasm build byte-for-byte what
-	it was. These are link-time names only — no call site changes, since glad
+	The desktop side is renamed (U1GL_*); glad_es, the web renderer's loader, stays
+	as generated. These are link-time names only: no call site changes, since glad
 	already reaches every function through the `glClear -> glad_glClear` macro.
 
 	Regenerate after re-running the glad generator:

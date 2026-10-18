@@ -518,22 +518,10 @@ APlayerPawn* ULevel::SpawnPlayActor( UPlayer* Player, ENetRole RemoteRole, const
 	if( !Actor )
 		return NULL;
 
-	// ★★ ufront 2.53 — APPLY THE URL'S NAME, BECAUSE v200's FROZEN SCRIPT DOES NOT.
-	//
-	// `eventLogin` above receives the full option string — `?Name=Player-a1b2c3?Class=…`, confirmed in the
-	// log — and v200's retail `GameInfo.Login` simply does not carry it onto the pawn: measured, the URL
-	// said `Name=Player-d9d8ff` and `Actor->PlayerName` came back as `Player`. `PlayerName` is what the
-	// Player Setup menu displays and what another player sees, so every install showed the same name.
-	//
-	// ⚠ THIS IS WHY THE LAUNCHER'S RANDOM NAME NEVER WORKED HERE WHILE IT WORKED ON THE OTHER THREE, AND
-	// IT IS NOT THE SAME BUG AS THE URL ONE FIXED IN UnGame.cpp — that one stopped the name reaching the
-	// URL at all; this one drops it between the URL and the pawn. Both had to go.
-	//
-	// ⚠ ONLY WHEN THE SCRIPT LEFT THE SHIPPED DEFAULT. A script that DID choose a name — a real network
-	// login, or an in-game rename through SetName/ChangeName — must always win, so this fills a gap
-	// rather than overriding a decision.
-	//
-	// ⚠ `PlayerName` is a CHAR[20] on the pawn (EngineClasses.h), not an FString: bound the copy.
+	// Apply the URL's Name to the pawn: `eventLogin` receives the full option string, but the packages'
+	// `GameInfo.Login` does not carry it onto `PlayerName` (what the Player Setup menu shows and other players
+	// see). Only when the script left the default, so a name the script chose (a network login, a rename
+	// through SetName/ChangeName) wins. `PlayerName` is a char[20] on the pawn, not an FString: bound the copy.
 	const char* WantName = URL.GetOption( "NAME=", NULL );
 	if( WantName && *WantName && appStricmp( Actor->PlayerName, *FURL::DefaultName )==0 )
 	{
@@ -567,10 +555,9 @@ APlayerPawn* ULevel::SpawnPlayActor( UPlayer* Player, ENetRole RemoteRole, const
 			}
 		}
 	}
-	// ufront 2.39c — ⚠ A NAME MATCH OVERWRITES the caller's Items, so a player listed with an EMPTY entry
-	// arrives with nothing even though its viewport had items exported. Log both sides of that decision:
-	// "matched, 0 bytes" and "no match, kept N bytes" are completely different faults and used to look the
-	// same from the outside.
+	// A name match overwrites the caller's Items, so a player listed with an empty entry arrives with nothing
+	// even though its viewport had items exported. Log both sides: "matched, 0 bytes" and "no match, kept N
+	// bytes" are different faults.
 	debugf
 	(
 		NAME_DevNet,

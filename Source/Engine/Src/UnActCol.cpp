@@ -267,10 +267,8 @@ void FCollisionHash::RemoveActor( AActor* Actor )
 	check(Actor->bCollideActors);
 	if( Actor->bDeleteMe )
 		return;
-	// "Moved since it was hashed" means different bits (ufront 2.84): a projectile whose physics produced a NaN
-	// location was hashed at NaN and never moved, but NaN != NaN, so the IEEE compare GCC emits killed every
-	// dedicated server with bots within minutes (i386 and x86_64 alike, the pre-2.84 engine too; retail's
-	// MSVC x87 compare evidently let it pass). Physics then destroys the out-of-world actor as intended.
+	// "Moved since it was hashed" compares bits, not floats: an actor whose physics produced a NaN location was
+	// hashed at NaN and has not moved, but NaN != NaN. Physics then destroys the out-of-world actor.
 	if( appMemcmp( &Actor->Location, &Actor->ColLocation, sizeof(FVector) )!=0 )
 		appErrorf( "%s moved without proper hashing", Actor->GetFullName() );
 

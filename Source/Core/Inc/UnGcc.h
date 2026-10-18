@@ -132,16 +132,16 @@ typedef int64_t  SQWORD; // 64-bit signed.
 typedef int32_t  UBOOL;  // Boolean 0 (false) or 1 (true).
 typedef double   DOUBLE; // 64-bit IEEE double.
 
-// Pointer-sized integers (ufront 2.84, as engine-ut99 2.83). Use these wherever a pointer passes through an
-// integer: an address rounded up, a pointer parked in a script-visible slot, a pointer printed or hashed.
+// Pointer-sized integers. Use these wherever a pointer passes through an integer: an address rounded up, a
+// pointer parked in a script-visible slot, a pointer printed or hashed.
 // INT and DWORD stay 32-bit on every target, so a pointer through either is truncated on LP64.
 typedef intptr_t  PTRINT;  // Pointer-sized signed.
 typedef uintptr_t UPTRINT; // Pointer-sized unsigned.
 
 // A copy of a small, constant number of bytes from a possibly unaligned address: one load where the CPU allows
-// unaligned loads, never a library call (the builtin expands inline at any optimisation level). ufront 2.84.
+// unaligned loads, never a library call (the builtin expands inline at any optimisation level).
 #define appUnalignedCopy(Dest,Src,Count) __builtin_memcpy(Dest,Src,Count)
-// Inlined at EVERY optimisation level (ufront 2.84): the script VM (UnCorSc.cpp, UnProp.cpp) is compiled at -Og,
+// Inlined at every optimisation level: the script VM (UnCorSc.cpp, UnProp.cpp) is compiled at -Og,
 // where an ordinary inline function that grows past a few instructions becomes a call per bytecode operand.
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 

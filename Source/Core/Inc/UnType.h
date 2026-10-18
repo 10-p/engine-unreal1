@@ -300,8 +300,8 @@ class CORE_API UObjectProperty : public UProperty
 	}
 	void Link( FArchive& Ar, UProperty* Prev )
 	{
-		// 4, not sizeof(UObject*) (ufront 2.84): the script layout is Win32's /Zp4 on every target, like the
-		// pack(4) C++ mirrors; at 64-bit an 8-aligned object property would move every member after it.
+		// 4, not sizeof(UObject*): the script layout is Win32's /Zp4 on every target, like the pack(4) C++
+		// mirrors; at 64-bit an 8-aligned object property would move every member after it.
 		Offset = Align( GetParentStruct()->PropertiesSize, 4 );
 	}
 	UBOOL Identical( const void* A, const void* B ) const

@@ -4,8 +4,8 @@
   "configurePresets": [
     {
       "name": "native",
-      "displayName": "Native (SDL2 + desktop GL/GLES2/Software, OpenAL audio) -- the WASM twin",
-      "description": "32-bit native build (needs a 32-bit SDL2; OpenAL Soft is fetched and built). Mirrors the web renderer set + real OpenAL audio (2.12.0 sensible default) + the desktop-GL renderer the web can't have. BUILD_STATIC links every package into ONE Unreal.bin -- no Core.so/Engine.so beside it, and appGetDllHandle resolves through the internal UNREAL_STATIC registry instead of dlopen (ufront 2.34; system libs SDL2/OpenAL/libGL stay dynamic). Builds in build-native/.",
+      "displayName": "Native x86 (SDL2 + desktop GL/GLES2/Software, OpenAL audio)",
+      "description": "32-bit native build (needs a 32-bit SDL2; openal-soft is fetched, built and copied beside the binary as libopenal.so.1). The web's renderers plus desktop GL (NOpenGLDrv), and OpenAL audio. BUILD_STATIC links every package into one Unreal.bin: no Core.so/Engine.so beside it, and appGetDllHandle resolves through the internal UNREAL_STATIC registry instead of dlopen (SDL2, libGL and libopenal.so.1 stay dynamic). Builds in build-native/.",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/../build-native",
       "cacheVariables": {
@@ -25,8 +25,8 @@
     },
     {
       "name": "native64",
-      "displayName": "Native x86_64 (LP64) -- the 64-bit twin of `native` (ufront 2.84)",
-      "description": "64-bit (LP64) native build: the same one-binary package set as `native`, compiled for x86_64 instead of -m32 (needs the amd64 libsdl2-dev). Retail 32-bit .u packages run unchanged (ufront docs/migration/steps/2.84-64bit-unreal1.md). Builds in build-native64/.",
+      "displayName": "Native x86_64 (LP64) -- the 64-bit `native`",
+      "description": "64-bit (LP64) native build: the same one-binary package set as `native`, compiled for x86_64 instead of -m32 (needs the amd64 libsdl2-dev). Retail 32-bit .u packages run unchanged. Builds in build-native64/.",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/../build-native64",
       "cacheVariables": {
@@ -48,7 +48,7 @@
     {
       "name": "native64-asan",
       "inherits": "native64",
-      "displayName": "Native x86_64 + AddressSanitizer (ufront 2.84)",
+      "displayName": "Native x86_64 + AddressSanitizer",
       "description": "native64 with -fsanitize=address (the flags keep -DASM=0). Run with ASAN_OPTIONS=alloc_dealloc_mismatch=0 (UE1's sized operator delete pairing is reported but benign). Put the binary in the run tree's System/ itself: the engine takes its base dir from the executable path. Builds in build-native64-asan/.",
       "binaryDir": "${sourceDir}/../build-native64-asan",
       "cacheVariables": {
@@ -69,7 +69,7 @@
     {
       "name": "wasm-debug",
       "displayName": "Web (Emscripten/WASM) -- -O0, last resort",
-      "description": "Emscripten web build: -O0, nothing inlined, every local live. Reach for it when the OPTIMISER is the suspect — a bug that shows at one -O level and not another is almost always undefined behaviour. Builds in build-wasm-debug/.",
+      "description": "Emscripten web build: -O0, nothing inlined, every local live. Reach for it when the optimiser is the suspect — a bug that shows at one -O level and not another is almost always undefined behaviour. Builds in build-wasm-debug/.",
       "inherits": "wasm",
       "binaryDir": "${sourceDir}/../build-wasm-debug",
       "cacheVariables": { "UT_WEB_DEBUG": "ON" }
@@ -78,14 +78,14 @@
       "name": "wasm-perf",
       "inherits": "wasm",
       "displayName": "Web (Emscripten/WASM) -- max performance",
-      "description": "Emscripten web build (-O3, no debug/assertions -> smaller/faster). Builds in build-wasm-perf/.",
+      "description": "Emscripten shipping build: -O2 compile, -O3 link, no debug info, no assertions. Builds in build-wasm-perf/.",
       "binaryDir": "${sourceDir}/../build-wasm-perf",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "UT_WEB_PERF": "ON" }
     },
     {
       "name": "windows",
       "displayName": "Windows x86 (MinGW-w64) -- one .exe + OpenAL32.dll",
-      "description": "32-bit Windows build. Cross-compiles from Linux via the toolchain file (i686-w64-mingw32 + a fetched SDL2); the SAME preset works from an MSYS2 MINGW32 prompt, where pacman's SDL2 answers instead. BUILD_STATIC links every package into the exe — no Core.dll/Engine.dll, and appGetDllHandle resolves through the internal registry, not LoadLibrary. Renderers are NOpenGL (desktop GL via opengl32) + NOpenGLES (GLES2 — needs ANGLE's libEGL.dll/libGLESv2.dll beside the exe) + SoftDrv + NullDrv, the last two CPU-only so it still verifies headless under wine+Xvfb. Builds in build-windows/. [ufront 2.33, renderers 2.34]",
+      "description": "32-bit Windows build. Cross-compiles from Linux via the toolchain file (i686-w64-mingw32 + a fetched SDL2); the same preset works from an MSYS2 MINGW32 prompt, where pacman's SDL2 answers instead. BUILD_STATIC links every package into the exe — no Core.dll/Engine.dll, and appGetDllHandle resolves through the internal registry, not LoadLibrary. Renderers are NOpenGL (desktop GL via opengl32) + NOpenGLES (GLES2 — needs ANGLE's libEGL.dll/libGLESv2.dll beside the exe) + SoftDrv + NullDrv, the last two CPU-only so it still verifies headless under wine+Xvfb. Builds in build-windows/.",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/../build-windows",
       "toolchainFile": "${sourceDir}/cmake/toolchain-mingw-w64.cmake",

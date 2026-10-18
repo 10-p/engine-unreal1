@@ -1,15 +1,14 @@
 //=============================================================================
-// U64Game -- ufront 2.84: the script VM checks for Unreal 1's 64-bit (LP64) port (engine-ut99's U64Mutator,
-// for v200: no mutators, so a game type runs them).
+// U64Game -- the script VM checks for Unreal 1's 64-bit (LP64) port, run by a game type (v200 has no mutators).
 //
 //     ./Unreal.bin "DmDeck16?game=U64Test.U64Game" -server        then read the log:
 //     U64 PASS <case> / U64 FAIL <case>, then U64 DONE passed=<n> failed=<n>.
 //     ... "?game=U64Test.U64Game?bench=9000000"                  also times the object-index cost (U64 BENCH).
 //
 // Compiled by the 32-bit `Unreal.bin -MAKE`; every case must pass on the 32-bit build first (the control), then
-// on 64-bit. The cases are what 2.84 changed: script object references are 4-byte object indices; a None
-// context zero-fills with the compiler's (32-bit) size, which the VM must widen; and -- v200 only -- a call lays
-// parameters out from the linked properties, and a function's result offset follows the running layout.
+// on 64-bit. The cases cover what the 64-bit VM relies on: script object references are 4-byte object indices;
+// a None context zero-fills with the compiler's (32-bit) size, which the VM must widen; a call lays parameters
+// out from the linked properties; and a function's result offset follows the running layout.
 //=============================================================================
 class U64Game expands GameInfo;
 
@@ -38,7 +37,7 @@ function Actor AssignInsideThenSelf( Actor Nobody )
 	return self;				// ...must not clear the caller's `InstObj = <this>` afterwards.
 }
 
-// v200: CallFunction lays parameters out; these mix every size and alignment.
+// CallFunction lays the parameters out; these mix every size and alignment.
 function int MixParms( byte B1, Actor A1, int I1, Actor A2, string[16] S1, vector V1, byte B2 )
 {
 	if( B1==3 && A1==self && I1==77 && A2==Level && S1=="mix" && V1.X==1 && V1.Y==2 && V1.Z==3 && B2==9 )
@@ -122,7 +121,7 @@ function RunTests()
 	A = self;			A = Echo( Nobody.Owner );	Report( A == None, "none_ctx_nested_argument" );
 	A = self;			A = ReturnNone( Nobody );	Report( A == None, "none_ctx_return_value" );
 	InstObj = self;		InstObj = AssignInsideThenSelf( Nobody ); Report( InstObj == self, "none_ctx_callee_does_not_clear_caller" );
-	S = "abc";			S = NoGame.InstStr;			Report( S == "", "none_ctx_string_clears" );	// v200: a fixed string is zero-filled (v400 kept it)
+	S = "abc";			S = NoGame.InstStr;			Report( S == "", "none_ctx_string_clears" );	// a fixed string is zero-filled too
 	A = self;			A = Pawn(Nobody.Owner);		Report( A == None, "none_ctx_under_cast" );
 	A = Spawn( class'U64StateActor' ); A.SetOwner( self ); A.SetOwner( Nobody.Owner );
 	Report( A.Owner == None, "none_ctx_native_object_parameter" );
@@ -139,7 +138,7 @@ function RunTests()
 	R = Region;			R2 = Region;				Report( R == R2, "struct_compare_equal" );
 	R2.iLeaf++;										Report( R != R2, "struct_compare_differ" );
 
-	// v200: parameters where the callee's linked properties read them, and results at the running offset.
+	// Parameters where the callee's linked properties read them, and results at the running offset.
 	Report( MixParms( 3, self, 77, Level, "mix", vect(1,2,3), 9 ) == 1, "parms_mixed_layout" );
 	OutA = None;	OutI = 0;	OutB = 0;
 	OutParms( 4, OutA, OutI, OutB );
@@ -149,7 +148,7 @@ function RunTests()
 	Report( TB == 42 && N1 == 5 && N2 == 6 && N3 == 7, "parms_out_byte_keeps_neighbours" );
 	Report( RetAfterObjs( self, Level, 5 ) == Level && RetIntAfterObjs( self, Level, 5 ) == 5, "return_after_object_parms" );
 
-	// v200 hands most results back by pointer: a value made in an opcode's own scratch buffer must reach the
+	// The VM hands most results back by pointer: a value made in an opcode's own scratch buffer must reach the
 	// caller before that frame is gone, and a None-context struct is zero past its compiled (32-bit) size.
 	i = 258;	B = i;								Report( B == 2, "int_to_byte" );
 	F = 0;		F = Normal( vect(0,0,5) ).Z;		Report( F == 1, "struct_member_of_rvalue" );

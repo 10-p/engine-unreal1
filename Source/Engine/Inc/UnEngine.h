@@ -5,7 +5,7 @@
 	Revision history:
 		* Created by Tim Sweeney
 =============================================================================*/
-#pragma pack (push,4) /* ufront 2.84: the UnrealScript mirror contract (Win32 /Zp4) on every target -- see Core/Inc/UnObjBas.h */
+#pragma pack (push,4) /* 4-byte packing on every target: these classes mirror UnrealScript's layout */
 
 /*-----------------------------------------------------------------------------
 	Unreal engine.

@@ -25,8 +25,8 @@ Revision history:
 #include <fcntl.h>
 #include <sys/socket.h>
 #ifdef __EMSCRIPTEN__
-// ufront 2.6a (web port): glibc pulls these transitively, musl/Emscripten does not.
-// TcpLink.cpp uses fd_set/FD_*/select (<sys/select.h>) + timeval (<sys/time.h>).
+// Emscripten's musl headers do not pull these in transitively: TcpLink.cpp uses fd_set/FD_*/select
+// (<sys/select.h>) and timeval (<sys/time.h>).
 #include <sys/select.h>
 #include <sys/time.h>
 #endif

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# play.sh <run-tree> <device-switch> <url> <out-dir> [<console command>...] -- a scripted PLAYER session
-# (ufront 2.84: engine-ut99's 2.83 tool, for Unreal.bin). Bots and -NULLRENDERER exercise almost none of what a player reaches: the 64-bit alias-key
-# crash (65e2f5a), the SoftDrv lit palette (da98ddb) and the `shot` overrun (9d74a86) were all on player-only
-# paths. This boots <url> on an X display, presses keys bound to aliases (Fire, AltFire, movement, Jump),
-# turns two full circles (procedural and scripted textures only tick when seen), types each command into the
-# console with a screenshot after it, and ends with `exit`.
+# play.sh <run-tree> <device-switch> <url> <out-dir> [<console command>...] -- a scripted player session.
+# Bots and -NULLRENDERER exercise few of the paths a player reaches. This boots <url> on an X display, presses
+# keys bound to aliases (Fire, AltFire, movement, Jump), turns two full circles (procedural and scripted
+# textures only tick when seen), types each command into the console with a screenshot after it, and ends
+# with `exit`.
 #
 #   Xvfb :98 -screen 0 1920x1080x24 -nolisten tcp &          # no WM: xdotool drives XTEST input directly
 #                                                            # (another Xvfb: PLAY_DISPLAY=:<n>)
@@ -15,8 +14,8 @@
 # (unbuffered), named here with LOG= and copied to <out-dir>/engine.log; the game runs on a pty (`script -f`)
 # whose capture, <out-dir>/client.log, holds stderr -- where a sanitizer reports. Screenshots come from the X
 # root (xwd), not the game.
-# v200's console stays open after Return, so each command closes it again (without that, every second grave
-# closed it and the next command was typed into the game as keys).
+# v200's console stays open after Return, so each command closes it again (otherwise every second grave would
+# close it and the next command would be typed into the game as keys).
 set -u
 TREE=$1; SW=$2; URL=$3; OUT=$4; shift 4
 mkdir -p "$OUT"

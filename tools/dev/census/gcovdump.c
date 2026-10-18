@@ -1,6 +1,6 @@
-/* gcovdump.c -- census only (ufront 2.83; see BUILD.md "Coverage census"). Linked into a --coverage build so a
-   game stopped by a signal still writes its counters: Unreal 1 installs no signal handlers of its own (engine-ut99 2.83, 2.84 here), the test tools stop
-   games with SIGTERM, and GCC only dumps from an exit handler. A crash dumps too, then re-raises.
+/* gcovdump.c -- coverage-census helper. Linked into a --coverage build so a game stopped by a signal still
+   writes its counters: Unreal 1 installs no signal handlers of its own, the test tools stop games with SIGTERM,
+   and GCC only dumps from an exit handler. A crash dumps too, then re-raises.
      cc -c -O2 -fPIC tools/dev/census/gcovdump.c -o <dir>/gcovdump.o
      cmake --preset native64 -B ../build-native64-cov ... "-DCMAKE_EXE_LINKER_FLAGS=--coverage <dir>/gcovdump.o" */
 #include <signal.h>

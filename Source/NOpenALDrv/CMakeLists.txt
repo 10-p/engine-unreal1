@@ -2,22 +2,9 @@ project(NOpenALDrv C CXX)
 
 set(SRC_FILES "NOpenALDrv.cpp")
 
-# ufront 2.12 (web audio): on Emscripten, OpenAL is the engine-provided built-in (Web Audio-backed, core
-# 1.1 only — the driver compiles out EFX/HRTF under NOPENAL_WEB) linked via -lopenal. libxmp (the tracker
-# decoder for Unreal's .umx music) is NOT shipped by Emscripten, so fetch + build it as a static wasm
-# archive. libxmp is portable C (LANGUAGES C) -> cross-compiles cleanly under emcc. Depackers/ProWizard are
-# disabled (Unreal music is raw modules; depackers pull archive deps + bloat the wasm). NOTE: libxmp's
-# BUILD_STATIC option collides by name with the engine's own BUILD_STATIC ("single binary"); under libxmp's
-# capped policy (CMP0077 OLD) its option() would reset the inherited value and disable the static build
-# (-> its "both disabled" FATAL_ERROR), so we force the cache var for its configure and restore the
-# engine's afterward (see the save/restore around BUILD_STATIC below). UT99's NOpenALDrv carries the
-# identical recipe + fix.
-#
-# ufront 2.12 Task B (native audio parity): this box ships no system libxmp (-lxmp fails), so build it
-# from source via cmake on NATIVE Linux too (portable C -> compiles fine at -m32). OpenAL stays the
-# system libopenal on native (the parent's -lopenal); only the FetchContent'd xmp_static differs from web.
-# ufront 2.34 — Windows (MinGW) joins the from-source list for the same reason Linux did: there is no
-# system libxmp to link against. libxmp is portable C, so it cross-compiles unchanged.
+# libxmp (the tracker decoder for Unreal's .umx music) is fetched and built from source as a static library
+# on the web, Linux and MinGW, so no system libxmp is needed; it is portable C. Depackers and ProWizard are
+# disabled: Unreal music is raw modules.
 if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOMPILING))
   include(FetchContent)
   set(LIBXMP_SOURCE_DIR "" CACHE PATH "Local libxmp checkout. Empty => fetch from git.")
@@ -30,11 +17,10 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOM
     message(STATUS "libxmp: fetching ${LIBXMP_GIT_REPOSITORY}@${LIBXMP_GIT_TAG}")
     FetchContent_Declare(libxmp GIT_REPOSITORY "${LIBXMP_GIT_REPOSITORY}" GIT_TAG "${LIBXMP_GIT_TAG}" GIT_SHALLOW TRUE)
   endif()
-  # libxmp's BUILD_STATIC (its own option) collides with the engine's BUILD_STATIC. Save the engine's
-  # cached value, force ON for libxmp's configure, and RESTORE it after MakeAvailable (below) — otherwise
-  # the FORCE persists and poisons the engine on the next *reconfigure*: the top-level if(BUILD_STATIC)
-  # flips LIB_TYPE to STATIC (native build unexpectedly links --whole-archive/single-binary). libxmp runs
-  # under CMP0077 OLD, so the value must be in the cache before its option() (a normal variable won't take).
+  # libxmp's own BUILD_STATIC option shares its name with the engine's. libxmp runs under CMP0077 OLD, so the
+  # value must be in the cache before its option(): save the engine's cached value, force ON for libxmp's
+  # configure and restore it after MakeAvailable. Left forced, the next reconfigure would switch the engine's
+  # LIB_TYPE to STATIC (a single --whole-archive binary).
   set(_UFRONT_SAVED_BUILD_STATIC "$CACHE{BUILD_STATIC}")
   set(BUILD_STATIC ON  CACHE BOOL "" FORCE)   # libxmp static lib (restored after MakeAvailable)
   set(BUILD_SHARED OFF CACHE BOOL "" FORCE)
@@ -50,10 +36,11 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOM
   if(NOT TARGET xmp_static)
     message(FATAL_ERROR "libxmp: expected static target 'xmp_static' was not created.")
   endif()
-  # Web: Emscripten's built-in OpenAL. Native Linux: keep the parent's system -lopenal. Windows: the
-  # prebuilt OpenAL Soft import library the parent's OpenALMingw.cmake set. All three: fetched libxmp.
+  # OpenAL. Native Linux keeps the parent's OPENAL_LIBRARY: the fork's bundled libopenal.so.1 when
+  # UT_BUNDLED_OPENAL is ON (the default), else the system libopenal. MinGW keeps the prebuilt OpenAL Soft
+  # import library from OpenALMingw.cmake.
   if(EMSCRIPTEN)
-    # ufront 2.61: openal-soft, built by the parent (cmake/OpenALSoft.cmake) — was Emscripten's -lopenal.
+    # the openal-soft `OpenAL` target the parent builds with Source/cmake/OpenALSoft.cmake (EFX and HRTF included)
     set(OPENAL_LIBRARY OpenAL)
   endif()
   set(LIBXMP_LIBRARY xmp_static)

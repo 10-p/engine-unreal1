@@ -47,7 +47,7 @@ public:
 	UBOOL HasOption( const char* Test ) const;
 	const char* GetOption( const char* Match, const char* Default ) const;
 	void GetConfigOptions( const char* Section, const char* Filename=NULL );
-	// The WRITE counterpart of GetConfigOptions — v200 shipped only the read half. See UnURL.cpp.
+	// The write counterpart of GetConfigOptions: persists one of this URL's options into a config section.
 	void SaveURLConfig( const char* Section, const char* Item, const char* Filename=NULL ) const;
 	void AddOption( const char* Str );
 	void String( FString& Result, UBOOL FullyQualified=0 ) const;

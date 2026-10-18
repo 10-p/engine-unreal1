@@ -17,7 +17,7 @@
 #endif
 
 #ifdef __EMSCRIPTEN__
-#include <emscripten.h>  // ufront 2.12: EM_ASM for the return-to-launcher reload on normal exit (appRequestExit)
+#include <emscripten.h>  // EM_ASM for the return-to-launcher reload on a normal exit (appRequestExit)
 #endif
 
 #ifdef PLATFORM_WIN32
@@ -205,17 +205,10 @@ CORE_API void appRequestExit()
 #endif
 	GIsRequestingExit=1;
 #ifdef __EMSCRIPTEN__
-	// ufront 2.12 (web): a NORMAL exit (the Exit menu / `exit` console command / RELAUNCH route here; the
-	// crash path uses the error device's exit(1) + GIsCriticalError, NOT appRequestExit) returns the page
-	// to the launcher instead of leaving a dead canvas. Navigate to location.pathname, which strips any
-	// autostart query (?map=…) so the shared frontend shows the launcher (its autostart gate keys off
-	// location.search). Deferred via setTimeout(0) so it fires after the blocking ASYNCIFY main loop
-	// unwinds. Crashes never reach here, so their console/error stays on screen. Mirrors engine-ut2004.
-	// ufront 2.13.2: MAIN_THREAD_EM_ASM, not EM_ASM. Under -sPROXY_TO_PTHREAD this runs on the worker,
-	// where `window` does not exist and WorkerLocation is read-only — the guard below would simply skip
-	// and the page would sit on a dead canvas forever (the E2E caught exactly that: waitForURL timed out).
-	// MAIN_THREAD_EM_ASM runs the snippet on the browser main thread, which is the only one that can
-	// navigate. It is a plain EM_ASM on a non-threaded build, so both configurations keep working.
+	// A normal exit (the Exit menu, the `exit` command, RELAUNCH; a crash never comes here) returns the page to
+	// the launcher: navigate to location.pathname, which drops any autostart query (?map=...). Deferred with
+	// setTimeout(0) so it fires after the main loop unwinds. With threads the engine runs on a worker, which
+	// cannot navigate, so the snippet runs on the browser main thread.
 #ifdef __EMSCRIPTEN_PTHREADS__
 	MAIN_THREAD_EM_ASM({
 #else
@@ -378,10 +371,10 @@ void appOpenLog( const char* Fname )
 	FGlobalPlatform init/exit.
 -----------------------------------------------------------------------------*/
 
-// ufront: the command line (appSetCmdLine, below), here so that appInit can report a cut line.
+// The command line (appSetCmdLine, below), here so that appInit can report a cut line.
 static char* CmdLine=NULL;
 static char CmdLineBuf[4096] = "";
-static UBOOL GCmdLineCut = 0;	// ufront: a token did not fit; appInit says so once the log is up
+static UBOOL GCmdLineCut = 0;	// a token did not fit; appInit says so once the log is up
 
 void appInit()
 {
@@ -431,7 +424,7 @@ void appInit()
 	// Language.
 	if( GetConfigString( "Engine.Engine", "Language", Temp, ARRAY_COUNT(Temp) ) )
 		SetLanguage( Temp );
-	// ufront (the launcher's Language, G-4 of the UC2 port): say which language this run uses.
+	// Say which language this run uses.
 	debugf( NAME_Init, "Language: %s", GetLanguage() );
 	if( GCmdLineCut )
 		debugf( NAME_Warning, "The command line is longer than %i characters: the arguments after '%s' were dropped",
@@ -1096,12 +1089,8 @@ void FGlobalPlatform::WriteBinary( const void* Data, INT Length, EName Event )
 				fwrite( "\n", 1, 1, GLogFile );
 			}
 #ifdef __EMSCRIPTEN__
-			// Web build: mirror every (non-suppressed) log line to stdout so the browser
-			// console receives it (the host's Module.print forwards stdout -> console.log).
-			// UE1 otherwise logs only to the MEMFS Unreal.log; the ufront E2E harness reads
-			// engine milestones from the console, matching engine-ut2004. Same RF_Suppress
-			// filter as the file write above, so console == Unreal.log. The trailing '\n'
-			// flushes Emscripten's line-buffered stdout (one Module.print call per line).
+			// Mirror each log line (what Unreal.log gets) to stdout, which the host forwards to the browser console.
+			// The trailing '\n' flushes Emscripten's line-buffered stdout.
 			fputs( *EventName, stdout );
 			fputs( ": ", stdout );
 			fputs( (const char*)Data, stdout );
@@ -1245,25 +1234,15 @@ void VARARGS appErrorf( const char* Fmt, ... )
 
 CORE_API void VARARGS appUnwindf( const char* Fmt, ... )
 {
-	// ★★ ufront 2.38 — this used to begin `GIsCriticalError = 1;`, unconditionally, and NOTHING in the
-	// engine ever cleared it again. (Same bug, same fix, as engine-ut2004 2.37c and engine-ut99 2.38.)
-	//
-	// unguard calls this for EVERY exception through a guarded scope, and most are NOT fatal: appThrowf is
-	// how a failed load unwinds and the loaders catch it -- a recoverable "Failed to load 'X'". So the first
-	// missing package of a session latched the engine into permanent-critical-error mode.
-	//
-	// ⚠ UObject::~UObject reads the flag (UnObj.cpp:351) and, when set, skips its cleanup entirely: the
-	// object stays in the object table as a dangling pointer and its index never returns to the free list.
-	// Anything that walks the table afterwards reads freed memory.
-	//
-	// A genuinely fatal error does not rely on this -- appError() sets GIsCriticalError itself before it
-	// throws (see above in this file) -- so setting it here only ever mislabelled the recoverable case.
+	// Does not set GIsCriticalError: unguard calls this for every exception through a guarded scope, and most
+	// are recoverable (a failed load unwinds with appThrowf and the loaders catch it). With the flag set,
+	// UObject::~UObject skips its cleanup and leaves a dangling pointer in the object table. A fatal error
+	// goes through appError(), which sets the flag itself.
 
 	char TempStr[4096];
 	GET_VARARGS( TempStr, Fmt );
 
-	// History chain only for a REAL error: otherwise every recovered load failure in the session appends to
-	// GErrorHist forever and the eventual crash report is mostly noise from packages that loaded fine.
+	// History chain only for a critical error, so recovered load failures do not fill GErrorHist.
 	if( GIsCriticalError )
 	{
 		static INT Count=0;
@@ -1580,8 +1559,7 @@ CORE_API FGuid appCreateGuid()
 // (CmdLine, CmdLineBuf and GCmdLineCut are defined above appInit, which reports a cut line.)
 
 // Set command line from argc/argv.
-// ufront (as engine-uc2's launcher): a token that does not fit is dropped whole, with a warning in appInit; appStrncat
-// used to cut the line in the middle of a token, silently.
+// A token that does not fit is dropped whole, with the rest of the line; appInit warns about it.
 CORE_API void appSetCmdLine( INT Argc, const char** Argv )
 {
 	guard(appSetCmdLine);
@@ -1648,9 +1626,8 @@ CORE_API const char* appBaseDir()
 		if ( getcwd( BaseDir, sizeof(BaseDir) ) )
 			appStrncat( BaseDir, "/", sizeof(BaseDir) - 1 );
 #elif defined(__EMSCRIPTEN__)
-		// ufront 2.6b (web port): SDL_GetBasePath() returns "/" under Emscripten, but Unreal runs from its
-		// System/ dir (the host chdir's there before main). Use getcwd so config + the package-search Paths
-		// (../System, ../Maps, ...) resolve from /System, matching a native install.
+		// SDL_GetBasePath() returns "/" under Emscripten, but Unreal runs from its System/ dir (the host chdirs
+		// there before main). getcwd makes config and the package Paths (../System, ../Maps, ...) resolve from it.
 		if ( getcwd( BaseDir, sizeof(BaseDir) ) )
 			appStrncat( BaseDir, "/", sizeof(BaseDir) - 1 );
 #elif defined(PLATFORM_SDL)

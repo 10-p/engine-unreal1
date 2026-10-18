@@ -387,14 +387,8 @@ void FURL::GetConfigOptions( const char* Section, const char* Filename )
 }
 
 //
-// Persist ONE of this URL's options into a config section — the WRITE counterpart of GetConfigOptions.
-//
-// ★★ ufront 2.39d — v200 SHIPPED ONLY THE READ HALF. `UGameEngine::Init` pulls `[DefaultPlayer]` into
-// DefaultURL and nothing ever writes back, so a player who renamed themselves in game kept the name for
-// that session and lost it on the next launch — and the launcher, which reads the engine's own ini to
-// show the current name, could never see it at all. v400 has exactly this call and its `UpdateURL` uses
-// it (`SaveURLConfig(TEXT("DefaultPlayer"), *NewOption, TEXT("User"))`), so the same shape is provided
-// here and the two engines behave the same way.
+// Persist one of this URL's options into a config section: the write counterpart of GetConfigOptions.
+// `UGameEngine::Init` reads [DefaultPlayer] into DefaultURL; APlayerPawn::execUpdateURL writes an option back.
 //
 void FURL::SaveURLConfig( const char* Section, const char* Item, const char* Filename ) const
 {
@@ -409,9 +403,8 @@ void FURL::SaveURLConfig( const char* Section, const char* Item, const char* Fil
 		*Value++ = 0;
 		if( appStricmp( Temp, Item )==0 )
 		{
-			// ⚠ Filename NULL means the DEFAULT ini — FConfigCache::FindConfig substitutes DefaultIni,
-			// which on this engine is Unreal.ini. There is no User.ini to write to here, and the one a
-			// retail tree ships is never read.
+			// Filename NULL means the default ini (FConfigCache::FindConfig substitutes DefaultIni, Unreal.ini).
+			// This engine reads no User.ini.
 			debugf( NAME_Log, "[ufront/profile] persist [%s] %s=%s -> %s", Section, Temp, Value, Filename ? Filename : "the default ini" );
 			SetConfigString( Section, Temp, Value, Filename );
 		}

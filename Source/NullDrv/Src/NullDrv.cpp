@@ -1,6 +1,6 @@
 /*=============================================================================
 	NullDrv.cpp: Null (GPU-free) render device.
-	ufront: a no-op URenderDevice — selected via -NULLRENDERER for a headless run (no WebGL context).
+	A no-op URenderDevice, selected via -NULLRENDERER for a headless run (no GL context).
 =============================================================================*/
 
 #include "NullDrvPrivate.h"
@@ -29,8 +29,8 @@ UBOOL UNullRenderDevice::Init( UViewport* InViewport )
 	FrameBuffered       = 0;
 	SupportsFogMaps     = 0;
 	SupportsDistanceFog = 0;
-	// No GL context / no surface setup here: the NSDL viewport (OpenWindow) already picked the software
-	// SDL_Texture surface because the device name lacks "OPENGL". We draw nothing.
+	// No GL context or surface setup here: the NSDL viewport (OpenWindow) opened no GL context because the
+	// device name lacks "OPENGL". We draw nothing.
 	return 1;
 	unguardSlow;
 }

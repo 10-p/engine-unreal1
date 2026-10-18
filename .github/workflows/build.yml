@@ -1,14 +1,10 @@
 name: build
 
-# ufront 2.34 — CI for the engine build matrix.
+# Builds the Linux, Windows and web targets on every push and pull request and uploads the binaries as
+# workflow artifacts; a push to main also replaces the rolling "latest" release (the `latest` job).
 #
-# Scope, decided with the owner: build on EVERY push and pull request and upload the binaries as workflow
-# artifacts. No GitHub Releases — the artifacts on the run page are the deliverable.
-#
-# What this does NOT do: run the game. The web E2E suite needs a GPU (it is guarded by the monorepo's
-# tools/e2e-gpu-guard.mjs) and a hosted runner has none, so CI proves every target still BUILDS and that
-# the Windows exe is self-contained. Rendering stays a human check on the owner's box, which is where the
-# screenshots in the 2.34 write-up come from.
+# It does not run the game: a hosted runner has no GPU. It checks that every target builds, that the Linux
+# build is one engine binary and that the Windows exe imports only system DLLs.
 
 on:
   push:
@@ -22,21 +18,16 @@ jobs:
   linux:
     name: linux (32-bit, one static binary)
     runs-on: ubuntu-24.04
-    # ⚠ A CONTAINER, not the bare runner. The runner image preinstalls a large set of amd64 -dev packages,
-    # and `libsdl2-dev:i386` then cannot be installed at all: it depends on libglib2.0-dev:i386, whose
-    # libglib2.0-dev-bin is Multi-Arch: foreign and so cannot be co-installed for two architectures. apt
-    # ends in "held broken packages". A stock ubuntu:24.04 has none of that preinstalled, so multiarch
-    # resolves normally — and it is the same distro SDL2/OpenAL the local `native` build links, which is
-    # the whole point of that preset.
+    # A container, not the bare runner: the runner image's preinstalled amd64 -dev packages make
+    # `libsdl2-dev:i386` uninstallable (its libglib2.0-dev-bin is Multi-Arch: foreign), and a stock
+    # ubuntu:24.04 resolves the i386 packages normally.
     container: ubuntu:24.04
-    # ⚠ A container job defaults to `sh -e`, not bash — GitHub only picks bash on the bare runner image.
-    # dash has no `set -o pipefail`, so a step that opens with `set -euo pipefail` dies on line 1 with a
-    # bare "exit code 2" and no message about the shell. Pin it.
+    # A container job runs steps with `sh` (dash), which has no `set -o pipefail`; use bash.
     defaults:
       run:
         shell: bash
     steps:
-      # The image is bare: even git has to be installed before checkout can use it.
+      # The image has no git, and checkout needs it.
       - name: Base tools
         run: |
           apt-get update
@@ -53,8 +44,8 @@ jobs:
           apt-get install -y --no-install-recommends \
             gcc-multilib g++-multilib libsdl2-dev:i386 libopenal-dev:i386
 
-      # FetchContent clones into the build dir, so cache that rather than a home directory. Keyed on the
-      # files that decide WHAT is fetched — a pin bump invalidates it, an unrelated source edit does not.
+      # FetchContent clones into the build directory, so that is what is cached, keyed on the files that
+      # decide what is fetched.
       - name: Cache fetched dependencies
         uses: actions/cache@v4
         with:
@@ -72,8 +63,8 @@ jobs:
       - name: Check it really is one binary
         run: |
           test -x build-native/Unreal/Unreal.bin
-          # BUILD_STATIC means no engine packages beside the executable. System libraries (SDL2, OpenAL,
-          # libGL, libc) stay dynamic — "single binary" is about the ENGINE, not about static libc.
+          # BUILD_STATIC: no engine package .so beside the executable. System libraries (SDL2, libGL, libc)
+          # and the bundled libopenal.so.1 stay dynamic.
           if ls build-native/*/*.so >/dev/null 2>&1; then
             echo "::error::engine .so modules were produced — BUILD_STATIC is not in effect"; exit 1
           fi
@@ -83,16 +74,8 @@ jobs:
           name: unreal1-linux
           path: build-native/Unreal/Unreal.bin
           if-no-files-found: error
-          # ⚠ RETENTION IS LOAD-BEARING, not tidiness. On 2026-08-27 every job across the three
-          # engine repos built and passed its own assertions and the runs were still RED, because
-          # `upload-artifact` failed with "Artifact storage quota has been hit": the default
-          # retention is 90 days and nothing ever set it, so 145 artifacts / 2.13 GB had piled up
-          # that would never expire. ut2004 was given 7 days that day; THESE TWO REPOSITORIES WERE
-          # NOT, which is why the note there says "three engine repos" while only one of them had
-          # the fix. 7 days is ~13x less standing storage at the same commit rate.
-          #
-          # ★ AND THE NEWEST BUILD NO LONGER GOES WITH IT — see the `latest` job at the end of this
-          # file. That is the whole reason a short age here is safe.
+          # A short retention keeps the artifacts under the storage quota (a full quota fails the upload);
+          # the newest build of main stays downloadable from the `latest` release.
           retention-days: 7
 
   windows:
@@ -120,17 +103,16 @@ jobs:
         run: cmake --build --preset windows -j$(nproc)
         working-directory: Source
 
-      # ★ The check that matters for a "drop it somewhere and run it" binary. Without -static-libgcc /
-      # -static-libstdc++ the exe imports libgcc_s_dw2-1.dll and libstdc++-6.dll and runs ONLY on the
-      # machine that built it — and nothing else in the build fails when that happens.
+      # Without -static-libgcc/-static-libstdc++ the exe would import libgcc_s_dw2-1.dll and libstdc++-6.dll
+      # and run only where the toolchain is installed; nothing else in the build would fail.
       - name: Assert the exe imports nothing but system DLLs
         run: |
           set -euo pipefail
           imports=$(i686-w64-mingw32-objdump -p build-windows/Unreal/Unreal.exe \
                     | sed -n 's/^\tDLL Name: //p' | sort -u)
           echo "$imports"
-          # OpenAL32.dll is deliberate: OpenAL Soft is the one library this build loads rather than links
-          # (see Source/cmake/OpenALMingw.cmake), and the build copies it next to the exe.
+          # OpenAL32.dll is expected: OpenAL Soft is the one library the Windows build ships as a DLL
+          # (Source/cmake/OpenALMingw.cmake), and the build copies it next to the exe.
           bad=$(echo "$imports" | grep -viE '^(ADVAPI32|GDI32|IMM32|KERNEL32|msvcrt|ole32|OLEAUT32|OPENGL32|OpenAL32|SETUPAPI|SHELL32|USER32|VERSION|WINMM|WS2_32)\.dll$' || true)
           if [ -n "$bad" ]; then echo "::error::non-system DLL imports: $bad"; exit 1; fi
           test -f build-windows/Unreal/OpenAL32.dll
@@ -142,16 +124,8 @@ jobs:
             build-windows/Unreal/Unreal.exe
             build-windows/Unreal/OpenAL32.dll
           if-no-files-found: error
-          # ⚠ RETENTION IS LOAD-BEARING, not tidiness. On 2026-08-27 every job across the three
-          # engine repos built and passed its own assertions and the runs were still RED, because
-          # `upload-artifact` failed with "Artifact storage quota has been hit": the default
-          # retention is 90 days and nothing ever set it, so 145 artifacts / 2.13 GB had piled up
-          # that would never expire. ut2004 was given 7 days that day; THESE TWO REPOSITORIES WERE
-          # NOT, which is why the note there says "three engine repos" while only one of them had
-          # the fix. 7 days is ~13x less standing storage at the same commit rate.
-          #
-          # ★ AND THE NEWEST BUILD NO LONGER GOES WITH IT — see the `latest` job at the end of this
-          # file. That is the whole reason a short age here is safe.
+          # A short retention keeps the artifacts under the storage quota (a full quota fails the upload);
+          # the newest build of main stays downloadable from the `latest` release.
           retention-days: 7
 
   web:
@@ -160,17 +134,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ⚠ emsdk must be on PATH BEFORE cmake configures: emcc is probed at configure time and
-      # `cmake --build` never re-probes. The preset's toolchain file also reads $EMSDK.
+      # emsdk is set up before the configure step: emcc is probed at configure time, and the preset's
+      # toolchain file is found through $EMSDK.
       - uses: mymindstorm/setup-emsdk@v14
         with:
           version: 5.0.7
           actions-cache-folder: emsdk-cache
 
-      # ★ A fresh emsdk has an EMPTY ports cache, and the SDL2 port's headers only land in the sysroot
-      # once the port has been built. Without this the very first compile fails with
-      # "'SDL2/SDL.h' file not found" — which never happens on a developer box, where some earlier build
-      # warmed the cache. Reproduced locally with EM_CACHE pointed at an empty directory.
+      # A fresh emsdk has an empty ports cache, and the SDL2 port's headers reach the sysroot only once the
+      # port is built; without this the first compile fails with "'SDL2/SDL.h' file not found".
       - name: Build the SDL2 port into the emsdk sysroot
         run: embuilder build sdl2
 
@@ -180,8 +152,8 @@ jobs:
           path: build-wasm/_deps
           key: deps-wasm-${{ hashFiles('Source/CMakeLists.txt', 'Source/*/CMakeLists.txt', 'Source/cmake/*.cmake') }}
 
-      # No game assets are needed: this engine's web link preloads only the TRACKED web config
-      # (Engine/Config/web), by design — the asset tree streams in at runtime via FetchFS.
+      # No game assets are needed: the web link preloads only Engine/Config/web/Default.ini, and the host
+      # serves the game files at run time.
       - name: Configure
         run: cmake --preset wasm
         working-directory: Source
@@ -190,8 +162,7 @@ jobs:
         run: cmake --build --preset wasm -j$(nproc)
         working-directory: Source
 
-      # meta.json carries the gitSha captured at CONFIGURE time. Assert it matches the commit actually
-      # built, or provenance silently describes a different tree (a real near-miss in 2.13).
+      # meta.json's gitSha must be the commit that was built.
       - name: Check artifact provenance
         run: |
           set -euo pipefail
@@ -204,42 +175,18 @@ jobs:
           name: unreal1-web
           path: build-wasm/SDLLaunch/
           if-no-files-found: error
-          # ⚠ RETENTION IS LOAD-BEARING, not tidiness. On 2026-08-27 every job across the three
-          # engine repos built and passed its own assertions and the runs were still RED, because
-          # `upload-artifact` failed with "Artifact storage quota has been hit": the default
-          # retention is 90 days and nothing ever set it, so 145 artifacts / 2.13 GB had piled up
-          # that would never expire. ut2004 was given 7 days that day; THESE TWO REPOSITORIES WERE
-          # NOT, which is why the note there says "three engine repos" while only one of them had
-          # the fix. 7 days is ~13x less standing storage at the same commit rate.
-          #
-          # ★ AND THE NEWEST BUILD NO LONGER GOES WITH IT — see the `latest` job at the end of this
-          # file. That is the whole reason a short age here is safe.
+          # A short retention keeps the artifacts under the storage quota (a full quota fails the upload);
+          # the newest build of main stays downloadable from the `latest` release.
           retention-days: 7
 
   # ---------------------------------------------------------------------------
-  # THE ROLLING "latest" RELEASE — the answer to "the 7-day age is fine, but it
-  # must not take the newest build with it" (owner, 2026-09-12).
+  # The rolling "latest" release: the newest build of main as release assets, which do not expire
+  # (artifacts expire by age alone, so a repository without pushes would have nothing left to download).
   #
-  # ★ IT IS A RELEASE AND NOT A LONGER RETENTION BECAUSE ARTIFACT RETENTION CANNOT
-  # EXPRESS THIS. GitHub expires artifacts purely by age; there is no "keep the
-  # latest" flag, and raising retention-days only moves the cliff — a repository
-  # nobody pushes to for ninety days still ends up with nothing to download, which
-  # is precisely the case where you most want the last good build. RELEASE ASSETS
-  # DO NOT EXPIRE. So per-push artifacts keep their deliberately short 7 days (see
-  # the retention note on every upload above — that limit is what stopped the
-  # quota from turning whole runs red), and the newest build of a tracked branch
-  # is additionally copied here, where it stays until the next one replaces it.
+  # Delete-then-create: `gh release edit --target` does not move a published release's tag, and a new
+  # release carries only the assets this run produced.
   #
-  # ⚠ DELETE-THEN-CREATE, ON PURPOSE. A rolling tag has to MOVE, and `gh release
-  # edit --target` does not move a published release's tag. Recreating it also
-  # drops assets that are no longer produced, so a retired build arm cannot leave
-  # a stale binary sitting in "latest" looking current. The cost is a few seconds
-  # where the tag does not exist; the alternative is a release that silently
-  # describes a commit it no longer contains.
-  #
-  # ⚠ `permissions: contents: write` IS LOAD-BEARING. This repository's default
-  # workflow token is READ-ONLY, so without this key every step below succeeds and
-  # the final one fails with HTTP 403.
+  # `permissions: contents: write` is required: the repository's default workflow token is read-only.
   latest:
     name: rolling "latest" release
     needs: [linux, windows, web]
@@ -266,8 +213,7 @@ jobs:
             ( cd "$d" && zip -qr "$GITHUB_WORKSPACE/out/$name.zip" . )
             n=$((n + 1))
           done
-          # ⚠ A release that publishes NOTHING is worse than a failed job: it looks
-          # like a successful build whose downloads have quietly gone missing.
+          # An empty release would look like a good build with missing downloads: fail instead.
           [ "$n" -gt 0 ] || { echo "::error::no artifacts were downloaded — nothing to publish"; exit 1; }
           echo "packed $n build(s):"
           ls -la out/
@@ -277,8 +223,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # One rolling tag per tracked branch, so branches cannot overwrite each
-          # other's "latest". The default branch keeps the bare name.
+          # One rolling tag per branch: `latest` for the default branch, `latest-<branch>` otherwise.
           if [ "$GITHUB_REF_NAME" = "${{ github.event.repository.default_branch }}" ]; then
             tag="latest"
           else

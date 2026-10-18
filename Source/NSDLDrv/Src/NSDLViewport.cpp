@@ -5,21 +5,19 @@
 #include "UnRender.h"
 
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-// ufront 2.13.2 — the worker creates and presents its own WebGL context (hatch (c)); see ResizeViewport.
+// The worker creates and presents its own WebGL context; see OpenWindow and Unlock.
 #include <stdint.h>
 #include <emscripten/html5.h>
 #include <emscripten/html5_webgl.h>
 
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
 #include <math.h>
-// ufront 2.71 (pixel-perfect canvas): the canvas backing store must be the canvas's DEVICE-pixel size.
-// SDL2's Emscripten backend measures and sets the CSS size of #canvas (its pixel_ratio is pinned to 1
-// without SDL_WINDOW_ALLOW_HIGHDPI) and reports that in WINDOWEVENT_RESIZED, so on a 125% desktop the
-// game rendered 4096x1728 on a 5120x2160 panel and the browser resampled it: every glyph blurred
-// (measured: web glyph widths exactly 1.25x native). Passing the device size to SDL_SetWindowSize
-// makes SDL set the backing store to exactly that (CSS untouched), report it from SDL_GetWindowSize
-// and rescale menu mouse coordinates into it by itself. Both calls are sync-proxied to the main
-// thread; SDL already makes the first from this thread on every mouse move. Returns false when the
+// The canvas backing store must be the canvas's device-pixel size, or the browser resamples the picture and
+// blurs it on a scaled display. SDL2's Emscripten backend measures and sets the CSS size of #canvas (its
+// pixel_ratio is 1 without SDL_WINDOW_ALLOW_HIGHDPI) and reports that in WINDOWEVENT_RESIZED. Passing the
+// device size to SDL_SetWindowSize makes SDL set the backing store to exactly that (CSS untouched), report it
+// from SDL_GetWindowSize and rescale menu mouse coordinates into it by itself. Both calls are sync-proxied to
+// the main thread; SDL already makes the first from this thread on every mouse move. Returns false when the
 // box reads 0x0 (display:none) so the caller keeps SDL's own numbers.
 static UBOOL ufrontCanvasDevicePixelSize( INT& OutW, INT& OutH )
 {
@@ -354,20 +352,17 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		}
 		else
 		{
-			// ufront 2.12 (dynamic resolution): resizable so the OS window / browser canvas can be
-			// resized and the viewport follows. The WINDOWEVENT_RESIZED handler in TickInput() syncs the
-			// engine viewport + framebuffer; on the web SDL2's Emscripten backend maps the window to the
-			// CSS 100vw/100vh canvas and emits those events automatically. Mirrors engine-ut2004 SDL2Drv.
+			// Resizable, so the window can be resized and the viewport follows: the WINDOWEVENT_RESIZED
+			// handler in TickInput() syncs the engine viewport and framebuffer.
 			Flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
 		}
 		if( DoOpenGL )
 		{
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-			// ufront 2.13.2 hatch (c): do NOT ask SDL for a GL window. SDL_WINDOW_OPENGL makes SDL bring
-			// up its EGL path, Emscripten proxies EGL to the browser main thread, and the canvas has been
-			// transferred to this worker — so the main thread's getContext() throws InvalidStateError
-			// (Emscripten #24792). We create the WebGL context ourselves further down; SDL is here for the
-			// window and input only, which need no GL flag.
+			// Do not ask SDL for a GL window. SDL_WINDOW_OPENGL makes SDL bring up its EGL path, Emscripten
+			// proxies EGL to the browser main thread, and the canvas has been transferred to this worker, so
+			// the main thread's getContext() throws InvalidStateError. The WebGL context is created further
+			// down; SDL is here for the window and input only, which need no GL flag.
 #else
 			Flags |= SDL_WINDOW_OPENGL;
 #endif
@@ -436,21 +431,18 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 			if( !GLCtx )
 			{
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-				// ufront 2.13.2 — hatch (c): create the WebGL context DIRECTLY, not through SDL2.
+				// Create the WebGL context directly, not through SDL2. SDL2's Emscripten GL path is all EGL
+				// (SDL_EGL_CreateContext_impl), and Emscripten's EGL emulation always proxies to the browser
+				// main thread. Under -sPROXY_TO_PTHREAD the canvas has been transferred to this worker, so the
+				// main thread can no longer getContext() on it and SDL_GL_CreateContext fails. This context
+				// belongs to the worker, so GL calls are not proxied.
 				//
-				// SDL2's emscripten GL path is 100% EGL (SDL_EGL_CreateContext_impl), and Emscripten's EGL
-				// emulation always proxies to the browser main thread. Under -sPROXY_TO_PTHREAD the canvas
-				// has been transferred to this worker, so the main thread can no longer getContext() on it
-				// and SDL_GL_CreateContext fails with InvalidStateError (Emscripten #24792). The 2.13.0
-				// spike measured all three escape hatches; this is the one that works, and it renders on
-				// the worker's OWN context — no per-GL-call proxying, so no per-call penalty.
-				//
-				// SDL2 still owns the window and ALL input; the only SDL call replaced is context creation.
+				// SDL2 still owns the window and all input; the only SDL call replaced is context creation.
 				EmscriptenWebGLContextAttributes Attrs;
 				emscripten_webgl_init_context_attributes( &Attrs );
-				// ufront 2.92: WebGL 2 (majorVersion 2), on which NOpenGLESDrv's GLES2 calls run unchanged, for its
-				// antialiasing (msaa-backbuffer.js needs multisampled renderbuffers); benchmarked against WebGL 1
-				// at no cost (docs: steps/2.92). -WEBGL=1 asks for WebGL 1, and a browser without WebGL 2 gets it.
+				// WebGL 2 (majorVersion 2), on which NOpenGLESDrv's GLES2 calls run unchanged, for its
+				// antialiasing (msaa-backbuffer.js needs multisampled renderbuffers). -WEBGL=1 asks for WebGL 1,
+				// and a browser without WebGL 2 gets it.
 				INT WebGLMajor = 2;
 				if( Parse( appCmdLine(), "WEBGL=", WebGLMajor ) && WebGLMajor != 1 )
 					WebGLMajor = 2;
@@ -460,7 +452,7 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				Attrs.depth                     = 1;
 				Attrs.stencil                   = 1;
 				Attrs.antialias                 = 0;
-				// explicitSwapControl + renderViaOffscreenBackBuffer are what make the frame OURS to
+				// explicitSwapControl + renderViaOffscreenBackBuffer are what make the frame ours to
 				// present: without them the browser composites at its own cadence and commit_frame() is
 				// meaningless on a worker.
 				Attrs.explicitSwapControl       = 1;
@@ -500,19 +492,11 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
 		else
 		{
-			// ufront 2.13.2: SDL's Emscripten renderer is GLES-backed, so SDL_CreateRenderer goes through
-			// eglCreateContext, which Emscripten proxies to the browser main thread — where the canvas has
-			// been transferred to this worker and getContext() throws. The proxied call never completes and
-			// THE ENGINE THREAD BLOCKS FOREVER: measured, the engine stopped logging right after "Opened
-			// viewport" and stopped servicing even a posted `exit` (Null renderer, DM+bots).
-			//
-			// A null device draws nothing, so having no SDL renderer costs it nothing. SoftDrv is a
-			// different matter: it blits its framebuffer through this renderer, so on a threaded build it
-			// currently has NO PRESENTATION PATH. That is a known 2.13.2 gap, not a silent one — it needs
-			// its own worker-side blit (an OffscreenCanvas 2D context, or a textured quad on the WebGL
-			// context we already create).
-			// SoftDrv renders into our own buffer; Unlock blits it to the canvas. A null device simply
-			// never locks, so it pays nothing for this.
+			// No SDL renderer here: SDL's Emscripten renderer is GLES-backed, so SDL_CreateRenderer goes through
+			// eglCreateContext, which Emscripten proxies to the browser main thread, where the canvas has been
+			// transferred to this worker and getContext() throws; the proxied call never completes and blocks
+			// the engine thread. SoftDrv renders into SoftFB instead, and Unlock blits it to the canvas through
+			// a 2D context. A null device never locks, so it pays nothing for this.
 			SDLTexFormat = SDL_PIXELFORMAT_ARGB8888;
 			ColorBytes   = SDL_BYTESPERPIXEL( SDLTexFormat );
 			Caps         = 0;
@@ -566,15 +550,13 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 			DisplaySize.h = DisplayMode.h;
 		}
 
-		// ufront 2.12 (dynamic resolution): adopt the real drawable size instead of the ini size. On the
-		// web SDL2's Emscripten backend maps the window to the CSS-sized (100vw/100vh) canvas, so this is
-		// the browser viewport; natively it is the created size. Match the drawing buffer (canvas
-		// width/height) + software framebuffer to it; WINDOWEVENT_RESIZED (TickInput) keeps it in sync.
+		// Adopt the window's real size instead of the ini size, and match the drawing buffer and the software
+		// framebuffer to it; WINDOWEVENT_RESIZED (TickInput) keeps it in sync.
 		int RealW = 0, RealH = 0;
 		SDL_GetWindowSize( hWnd, &RealW, &RealH );
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-		// ufront 2.71: the canvas's device-pixel size, UNALIGNED — Align rounds up, and any width other
-		// than the box's own is a fractional rescale in the browser, i.e. the blur this exists to remove.
+		// The canvas's device-pixel size, unaligned: Align rounds up, and any width other than the box's own
+		// is a fractional rescale in the browser, the blur this exists to remove.
 		INT DevW = 0, DevH = 0;
 		if( ufrontCanvasDevicePixelSize( DevW, DevH ) )
 		{
@@ -604,25 +586,10 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 	SizeY = NewY;
 
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-	// ufront 2.19f: grow the software framebuffer to the size we ACTUALLY adopted.
-	//
-	// SoftFB is allocated further up from the ini resolution, and the dynamic-resolution block above
-	// then REPLACES NewX/NewY with the real canvas size — but only ever re-created the SDL texture,
-	// never this buffer, despite its own comment promising to match "the software framebuffer" to the
-	// drawable size. So on any browser window larger than the ini resolution, SoftDrv rasterised
-	// SizeX*SizeY*ColorBytes bytes into a buffer sized for something smaller: a straight heap overrun,
-	// every frame.
-	//
-	// Measured before the fix, on all three UE1 engines: every viewport whose framebuffer exceeded
-	// 4 MB died (1600x720, 1280x1080, 1600x900, 1920x1080) and every one under it survived (1024x768,
-	// 1280x720) — 4 MB being where the allocator stops handing out room the overrun could quietly
-	// scribble on. It surfaced as "memory access out of bounds", "table index is out of bounds" or
-	// "null function" depending on what the write happened to land on, and it did NOT reproduce in the
-	// -O2 build, whose different heap layout absorbed it. Corruption, not a bounds check.
-	//
-	// Sized here rather than at the allocation site because this is the one place SizeX/SizeY are
-	// final, so every path that can change them — first open, the adopt-drawable-size block, and the
-	// WINDOWEVENT_RESIZED re-entry from TickInput — is covered by construction.
+	// Grow the software framebuffer to the size adopted above: SoftFB is allocated from the requested size
+	// before the drawable-size block replaces NewX/NewY, and SoftDrv writes SizeX*SizeY*ColorBytes bytes into it.
+	// Sized here because this is the one place SizeX/SizeY are final, so every path that can change them (first
+	// open, the drawable-size block, the WINDOWEVENT_RESIZED re-entry from TickInput) is covered.
 	if( SoftFB )
 	{
 		const INT Needed = SizeX * SizeY * ColorBytes;
@@ -675,8 +642,8 @@ void UNSDLViewport::CloseWindow()
 		if( GLCtx )
 		{
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-			// GLCtx is an Emscripten WebGL handle here, not an SDL context (hatch (c)) — SDL never made it
-			// and must not be asked to destroy it.
+			// GLCtx is an Emscripten WebGL handle here, not an SDL context: SDL never made it and must not be
+			// asked to destroy it.
 			emscripten_webgl_destroy_context( (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE)(intptr_t)GLCtx );
 #else
 			SDL_GL_DeleteContext( GLCtx );
@@ -760,8 +727,8 @@ void UNSDLViewport::Unlock( UBOOL Blit )
 		{
 			// Flip OpenGL buffers.
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-			// The context was created with explicitSwapControl, so THIS is the present (2.13.2 hatch (c)).
-			// SDL_GL_SwapWindow would go through the EGL emulation that cannot see our worker context.
+			// The context was created with explicitSwapControl, so this is the present. SDL_GL_SwapWindow
+			// would go through the EGL emulation, which cannot see the worker's context.
 			emscripten_webgl_commit_frame();
 #else
 			SDL_GL_SwapWindow( hWnd );
@@ -976,10 +943,9 @@ void UNSDLViewport::SetMouseCapture( UBOOL Capture, UBOOL Clip, UBOOL OnlyFocus 
 		if( hWnd != SDL_GetMouseFocus() )
 			return;
 #else
-	// ufront 2.12 (web mouse): skip the focus gate on the web. The canvas fills the window and SDL2's
-	// Emscripten port defers the pointer lock to the next click anyway, so gating the menu->game capture
-	// transition on SDL_GetMouseFocus() (which can be stale on the transition frame) would drop the lock
-	// intent. UT2004's SetMouseCapture is likewise focus-agnostic.
+	// No focus gate: the canvas fills the window and SDL2's Emscripten port defers the pointer lock to the
+	// next click anyway, so gating the menu->game capture transition on SDL_GetMouseFocus() (which can be
+	// stale on the transition frame) would drop the lock request.
 	(void)OnlyFocus;
 #endif
 
@@ -1035,14 +1001,14 @@ void UNSDLViewport::UpdatePadAxis( INT Axis, INT NewValue )
 	JoyAxis[Axis] = NewValue;
 }
 
-// H-3: the keys a pad's held-at-connect press gave the game. SDL never reports their release (it never saw them go
-// down), so they are a tap: released at the next tick, as engine-uc2's SDL2Pads.cpp does.
+// The keys a pad's held-at-connect press gave the game. SDL never reports their release (it never saw them go
+// down), so they are a tap: released at the next tick.
 static BYTE GHeldTap[32];
 static INT GHeldTapNum = 0;
 static INT GPadsOn = -1;	// UseJoystick as last seen (-1: not yet; the client's Init said it)
 
 //
-// ufront 2.91: nothing may stay held when the pad goes (removed, or UseJoystick off): every pad key is released (both
+// Nothing may stay held when the pad goes (removed, or UseJoystick off): every pad key is released (both
 // maps) and the axes the frame loop re-sends are zeroed.
 //
 void UNSDLViewport::ReleasePad()
@@ -1070,19 +1036,18 @@ UBOOL UNSDLViewport::TickInput()
 
 	SDL_Event Ev;
 	INT Tmp;
-	// ufront: DOUBLE. appSeconds() is not a small number: on the threaded web build it counts from the epoch
-	// (emscripten_get_now() is timeOrigin + now there, so that every worker agrees), natively from the boot. A FLOAT
-	// that size moves in steps of up to 128 s, so DeltaTime was 0 on nearly every frame and a held stick, which is
-	// scaled by it below, moved nothing. The first call has no previous time, and a long hitch is not one big step.
+	// DOUBLE: appSeconds() can be a large number (seconds since the epoch on some targets), and a FLOAT that size
+	// moves in steps of up to 128 s: DeltaTime would be 0 on nearly every frame, and a held stick, scaled by it
+	// below, would not move. The first call has no previous time, and a long hitch is not one big step.
 	const DOUBLE CurTime = appSeconds();
 	const FLOAT DeltaTime = InputUpdateTime > 0.0 ? (FLOAT)Clamp( CurTime - InputUpdateTime, 0.0, 0.25 ) : 0.f;
 	for( INT k = 0; k < GHeldTapNum; k++ )
 		CauseInputEvent( GHeldTap[k], IST_Release );
 	GHeldTapNum = 0;
 
-	// ufront 2.91: UseJoystick, every tick. The game's own joystick option (`set ini:Engine.Engine.ViewportManager
-	// UseJoystick ...`) sets it on this live client, so it takes effect at once: off closes the pad (keys released),
-	// back on opens the first one present (one connected while it was off sent its ADDED event then).
+	// UseJoystick, every tick. The game's own joystick option (`set ini:Engine.Engine.ViewportManager UseJoystick
+	// ...`) sets it on this live client, so it takes effect at once: off closes the pad (keys released), back on
+	// opens the first one present (a pad connected while it was off has already sent its ADDED event).
 	{
 		const INT On = Client->UseJoystick ? 1 : 0;
 		if( GPadsOn >= 0 && On != GPadsOn )
@@ -1147,15 +1112,16 @@ UBOOL UNSDLViewport::TickInput()
 					}
 				}
 				break;
-			// ufront (the UC2 port's pads, one pad here; as engine-ut99): hot-plug. A pad connected after start opens
-			// here (the first one; UseJoystick gates it, UNSDLClient::OpenPad), and the one in use closes when it goes.
+			// Hot-plug: a pad connected after start opens here (the first one; UseJoystick gates it,
+			// UNSDLClient::OpenPad), and the one in use closes when it goes.
 			case SDL_CONTROLLERDEVICEADDED:
 				{
 					DWORD Held = 0;
 					if( Client->OpenPad( Ev.cdevice.which, &Held ) && Held )
 					{
-						// H-3 (web): the press that made the browser list the pad is never reported by SDL; give it to the
-						// game now (W3C "standard" button order -> SDL's; the menus' map while a menu is up, as below).
+						// The press that made the browser list the pad (Held is set on the web only) is never
+						// reported by SDL; give it to the game now (W3C "standard" button order -> SDL's; the
+						// menus' map while a menu is up, as below).
 						static const INT W3CToSDL[17] =
 						{
 							SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_B, SDL_CONTROLLER_BUTTON_X, SDL_CONTROLLER_BUTTON_Y,
@@ -1211,7 +1177,7 @@ UBOOL UNSDLViewport::TickInput()
 				}
 				break;
 			case SDL_CONTROLLERAXISMOTION:
-				// ufront: the sticks and triggers are read from the pad's state every tick (below), not from these.
+				// The sticks and triggers are read from the pad's state every tick (below), not from these.
 				break;
 			case SDL_MOUSEMOTION:
 				if( !Client->FullscreenViewport && !SDL_GetRelativeMouseMode() )
@@ -1234,19 +1200,15 @@ UBOOL UNSDLViewport::TickInput()
 				}
 				break;
 			case SDL_WINDOWEVENT:
-				// ufront 2.12 (dynamic resolution): follow OS window / browser canvas resizes. SDL2's
-				// Emscripten backend fires this when the CSS 100vw/100vh canvas changes size (and once
-				// after creation, correcting the initial size); native window managers fire it on user
-				// resize. SetClientSize re-syncs the SDL window + software framebuffer + SizeX/SizeY; the
-				// GL render device re-issues glViewport from Viewport->SizeX/SizeY on the next frame. The
-				// no-op guard makes the SDL_SetWindowSize inside SetClientSize non-recursive. (engine-ut2004
-				// SDL2Drv parity.)
+				// Follow window resizes. SetClientSize re-syncs the SDL window, the software framebuffer and
+				// SizeX/SizeY; the GL render device re-issues glViewport from Viewport->SizeX/SizeY on the next
+				// frame. The no-op guard keeps the SDL_SetWindowSize inside SetClientSize from recursing.
 				if( ( Ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || Ev.window.event == SDL_WINDOWEVENT_RESIZED )
 					&& Ev.window.data1 > 0 && Ev.window.data2 > 0 )
 				{
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-					// ufront 2.71: SDL reports the CSS size and has just reset the backing store to it, so
-					// re-apply whenever ITS size differs from the device size, not only when ours does. The
+					// SDL reports the CSS size and has just reset the backing store to it, so re-apply
+					// whenever its size differs from the device size, not only when ours does. The
 					// echo SIZE_CHANGED from SetClientSize's SDL_SetWindowSize carries the device size and
 					// stays a no-op. Unaligned on purpose (see ufrontCanvasDevicePixelSize).
 					INT NewX = Ev.window.data1, NewY = Ev.window.data2;
@@ -1265,11 +1227,10 @@ UBOOL UNSDLViewport::TickInput()
 		}
 	}
 
-	// ufront: the sticks and triggers come from the pad's STATE every tick, not from SDL_CONTROLLERAXISMOTION. SDL's
-	// Emscripten joystick driver reports no axis values when a pad is opened, so SDL takes the first value an axis
-	// reports as its resting point and posts no event for it (SDL_PrivateJoystickAxis): the first push of a stick
-	// after the pad appeared was lost, and SDL then took the held stick for the centre. The state is always right
-	// (engine-uc2's SDL2Pads.cpp reads it the same way).
+	// The sticks and triggers come from the pad's state every tick, not from SDL_CONTROLLERAXISMOTION. A joystick
+	// driver that reports no axis values when a pad opens (SDL's Emscripten one) makes SDL take the first value an
+	// axis reports as its resting point and post no event for it (SDL_PrivateJoystickAxis), so the first push of a
+	// stick would be lost and a held stick taken for the centre. The state is always right.
 	if( SDL_GameController* GC = Client->GetController() )
 		for( INT a = 0; a < SDL_CONTROLLER_AXIS_MAX; a++ )
 			UpdatePadAxis( a, SDL_GameControllerGetAxis( GC, (SDL_GameControllerAxis)a ) );

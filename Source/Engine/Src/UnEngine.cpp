@@ -186,17 +186,8 @@ UBOOL UEngine::Exec( const char* Cmd, FOutputDevice* Out )
 	guard(UEngine::Exec);
 	const char* Str = Cmd;
 
-	// ufront 2.28: force the config cache out to the filesystem, on demand.
-	//
-	// WHY IT IS FIRST. Every other handler below gets the command before the engine's own block, so a
-	// subsystem could shadow this one; persistence is not something a render device may override. It is
-	// also the reason it is here in UEngine rather than in a game class: UEngine::Exec is the one point
-	// all four ufront engines reach from `ue_exec_command`.
-	//
-	// WHY IT IS NEEDED AT ALL on this engine: v200's UObject::SaveConfig only updates the in-memory
-	// cache, so config reached disk ONLY via FConfigCache::Exit() at shutdown — which a browser tab never
-	// performs. (SaveConfig now writes through as well; this stays as the explicit "persist now" the host
-	// calls before harvesting, and as the answer to a user pressing save.)
+	// FLUSHCONFIG: write the config cache to disk now (the host calls it before harvesting the ini). First, so
+	// no handler below can shadow it, and in UEngine because UEngine::Exec is what `ue_exec_command` reaches.
 	if( ParseCommand(&Str,"FLUSHCONFIG") )
 	{
 		UBOOL Ok = GConfigCache.SaveAllConfigs();

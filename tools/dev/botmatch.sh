@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# botmatch.sh -- a headless native bot match: a dedicated server and one client that joins it. Prints one summary
-# line. (ufront 2.84: engine-ut99's 2.83 oracle loop for v200 -- `Unreal.bin -SERVER`, no ucc, no query port.)
+# botmatch.sh -- a headless native bot match: a dedicated server (`Unreal.bin -server`) and one client that joins
+# it. Prints one summary line.
 #
 #   tools/dev/botmatch.sh <server-run-tree> <seconds> [<client-run-tree>] [<map>]
 #
-# Bots: a v200 server is bot-free unless the SERVER tree's Unreal.ini sets the game's globalconfig
+# Bots: a v200 server is bot-free unless the server tree's Unreal.ini sets the game's globalconfig
 # bMultiPlayerBots=True (and InitialBots=<n>) in the section of the class that declares them. The server port is
 # that ini's [URL] Port. The client may be another run tree, e.g. a 32-bit client joining a 64-bit server. Output
 # lands in <server-run-tree>/botmatch/.
 #
 # v200 writes its log only to a file (System/<exe>.log), so server and client from one tree would share it: each
-# gets its own with LOG=<file>. Traps this handles (all met in 2.83): `timeout xvfb-run ...` kills the wrapper and leaves the game running, so
-# the timeout is inside; the engine log is 4 KB block-buffered and stdbuf's preload library is 64-bit only, so
-# every game runs on a pty (`script -f`) and logs line by line at either width; the game is stopped by its own
-# command line, never by a regex over a map name (DM-Deck16][ is not a valid regex); a sanitizer report counts
-# as a crash marker (an ASan abort in the CLIENT otherwise looks like a player leaving).
+# gets its own with LOG=<file>. The timeout runs inside the wrappers (xvfb-run, script): `timeout xvfb-run ...`
+# kills the wrapper and leaves the game running. Console output is 4 KB block-buffered and stdbuf's preload
+# library is 64-bit only, so every game runs on a pty (`script -f`) and prints line by line at either width. A
+# game is stopped by its own command line, never by a regex over a map name (DM-Deck16][ is not a valid regex).
+# A sanitizer report counts as a crash marker (an ASan abort in the client otherwise looks like a player leaving).
 set -eu
 SRV=$(readlink -f "${1:?usage: botmatch.sh <server-run-tree> <seconds> [<client-run-tree>] [<map>]}")
 SECS=${2:?}
@@ -23,7 +23,8 @@ MAP=${4:-DmDeck16}
 OUT=$SRV/botmatch; rm -rf "$OUT"; mkdir -p "$OUT"
 PORT=$(sed -n '/^\[URL\]/,/^\[/{s/^Port=\([0-9]*\).*/\1/p}' "$SRV/System/Unreal.ini" | head -1)
 PORT=${PORT:-7777}
-# A game saves its config on exit, and -NULLRENDERER makes that NullDrv: the trees' ini files go back as they were.
+# A game saves its config on exit, and -NULLRENDERER would save NullDrv as the renderer: keep the trees' ini files
+# here and restore them afterwards.
 mkdir -p "$OUT/ini/srv" "$OUT/ini/cli"
 cp -p "$SRV"/System/*.ini "$OUT/ini/srv/"; cp -p "$CLI"/System/*.ini "$OUT/ini/cli/"
 cd "$SRV/System"
@@ -36,7 +37,7 @@ rm -f botmatch-client.log
 xvfb-run -a -s "-screen 0 1024x768x24" script -qfc "timeout $((SECS+30)) ./Unreal.bin 127.0.0.1:$PORT -NULLRENDERER LOG=botmatch-client.log" "$OUT/client.pty" > /dev/null 2>&1 &
 CPID=$!
 sleep "$SECS"
-# Stop the GAMES, not the wrappers: xvfb-run then shuts its own X server down.
+# Stop the games, not the wrappers: xvfb-run then shuts its own X server down.
 pkill -TERM -f "^./Unreal.bin 127.0.0.1:$PORT " 2>/dev/null || true
 pkill -TERM -f "^./Unreal.bin .*-server LOG=botmatch-server.log$" 2>/dev/null || true
 wait 2>/dev/null || true

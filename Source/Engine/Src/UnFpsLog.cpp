@@ -1,7 +1,5 @@
 /*=============================================================================
-	UnFpsLog.cpp: the frame rate in the log, one line per interval. ufront port; not
-	Epic's. Ported from engine-uc2 (Source/Engine/Src/UC2FpsLog.cpp, its F-2); the same
-	setting, command and line in every engine of the frontend. Quiet by default.
+	UnFpsLog.cpp: the frame rate in the log, one line per interval. Quiet by default.
 
 	Setting (ini; set from outside with -ini:System:[Engine.GameEngine]:FpsLogSeconds=5):
 	  [Engine.GameEngine] FpsLogSeconds=<seconds>   0 (default) = off
@@ -19,7 +17,7 @@
 
 static EName FpsLogName()
 {
-	// RF_Intrinsic keeps a run-time name out of v200's purge of unreachable names.
+	// RF_Intrinsic keeps a run-time name out of the engine's purge of unreachable names.
 	static FName Name;
 	if( Name==NAME_None )
 	{

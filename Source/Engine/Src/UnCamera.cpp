@@ -69,11 +69,10 @@ UBOOL UViewport::SetDrag( UBOOL NewDrag )
 }
 
 /*-----------------------------------------------------------------------------
-	ufront AutoFOV (step 2.16).
+	AutoFOV.
 -----------------------------------------------------------------------------*/
 
-// Parsed once on first use: config is authoritative, the command line overrides it. Re-reading per
-// frame would be wasted work — the values only change across a launch.
+// The [ufront.AutoFOV] section is parsed once, on first use: the values change only across a launch.
 ENGINE_API FLOAT GAutoFovFrameBase = 90.0f;
 
 static UBOOL  GAutoFovParsed  = 0;
@@ -89,11 +88,9 @@ static void ufrontParseAutoFov()
 	guard(ufrontParseAutoFov);
 	GAutoFovParsed = 1;
 
-	// [ufront.AutoFOV] is a plain config section, not a class — deliberately. The override has to be read
-	// from UGameEngine::Draw (Engine), while the natural "display settings" home is the client class,
-	// which lives in a driver package Engine cannot reach; and adding properties to a retail-Engine.u
-	// class is not an option. A free section is readable anywhere, is spelled identically in all four
-	// engines (so it stays DATA rather than per-engine code), and is one obvious block for a human to edit.
+	// [ufront.AutoFOV] is a plain config section, not a class: UGameEngine::Draw (Engine) reads it, the client
+	// class lives in a driver package Engine cannot reach, and the packages' classes cannot gain properties. A
+	// free section is readable anywhere and is one obvious block for a human to edit.
 	INT   Mode = GAutoFovMode;
 	FLOAT Ref  = GAutoFovRef;
 	FLOAT Weap = GAutoFovWeapon;
@@ -101,17 +98,8 @@ static void ufrontParseAutoFov()
 	GetConfigFloat( "ufront.AutoFOV", "ReferenceAspect", Ref  );
 	GetConfigFloat( "ufront.AutoFOV", "WeaponScale",     Weap );
 
-	// !! NO COMMAND-LINE OVERRIDES (removed 2026-09-10, owner's rule). A setting has ONE home, and this
-	// one's home is the [ufront.AutoFOV] section above. The switches that used to be here were
-	// development scaffolding for step 2.16 that outlived the development: they duplicated every key on a
-	// command line that is already long, repeated on every launch, and undiscoverable.
-	//
-	// Anything that still needs to change a value per launch -- including the E2E, which drives AutoFOV
-	// both ways off ONE build -- uses the engine's GENERIC config switch instead of a bespoke one:
-	//     -ini:System:[ufront.AutoFOV]:AutoFOV=0
-	// (appApplyIniOverrides, UnMisc.cpp). !! That WRITES the value into the ini rather than overriding it
-	// for one run, which is the deliberate trade: one mechanism, and the setting stays where a human can
-	// see it.
+	// The section is the only setting. A launch that needs another value sets the key with the generic config
+	// switch, e.g. `-ini:System:[ufront.AutoFOV]:AutoFOV=0` (appApplyIniOverrides), which writes it into the ini.
 	GAutoFovMode   = Clamp( Mode, (INT)AUTOFOV_Off, (INT)AUTOFOV_Adaptive );
 	GAutoFovRef    = (Ref  > 0.01f) ? Ref : (4.0f / 3.0f);
 	GAutoFovWeapon = Clamp( Weap, 0.0f, 4.0f );
@@ -137,13 +125,8 @@ ENGINE_API FLOAT ufrontEffectiveFov( FLOAT BaseFov, INT SizeX, INT SizeY, UBOOL 
 	FLOAT Eff = ( GAutoFovMode == AUTOFOV_Adaptive ) ? Max( Base, HorPlus ) : HorPlus;
 	Eff = Clamp( Eff, 1.0f, 170.0f );
 
-	// Log whenever the INPUTS change — the viewport size or the base FOV. Both matter and neither can
-	// be inferred from the other: the size is the resize event the E2E asserts on, and the base moves
-	// when the game changes the player's FOV (an intro camera, a zoom). Two earlier cuts were wrong:
-	// gating on "base == 90" emitted NOTHING on an engine whose stored FOV was not 90, and gating on
-	// size alone latched whatever transient FOV the very first drawn frame happened to carry (an intro
-	// camera at the 170 clamp), so the first line did not describe gameplay. Zoom still cannot spam it:
-	// UE interpolates FovAngle over ~a dozen frames, so a zoom costs a dozen lines, once.
+	// Log whenever the inputs change: the viewport size (a resize) or the base FOV (an intro camera, a zoom).
+	// A zoom interpolates FovAngle over about a dozen frames, so it costs a dozen lines, once.
 	if( bLog && ( SizeX != GAutoFovLastX || SizeY != GAutoFovLastY || Abs(Base - GAutoFovLastBase) > 0.5f ) )
 	{
 		GAutoFovLastX    = SizeX;
@@ -167,7 +150,7 @@ ENGINE_API FLOAT ufrontWeaponFov( FLOAT BaseFov, FLOAT EffectiveFov )
 	if( GAutoFovMode == AUTOFOV_Off || Abs(GAutoFovWeapon - 1.0f) < 0.001f )
 		return EffectiveFov;
 
-	// Blend in TAN space, not degrees: tangent is the linear one on screen, so 0.5 lands visually halfway.
+	// Blend in tan space, not degrees: tangent is the linear one on screen, so 0.5 lands visually halfway.
 	FLOAT TanBase = (FLOAT)appTan( Clamp( BaseFov, 1.0f, 170.0f ) * PI / 360.0 );
 	FLOAT TanEff  = (FLOAT)appTan( Clamp( EffectiveFov, 1.0f, 170.0f ) * PI / 360.0 );
 	FLOAT TanOut  = TanBase + ( TanEff - TanBase ) * GAutoFovWeapon;

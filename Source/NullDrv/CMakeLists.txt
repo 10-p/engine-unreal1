@@ -1,8 +1,7 @@
 #=============================================================================
 # NullDrv - null render device (GPU-free). A no-op URenderDevice: no GL context, no rasterization, draws
-# nothing. Selected via -NULLRENDERER for a headless / "poor-man's dedicated server" run (host listens with
-# an empty tab). Additive like SoftDrv; the NSDL viewport gives it a software SDL_Texture surface because the
-# device name lacks "OPENGL". Mirrors engine-ut99's NullDrv (v400) + UT2004's Engine.NullRenderDevice (UE2.5).
+# nothing. Selected via -NULLRENDERER for a headless run; the NSDL viewport opens no GL context for it because
+# the device name lacks "OPENGL".
 #=============================================================================
 
 project(NullDrv CXX)

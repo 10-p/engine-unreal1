@@ -272,9 +272,8 @@ inline void FFrame::Step( UObject* Context, BYTE*& Result )
 	(Context->*GIntrinsics[B])( *this, Result );
 	unguardSlow;
 }
-// The bytecode is a packed byte stream, so an operand can sit at any address: every multi-byte read copies
-// (ufront 2.84, as engine-ut99 2.83). A typed read of an unaligned address is undefined behaviour everywhere
-// and a bus error on 32-bit ARM (engine-ut99 measured it: execVectorConst, SIGBUS on armeabi-v7a). A
+// The bytecode is a packed byte stream, so an operand can sit at any address: every multi-byte read copies.
+// A typed read of an unaligned address is undefined behaviour everywhere and a bus error on 32-bit ARM; a
 // constant-size copy compiles to the same single load wherever unaligned loads are legal (x86, arm64, wasm).
 template< class T > ALWAYS_INLINE T ReadScriptOperand( const BYTE* Code )
 {

@@ -1,10 +1,6 @@
 #!/usr/bin/env node
-// web-smoke.mjs — ufront 2.6a bare-loader smoke for engine-unreal1.
-// Serves a minimal host page over the just-built SDLLaunch.{js,wasm,data} and drives it in headless
-// Chromium (Playwright, resolved from the ufront monorepo). Confirms the WASM module downloads, compiles,
-// instantiates, and main() runs (UE1 emits its early log). With only System/Default.ini preloaded (no
-// FetchFS yet — step 2.6b), the engine reaches package loading and stops there, BEFORE any WebGL — so this
-// smoke needs no GPU. Usage: node tools/web-smoke.mjs [artifactDir] [seconds]
+// web-smoke.mjs — bare-loader smoke test: serves a minimal host page over SDLLaunch.{js,wasm,data} and drives
+// it in headless Chromium (Playwright). Usage: node tools/web-smoke.mjs [artifactDir] [seconds]
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';

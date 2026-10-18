@@ -121,8 +121,8 @@ struct FMMXPolyCSetup
 	Gouraud span rendering.
 ------------------------------------------------------------------------------*/
 
-// Set per DrawGouraudPolygon from RenDev->VolumetricLightingMeshes; lets mesh fog be turned off
-// independently of surface fog, since it is the expensive half on a weak CPU.
+// Set per DrawGouraudPolygon from VolumetricLightingMeshes (with VolumetricLighting), so mesh fog,
+// the costlier half, can be turned off independently of surface fog.
 static UBOOL GMeshFog=0;
 static UBOOL GDontMaskThePolygon=0;
 static UBOOL GTranslucent=0;
@@ -4138,10 +4138,8 @@ void USoftwareRenderDevice::PentiumFlashTriangle
 	//
 	// Volumetric fog on meshes.
 	//
-	// FLightManager::Fog() already fills FTransSample::Fog per vertex (UnMeshRn.cpp), and the MMX
-	// path interpolated it -- TriVertexType::Fog, TriDeltaFog and FPolyCSetup::FogRGB all exist for
-	// exactly this. The Pentium twin never grew it, so actors have been unfogged on every non-x86
-	// build. Same treatment as Light: scale into display units, then interpolate.
+	// FLightManager::Fog() fills FTransSample::Fog per vertex; like Light, it is scaled into display
+	// units here and then interpolated.
 	//
 	// Clamped against what the light already claimed (GFloatRange minus this vertex's light) so
 	// light + fog can never exceed GMaxColor. Both interpolate linearly, so bounding the sum at the
@@ -4386,9 +4384,8 @@ void USoftwareRenderDevice::PentiumFlashTriangle
 	GPolyC.DG  = dGdX;
 	GPolyC.DB  = dBdX;
 
-	// Fog steps per pixel exactly like the light. Scaled into each depth's display units by the
-	// same factors FlashR/G/B use for the global screen fog just above -- per-vertex fog and screen
-	// flash fog are the same 0..1 colour, they just differ in where they come from.
+	// Fog steps per pixel like the light, scaled into each depth's display units by the same factors
+	// FlashR/G/B use for the screen fog above: per-vertex fog and screen fog are the same 0..1 colour.
 	FLOAT FogScaleR, FogScaleG, FogScaleB;
 	if( Viewport->ColorBytes==4 )
 	{
@@ -4485,9 +4482,8 @@ void USoftwareRenderDevice::DrawGouraudPolygon(FSceneNode* Frame, FTextureInfo& 
 
 	guardSlow(USoftwareRenderDevice::DrawGouraudPolygon);
 
-	// Mesh fog rides on the same data URender already computes (FLightManager::Fog fills
-	// FTransSample::Fog per vertex), so it costs nothing to gather -- but interpolating and adding
-	// it is per-pixel work, hence its own switch separate from VolumetricLighting.
+	// Mesh fog uses the per-vertex FTransSample::Fog URender already fills, but interpolating and adding
+	// it is per-pixel work, so it has its own switch besides VolumetricLighting.
 	GMeshFog = VolumetricLighting && VolumetricLightingMeshes && SupportsFogMaps;
 
 	// Screen Y size not supported if bigger than our setup buffer size:

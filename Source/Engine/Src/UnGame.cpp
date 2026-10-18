@@ -107,19 +107,9 @@ void UGameEngine::Init()
 	char Error256[256];
 	if( Client )
 	{
-		// ★★ ufront 2.53 — SEEDED WITH DefaultURL, WHICH v200 DID NOT DO, AND WHICH v400 DOES NOT NEED.
-		// The Entry level is where the main menu (and its Player Setup screen) lives, and the pawn spawned
-		// into it takes its name from THIS url — `SpawnPlayActor` reads `URL.GetOption("NAME=", ...)`,
-		// defaulting to `FURL::DefaultName`, i.e. `[URL] Name=Player`. A bare `FURL("Entry")` therefore
-		// put every player in the menu as "Player" no matter what the config said.
-		//
-		// ⚠ THIS PART HAS NO v400 COUNTERPART, deliberately. UT99's menu does not read the pawn at all —
-		// it calls the `GetDefaultURL` native (UnPawn.cpp) to read `[DefaultPlayer]` straight from the
-		// config. This engine has no such native, and its frozen retail script never calls one:
-		// `Engine.u`/`UnrealI.u` contain `UpdateURL`, `SetName` and `ChangeName`, and no `GetDefaultURL`.
-		// So the only way the menu can show the right name here is for the Entry pawn to BE spawned with
-		// it, which is what this does. Moving the DefaultURL construction above the load is the whole
-		// change; nothing else about the entry path is touched.
+		// Entry (the main menu and its Player Setup screen) is loaded with DefaultURL's options: the pawn spawned
+		// into it takes its name from this URL (SpawnPlayActor reads `NAME=`, defaulting to FURL::DefaultName),
+		// and the menu script shows that pawn's name; it has no native that reads [DefaultPlayer] itself.
 		if( !LoadMap( FURL(&DefaultURL,"Entry",TRAVEL_Partial), NULL, Error256 ) )
 			appErrorf( LocalizeError("LoadEntry"), Error256 );
 		Exchange( GLevel, GEntry );
@@ -131,27 +121,14 @@ void UGameEngine::Init()
 	if
 	(	!ParseToken( Tmp, AutoURL, ARRAY_COUNT(AutoURL), 0 )
 	||	AutoURL[0]=='-'
-	// ufront 2.38: …and a global option is not a map either. See appIsGlobalOptionToken — one launcher
-	// dropping its leading flag turned `CPUSPEED=3000` into "the map" and cost the main menu entirely.
+	// ...and a global option (`CPUSPEED=3000`) is not a map either.
 	||	appIsGlobalOptionToken(AutoURL) )
 		appStrcpy( AutoURL, *FURL::DefaultLocalMap );
 	FURL URL( &DefaultURL, AutoURL, TRAVEL_Partial );
 	if( !URL.Valid )
 		appErrorf( LocalizeError("InvalidUrl"), AutoURL );
-	// ★★ ufront 2.53 — BROWSE THE URL WE JUST BUILT. v200 built `URL` from DefaultURL, checked its
-	// `Valid` flag, and then threw the whole thing away to browse a url built from `LastURL` instead —
-	// which at this point is the default-constructed `LastURL("")` from the constructor, so its Name
-	// option is `FURL::DefaultName`, i.e. `[URL] Name=Player` out of Unreal.ini.
-	//
-	// That is why the launcher's generated name never reached this engine while it worked on the other
-	// three: the `-ini:` seed lands in `[DefaultPlayer]` correctly, `GetConfigOptions` reads it into
-	// DefaultURL correctly, and then the only url that carried it was discarded. `SpawnPlayActor` reads
-	// `URL.GetOption("NAME=", *FURL::DefaultName)`, so every player logged in as "Player" — and in a coop
-	// game every player having the SAME name is exactly the collision the random-name feature exists to
-	// prevent (UE1 keys its map-travel inventory table by player name; measured in 2.39c).
-	//
-	// engine-ut99's UnGame.cpp does `Browse( URL, NULL, Error )` and uses DefaultURL for the fallback
-	// below. This now matches it line for line.
+	// Browse the URL just built: it carries DefaultURL's [DefaultPlayer] options, including the Name that
+	// SpawnPlayActor reads (`URL.GetOption("NAME=", *FURL::DefaultName)`).
 	UBOOL Success = Browse( URL, Error256 );
 
 	// If waiting for a network connection, go into the starting level.
@@ -162,9 +139,8 @@ void UGameEngine::Init()
 	if( !Success )
 #ifdef __EMSCRIPTEN__
 	{
-		// step 2.6f: a bad startup map must not be fatal — appErrorf throws to unwind, which cannot cross
-		// Asyncify frames (uncaught abort). Entry is already loaded; fall back to the menu and let the user
-		// pick a valid map / host from the UI instead of crashing. Mirrors engine-ut2004.
+		// A bad startup map is not fatal: appErrorf would abort (the web build cannot catch exceptions). Entry
+		// is already loaded, so fall back to the menu.
 		debugf( NAME_Warning, "Startup map '%s' failed to load (%s) — falling back to the menu", AutoURL, Error256 );
 		if( !GLevel )
 			GLevel = GEntry;
@@ -220,10 +196,8 @@ void UGameEngine::Destroy()
 void UGameEngine::SetProgress( const char* Str1, const char* Str2, FLOAT Seconds )
 {
 	guard(UGameEngine::SetProgress);
-	// 2.12 hardening (parity with engine-ut99): the viewport can exist with a NULL Actor — e.g. after
-	// DissociateViewports tears the pawn down during a failed travel. SetProgress dereferences Actor below, so
-	// without this null-check that becomes a NULL/garbage-heap deref → "memory access out of bounds" abort on
-	// the web build (catching is off; wasm has no unmapped NULL page). Only message a live actor.
+	// The viewport can exist with a NULL Actor (e.g. after DissociateViewports tears the pawn down during a
+	// failed travel), so only message a live actor.
 	if( Client && Client->Viewports.Num() && Client->Viewports(0)->Actor )
 	{
 		APlayerPawn* Actor = Client->Viewports(0)->Actor;
@@ -243,21 +217,21 @@ void UGameEngine::SetProgress( const char* Str1, const char* Str2, FLOAT Seconds
 	Command line executor.
 -----------------------------------------------------------------------------*/
 
-//
-// This always going to be the last exec handler in the chain. It
-// handles passing the command to all other global handlers.
-//
-// ufront port (from engine-uc2, by way of engine-ut99): WHEREAMI / TELEPORT <x> <y> <z> (UnCheats.cpp) and the frame
-// rate in the log, [Engine.GameEngine] FpsLogSeconds / FPSLOG (UnFpsLog.cpp).
+// WHEREAMI / TELEPORT <x> <y> <z> (UnCheats.cpp) and the frame rate in the log, [Engine.GameEngine]
+// FpsLogSeconds / FPSLOG (UnFpsLog.cpp).
 ENGINE_API UBOOL UfrontCheatExec( UEngine* Engine, const char* Cmd, FOutputDevice* Out );
 ENGINE_API void UfrontFpsLogTick( UEngine* Engine );
 ENGINE_API UBOOL UfrontFpsLogExec( const char* Cmd, FOutputDevice* Out );
 
+//
+// This always going to be the last exec handler in the chain. It
+// handles passing the command to all other global handlers.
+//
 UBOOL UGameEngine::Exec( const char* Cmd, FOutputDevice* Out )
 {
 	guard(UGameEngine::Exec);
 	const char *Str = Cmd;
-	// ufront: first, because the web's ue_exec_command reaches this engine only (never the viewport).
+	// First, because the web's ue_exec_command reaches only the engine, never the viewport.
 	if( UfrontCheatExec( this, Cmd, Out ) )
 		return 1;
 	if( UfrontFpsLogExec( Cmd, Out ) )
@@ -376,11 +350,9 @@ UBOOL UGameEngine::Browse( FURL URL, char* Error256 )
 	unguard;
 
 #ifdef __EMSCRIPTEN__
-	// ufront 2.6c: the web frontend forms a client-connect URL as "<host>?connect" — the host lands in
-	// URL.Map with no URL.Host, which UE1 would treat as a LOCAL map load (IsLocalInternal) and fail. When
-	// the "connect" option is present with no Host, promote the map token to Host so Browse takes the
-	// network path (IsInternal + Host -> UPendingLevel -> WebRTCNetDriver connect). Web-only + guarded on
-	// the connect option, so local map browsing is unaffected.
+	// The web frontend forms a client-connect URL as "<host>?connect", which puts the host in URL.Map with no
+	// URL.Host (a local map load). With the connect option and no Host, the map token becomes the Host, so
+	// Browse takes the network path (UPendingLevel, WebRTCNetDriver).
 	if( URL.HasOption("connect") && URL.Host.Length()<=0 && URL.Map.Length()>0 )
 	{
 		URL.Host = URL.Map;
@@ -556,9 +528,8 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, char* Err
 		}
 		ULevel* Verified = LoadObject<ULevel>( MapParent, "MyLevel", PATH(*URL.Map), LOAD_Verify | LOAD_Throw | LOAD_KeepImports | LOAD_NoWarn, NULL );
 #ifdef __EMSCRIPTEN__
-		// step 2.6f: SafeLoadError no longer re-throws on Emscripten, so a failed verify arrives as NULL
-		// (not an exception — the catch below is dead). Report + return NULL (caller falls back to the menu)
-		// instead of falling through to LoadLevel where check(!GLevel->NetDriver) would NULL-deref. (ut2004 pattern)
+		// SafeLoadError does not re-throw on the web, so a failed verify arrives as NULL, not an exception.
+		// Report it and return NULL (the caller falls back to the menu) rather than go on to LoadLevel.
 		if( !Verified )
 		{
 			appStrcpy( Error256, "Could not load map" );
@@ -936,17 +907,12 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, char* Err
 -----------------------------------------------------------------------------*/
 
 //
-// Draw a global view.
-//
-//
-// Scoped AutoFOV override (step 2.16). Everything that consumes the FOV during a frame reads it from
-// Viewport->Actor->FovAngle: the engine's own clip planes via FSceneNode::ComputeRenderSize, and EVERY
-// render device independently (they each re-derive their frustum from it — NOpenGLDrv, NOpenGLESDrv,
-// SoftDrv, XOpenGL, UTGLR, PVR). Overriding it for the duration of the draw is therefore the ONLY lever
-// that keeps culling and the drawn projection in agreement across all of them, and it needs no
-// per-driver change at all. It is restored on every exit path, so the value script sees is untouched —
-// which matters: PlayerPawn.uc derives MouseScale from DesiredFOV, so writing the actor's FOV
-// permanently (as the driver-level AutoFOV this replaces did) silently rescales the player's aim.
+// Scoped AutoFOV override. Everything that consumes the FOV during a frame reads it from
+// Viewport->Actor->FovAngle: the engine's own clip planes via FSceneNode::ComputeRenderSize, and every
+// render device, each deriving its projection from it. Overriding it for the duration of the draw keeps
+// culling and the drawn projection in agreement with no per-device change. It is restored on every exit
+// path, so script sees the real value: PlayerPawn.uc derives MouseScale from DesiredFOV, and writing the
+// actor's FOV would rescale the player's aim.
 //
 struct FScopedAutoFov
 {
@@ -965,6 +931,9 @@ struct FScopedAutoFov
 	}
 };
 
+//
+// Draw a global view.
+//
 void UGameEngine::Draw( UViewport* Viewport, BYTE* HitData, INT* HitSize )
 {
 	guard(UGameEngine::Draw);
@@ -1043,9 +1012,8 @@ void ExportTravel( FOutputDevice& Out, AActor* Actor )
 {
 	guard(ExportTravel);
 	check(Actor);
-	// ufront 2.39c — say what is and is not crossing the map. An item is only carried if bTravel is set
-	// AND its properties are CPF_Travel; a silent skip here is indistinguishable from "the travel lost it"
-	// anywhere downstream, which is exactly the report this was added to answer.
+	// Log what does and does not cross the map: an actor is carried only if bTravel is set, and only its
+	// CPF_Travel properties.
 	if( !Actor->bTravel )
 	{
 		debugf( NAME_DevNet, "[ufront/travel] SKIP  %s (%s) — bTravel=false", Actor->GetName(), Actor->GetClass()->GetPathName() );
@@ -1106,7 +1074,7 @@ void UGameEngine::SetClientTravel( UPlayer* Player, const char* NextURL, UBOOL b
 				ExportTravel( CarryInfo, Inv );
 			Player->TravelItems = CarryInfo;
 		}
-		// ufront 2.39c — one summary line per player, so a log says at a glance who carried what.
+		// One summary line per player: who carried what.
 		debugf
 		(
 			NAME_DevNet,
@@ -1151,7 +1119,7 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 	guard(UGameEngine::Tick);
 	INT LocalTickCycles=0;
 	uclock(LocalTickCycles);
-	UfrontFpsLogTick( this );	// ufront: FpsLogSeconds / FPSLOG; nothing unless asked for
+	UfrontFpsLogTick( this );	// FpsLogSeconds / FPSLOG; nothing unless asked for
 
 	// If all viewports closed, time to exit.
 	if( Client && Client->Viewports.Num()==0 )
@@ -1204,21 +1172,10 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 				if( P && P->Player )
 				{
 					P->Player->TravelItems="";
-					// ★★ ufront 2.39c — EVERY player's items are exported here, not just the remote ones.
-					//
-					// v200 wiped TravelItems on the line above and then re-exported ONLY when the player
-					// was a UNetConnection, so a LISTEN HOST'S OWN player travelled with nothing: the
-					// owner arrived on the next map with no weapons, armour or health while the guests
-					// kept theirs. It is not recoverable downstream either — SpawnPlayActor prefers a
-					// TravelNames match over the viewport's own TravelItems, so the empty string here
-					// OVERWRITES whatever ClientTravel had already exported.
-					//
-					// v400 does it for every PlayerPawn (its "Export items and self" loop, with no
-					// connection test at all), which is the rule adopted here.
-					//
-					// ⚠ bURL is still 0 for a local player: we want the ITEMS, not the travel. Arming
-					// Viewport->TravelURL would re-enter the client-travel that the block below acts on
-					// — the map-reload loop of 2.39b. The line after this clears it regardless.
+					// Export every player's items, the local player's too: it carries them in its viewport's
+					// TravelItems, which the line above has just emptied. bURL only for a remote player: arming
+					// the local Viewport->TravelURL would start the client travel of the block below; the line
+					// after this clears it regardless.
 					SetClientTravel
 					(
 						P->Player,
@@ -1229,17 +1186,10 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 					);
 					if( Cast<UViewport>( P->Player ) )
 						Cast<UViewport>( P->Player )->TravelURL = "";
-					// ★★ ufront 2.39c — THE LOCAL PLAYER IS NOT LISTED HERE, and that is the fix, not an
-					// omission. This list is keyed by PLAYER NAME, and every web player defaults to
-					// "Player", so entries collide. The local player never needs its own entry: it carries
-					// its items on its viewport (Viewport->TravelItems, consumed by SpawnPlayActor during
-					// LoadMap — which runs INSIDE Browse below, i.e. before this list is even assigned, so
-					// it could never match itself anyway). But the entry CAN be matched by somebody else,
-					// and it was: measured with a host and a guest both named "Player", the guest matched
-					// the HOST's entry and re-spawned the host's actors, while its own was left unclaimed.
-					// Distinct names hide the bug completely, which is why it survived the earlier runs.
-					// ⚠ Two REMOTE players sharing a name still collide with each other — that is UE1's
-					// name-keyed design and needs unique names.
+					// The local player is not listed: it carries its items on its viewport (SpawnPlayActor reads
+					// them during LoadMap, inside Browse below), and this list is keyed by player name, so its entry
+					// could be matched by a remote player of the same name. Two remote players sharing a name still
+					// collide: the list is name-keyed.
 					if( !Cast<UViewport>( P->Player ) )
 					{
 						new(TravelNames)FString(P->PlayerName);

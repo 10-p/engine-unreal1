@@ -68,12 +68,12 @@ private:
 	SDL_Window* hWnd;
 	SDL_Renderer* SDLRen; // for accelerated SoftDrv
 	SDL_Texture* SDLTex; // for use with the above renderer
-	DWORD SDLTexFormat;
-	SDL_GLContext GLCtx; // for OpenGLDrv
+	DWORD SDLTexFormat; // pixel format of SDLTex; on the threaded web build, of SoftFB (no SDL texture there)
+	SDL_GLContext GLCtx; // for NOpenGLDrv and NOpenGLESDrv; on the threaded web build, an Emscripten WebGL handle
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-	// ufront 2.13.2: on a worker there is no SDL renderer (SDL's is GLES-backed and its proxied
-	// eglCreateContext deadlocks the engine thread), so SoftDrv renders into OUR buffer and we blit it to
-	// the transferred OffscreenCanvas through a 2D context.
+	// On a worker there is no SDL renderer (SDL's is GLES-backed and its proxied eglCreateContext blocks the
+	// engine thread), so SoftDrv renders into this buffer and Unlock blits it to the transferred OffscreenCanvas
+	// through a 2D context.
 	BYTE* SoftFB;
 	INT SoftFBBytes;
 #endif
@@ -81,10 +81,10 @@ private:
 	INT DisplayIndex;
 	SDL_Rect DisplaySize;
 	SWORD JoyAxis[SDL_CONTROLLER_AXIS_MAX];
-	void UpdatePadAxis( INT Axis, INT NewValue );	// ufront: one stick or trigger value, read from the pad's state
-	void ReleasePad();	// ufront 2.91: every pad key up and the axes zeroed (the pad went, or UseJoystick went off)
+	void UpdatePadAxis( INT Axis, INT NewValue );	// one stick or trigger value, read from the pad's state
+	void ReleasePad();	// every pad key up and the axes zeroed (the pad went, or UseJoystick went off)
 	UBOOL QuitRequested;
-	DOUBLE InputUpdateTime;	// ufront: DOUBLE, see TickInput
+	DOUBLE InputUpdateTime;	// DOUBLE: see TickInput
 
 	// Info saved during captures and fullscreen sessions.
 	INT SavedX, SavedY;
@@ -140,9 +140,8 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	void TryRenderDevice( UViewport* Viewport, const char* ClassName, UBOOL Fullscreen );
 	const TArray<SDL_Rect>& GetDisplayResolutions();
 	inline SDL_GameController* GetController() { return Controller; }
-	// ufront (the UC2 port's pads, one pad here; as engine-ut99): open the pad at SDL device index DeviceIndex when
-	// none is open and UseJoystick is on; Held gets the buttons already down at the connect (W3C indices, the web's
-	// H-3). ClosePad closes it when InstanceId is ours.
+	// Open the pad at SDL device index DeviceIndex when none is open and UseJoystick is on; on the web Held gets the
+	// buttons already down at the connect (W3C indices). ClosePad closes it when InstanceId is ours.
 	UBOOL OpenPad( INT DeviceIndex, DWORD* Held );
 	UBOOL ClosePad( INT InstanceId );
 	inline const SDL_DisplayMode& GetDefaultDisplayMode() const { return DefaultDisplayMode; }

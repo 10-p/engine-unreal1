@@ -5006,8 +5006,8 @@ void FScriptCompiler::CompileSecondPass( UStruct* Node )
 			for( TFieldIterator<UProperty> It(TopFunction); It && (It->PropertyFlags&(CPF_Parm|CPF_ReturnParm))==CPF_Parm; ++It )
 			{
 				// Emit parm size into code stream: the parameter's span up to the next one, in the script
-				// format's 32-bit layout on every host (ufront 2.84) -- the runtime lays parameters out from the
-				// linked properties (CallFunction) and only counts these.
+				// format's 32-bit layout on every host -- the runtime lays parameters out from the linked
+				// properties (CallFunction) and only counts these.
 				UProperty* Property = *It;
 				INT Alignment;
 				INT Size = ScriptFormatElementSize( Property, Alignment ) * Property->ArrayDim;

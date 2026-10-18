@@ -9,12 +9,8 @@
 
 #include "RenderPrivate.h"
 
-// ufront 2.33 (Windows/MinGW): the Win32 headers reached through the chain above define IN and OUT as
-// EMPTY parameter-annotation macros, which silently deletes any local named `IN` — DrawSurf.cpp's
-// bilinear filter has one, and the error it produces ("expected unqualified-id before '='") points at the
-// assignment rather than at the macro. Undefining is preferable to renaming the local: it is
-// preprocessor-only, so the Linux and web builds are textually and byte-for-byte unaffected. Nothing in
-// this engine uses the annotations.
+// The Win32 headers reached through RenderPrivate.h define IN and OUT as empty parameter-annotation
+// macros, which would delete DrawSurf.cpp's local `IN`. Nothing in this engine uses the annotations.
 #ifdef PLATFORM_WIN32
 #undef IN
 #undef OUT
@@ -30,19 +26,11 @@
 #endif
 
 // Maximum supported sizes.
-// ufront 2.12: was 1200 x 2048. The software rasterizer's per-scanline arrays (DrawPoly Setup/MMXSetup/
-// SpanIndex, DrawTile SpanIndex) are indexed by Viewport->SizeY, and DrawTile had NO guard, so at SizeY>1200
-// (1440p/4K — reachable since the 2.12 dynamic-resolution work) it overran the span table into a self-
-// referential FSpan -> the tile blitter's for(Span;Span;Span=Span->Next) walk hung the main thread (the web
-// tab-freeze; music stopped, WebAudio ambient kept looping). Raised to cover 4K in any orientation; DrawTile
-// now also clamps its fill to this. (fgsfdsfgs/UE1 dropped UT99's SoftDrv::SetRes SizeY clamp; this restores
-// a safe ceiling.) Above the ceiling the software path fail-soft skips (no hang). X bump also fixes the
-// DrawSurf Photon "crashes above 1600" note.
-// ufront 2.19f: overridable at build time (-DSOFTDRV_MAX_SCREEN=n), because these are the bounds of
-// STATIC arrays — they cost their full size in .bss at every resolution, not just at the ceiling.
-// Measured at 4096: Setup + MMXSetup + Photon + UCoordTable + two SpanIndex = 368 KB resident whether
-// the viewport is 4K or 240x240; at a 256 ceiling the same tables cost 23 KB. Lowering it is fail-soft
-// (SetRes clamps X, DrawPoly skips above the Y ceiling, DrawTile clamps its span-fill), not a landmine.
+// The per-scanline arrays (DrawPoly Setup/MMXSetup/SpanIndex, DrawTile SpanIndex) are indexed by
+// Viewport->SizeY and the per-pixel ones (DrawSurf Photon/FogPhoton, DrawTile UCoordTable) by SizeX; the
+// default covers 4K in any orientation. Above the Y ceiling DrawGouraudPolygon skips and DrawTile spans
+// only the rows that fit; nothing guards X, so the bound must cover the widest viewport. These are static
+// arrays that cost their full size in .bss at every resolution; -DSOFTDRV_MAX_SCREEN=n changes the bound.
 #ifndef SOFTDRV_MAX_SCREEN
 #define SOFTDRV_MAX_SCREEN 4096
 #endif
@@ -175,10 +163,9 @@ class DLL_EXPORT USoftwareRenderDevice : public URenderDevice
 
 	// Temp statistics.
 	INT SurfPalBuilds;
-	// Which filtering to use when HighRes/LowResTextureSmooth have already enabled it for this
-	// resolution: False = the original 2x2 knight's-move coordinate dither (one texel, ~free),
-	// True = true bilinear (four texels and a blend). Smoothing off is point sampling either way,
-	// so this knob only ever picks between the two filtered modes.
+	// Which filter to use once HighRes/LowResTextureSmooth have enabled smoothing for this resolution:
+	// False = the 2x2 knight's-move coordinate dither (one texel), True = bilinear (four texels and a
+	// blend). With smoothing off both settings point-sample.
 	UBOOL			BilinearFiltering;
 
 	// Preference variables.

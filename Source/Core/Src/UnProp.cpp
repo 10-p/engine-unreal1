@@ -190,8 +190,8 @@ void UProperty::ExecLet( void* Var, FFrame& Stack )
 {
 	guardSlow(UProperty::ExecLet);
 
-	// Assign value. (ufront 2.84: room for any value, not MAX_CONST_SIZE -- a None context's struct is zeroed here
-	// to its size in memory, which on LP64 passes 16 bytes for a struct holding pointers.)
+	// Assign value. (Room for any value, not MAX_CONST_SIZE: a None context's struct is zeroed here to its size in
+	// memory, which on LP64 exceeds 16 bytes for a struct holding pointers.)
 	BYTE Buffer[MAX_STRING_CONST_SIZE], *Val=Buffer;
 	GNullContextResult = NULL;
 	Stack.Step( Stack.Object, Val );

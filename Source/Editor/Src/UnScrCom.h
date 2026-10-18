@@ -108,9 +108,8 @@ public:
 	UClass* MetaClass;
 
 	// Constructors.
-	// Enum(NULL) clears the whole union (ufront 2.84, as engine-ut99 2bd4e9f). It used to clear BitMask, 4 bytes:
-	// on LP64 the pointer members kept a garbage high half, so a plain byte had an Enum and `B = 7` was a type
-	// mismatch.
+	// Enum(NULL) clears the whole union: on LP64 its pointer members are wider than BitMask, and a garbage high
+	// half would give a plain byte an Enum (`B = 7` a type mismatch).
 	FPropertyBase( EPropertyType InType )
 	:	Type(InType), ArrayDim(1), PropertyFlags(0), Enum(NULL), MetaClass(NULL)
 	{}
@@ -183,9 +182,9 @@ public:
 	{
 		return GetElementSize() * ArrayDim;
 	}
-	// The size recorded INTO bytecode (a None context's fill, a switch value): the script format's 32-bit
-	// size on every host (ufront 2.84, as engine-ut99 d075242) -- 4 for an object, a struct replayed with the
-	// format's sizes. The 64-bit VM widens where it must (UProperty::ExecLet, execSwitch).
+	// The size recorded into bytecode (a None context's fill, a switch value): the script format's 32-bit size
+	// on every host -- 4 for an object, a struct replayed with the format's sizes. The 64-bit VM widens where it
+	// must (UProperty::ExecLet, execSwitch).
 	INT GetScriptFormatSize() const
 	{
 		if( Type==CPT_ObjectReference )
@@ -745,7 +744,7 @@ public:
 	FArchive& operator<<( class FName& N )
 		{NAME_INDEX W=N.GetIndex(); return *this << W;}
 	FArchive& operator<<( class UObject*& Res )
-		{INT D = FObjectManager::GetScriptRef( Res ); return *this << D;} // a 4-byte object index (ufront 2.84)
+		{INT D = FObjectManager::GetScriptRef( Res ); return *this << D;} // a 4-byte object index
 	FArchive& operator<<( char* S )
 		{return Serialize(S,appStrlen(S)+1);}
 	FArchive& operator<<( enum EExprToken E )

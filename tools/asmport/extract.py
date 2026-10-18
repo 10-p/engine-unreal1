@@ -2,14 +2,12 @@
 """
 extract.py -- pull MSVC `__asm` blocks out of UE1's SoftDrv sources into a normalized IR.
 
-The x86/MMX kernels in Source/SoftDrv/Src/{DrawSurf,DrawPoly,DrawTile}.cpp are the only place
-where UE1's software renderer implements fog maps and texture smoothing.  We are not porting them
-instruction-for-instruction -- we are *reading* them to recover the exact arithmetic (shift
-amounts, bias constants, lane packing) so the portable C path can reproduce it.  This module does
-the mechanical half: locate a function, gather its `__asm` text, and hand back a structured
-instruction list that trace.py can reason over.
+Locates a function in Source/SoftDrv/Src/{DrawSurf,DrawPoly,DrawTile}.cpp, gathers its `__asm` text
+and returns a structured instruction list, which trace.py and emit.py consume.  It is the
+mechanical half of reading the x86/MMX kernels' arithmetic (shift amounts, bias constants, lane
+packing) so the portable C path can reproduce it.
 
-Handles the MSVC inline-asm dialect this codebase actually uses:
+Handles the MSVC inline-asm dialect this codebase uses:
 
     mov     esi,[eax]FTexSetup.X        struct-relative:  base + offsetof(FTexSetup,X)
     mov     ecx,[eax+ 8*3]FTexSetup.X   ... with an extra displacement

@@ -16,7 +16,7 @@ endif()
 if(TARGET_IS_WINDOWS)
   list(APPEND SRC_FILES "Src/Res/LaunchRes.rc")
   add_executable(${PROJECT_NAME} WIN32 ${SRC_FILES})
-  # ufront 2.33 — the .rc names its icon relative to itself; give the resource compiler that directory.
+  # The .rc names its icon relative to itself; give the resource compiler that directory.
   set_source_files_properties("Src/Res/LaunchRes.rc" PROPERTIES
     COMPILE_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}/Src/Res")
 else()
@@ -31,9 +31,8 @@ target_include_directories(${PROJECT_NAME}
 )
 
 if(USE_SDL)
-  # ufront 2.6a (web): under Emscripten, SDL2 comes from the -sUSE_SDL=2 port (link flags below) and
-  # NSDLDrv is pulled in via the --whole-archive static set — linking it again here double-defines every
-  # NSDLDrv symbol (GNU ld tolerates it; wasm-ld does not).
+  # Under Emscripten, SDL2 comes from the -sUSE_SDL=2 port (link flags below) and NSDLDrv from the
+  # --whole-archive static set; linking NSDLDrv again here would double-define its symbols, which wasm-ld rejects.
   if(NOT EMSCRIPTEN)
     target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY} NSDLDrv)
   endif()
@@ -53,17 +52,17 @@ else()
 endif()
 
 if(EMSCRIPTEN)
-  # ufront step 2.6a/2.6b (web port) — emit a BARE LOADER (SDLLaunch.{js,wasm,data}); no --shell-file. The
-  # monorepo owns the host page and injects the heavy glue (FetchFS/IDB/WebRTC) at runtime; only the thin
-  # webrtc_* shim is baked (vendor/glue/webrtc-shim.js). Renderer = NOpenGLESDrv (GLES2->WebGL) + SoftDrv
-  # (both in the --whole-archive static set). SDL2 comes from the Emscripten port, not system libs.
+  # Emits a bare loader (SDLLaunch.{js,wasm,data}), no --shell-file: the host page injects the glue (file system,
+  # storage, WebRTC) at run time. Baked in are only the thin --js-library forwarders: vendor/glue/webrtc-shim.js,
+  # vendor/glue/wasmfs-shim.js and msaa-backbuffer.js. Renderers: NOpenGLESDrv (GLES2 -> WebGL), SoftDrv and
+  # NullDrv, in the --whole-archive static set. SDL2 comes from the Emscripten port.
   set(UNREAL_ASSETS_DIR "/home/ion/unreal-assets" CACHE PATH
       "Unreal v200 assets (System/*.ini preloaded into MEMFS; the rest streams via FetchFS)")
   target_link_options(${PROJECT_NAME} PRIVATE
     -sASYNCIFY
     -sASYNCIFY_STACK_SIZE=262144
-    # emscripten_sleep/set_main_loop = main-loop inversion (the live Asyncify use). __syscall_openat is
-    # listed for FetchFS on-demand open (kept ABI-consistent with engine-ut2004; the open is sync-XHR).
+    # emscripten_sleep is the frame-rate cap's sleep and WebRTCDrv's handshake wait; EM_ASYNC_JS imports (the
+    # frame yield) register themselves. emscripten_set_main_loop and __syscall_openat are also listed.
     "-sASYNCIFY_IMPORTS=['emscripten_sleep','emscripten_set_main_loop','__syscall_openat']"
     -sFULL_ES2=1
     -sUSE_SDL=2
@@ -71,80 +70,54 @@ if(EMSCRIPTEN)
     -sINITIAL_MEMORY=268435456
     -sSTACK_SIZE=2097152
     -sFORCE_FILESYSTEM
-    # ufront 2.13.1 — WasmFS + the JS-implemented FS backend (ported from engine-ut2004, the pilot).
+    # WasmFS with a JS-implemented (JSImpl) backend: vendor/glue/wasmfs-shim.js forwards its file operations
+    # to the host-injected Module.UE.fs.backend, which serves game files on demand and keeps their bytes in JS
+    # typed arrays rather than in linear memory. -sFORCE_FILESYSTEM (above) is still needed: WasmFS omits the
+    # JS FS.* API otherwise, and the host uses it for user data, mods and the file browser.
     #
-    # -sWASMFS moves the VFS into wasm, which BREAKS FetchFS's old seam: it intercepted file access by
-    # monkey-patching the JS FS.open (legal only because the legacy filesystem implements
-    # __syscall_openat in JS), and under WasmFS a C open() never routes through it. The replacement is a
-    # WasmFS JSImpl backend whose file ops are implemented in JS (vendor/glue/wasmfs-shim.js forwards
-    # them to the host-injected Module.UE.fs.backend), which is both the on-demand hook and the way to
-    # keep asset bytes in JS typed arrays instead of a std::vector inside linear memory.
-    #
-    # -sFORCE_FILESYSTEM (above) stays REQUIRED — WasmFS omits the JS FS.* API otherwise, and the host
-    # glue still uses it for user data, mods and the file browser.
-    #
-    # The EXPORTED_FUNCTIONS entries let the HOST stand the backend up entirely from JS, so this block
-    # plus the vendored shim is the whole per-engine cost — no C++ in any engine repo.
-    # NB: no _webrtc_deferred_open in this list — the UE1 engines deliberately do not use the
-    # deferred-connect pair (see WebRTCDrv.cpp); it is a ut2004 thing. Listing an undefined symbol is a
-    # hard wasm-ld error: 'symbol exported via --export not found'.
+    # The EXPORTED_FUNCTIONS entries let the host create the backend from JS. _webrtc_deferred_open is not
+    # exported: this engine does not use the deferred-connect pair, and exporting an undefined symbol fails the link.
     -sWASMFS
-    # The worker-side bootstrap in wasmfs-shim.js hangs off a __postset, and a postset is only EMITTED if
-    # its $symbol is referenced. Nothing references it (it is pure side effect), so without this it is
-    # dead-stripped SILENTLY — no error, no warning, and the engine dies on its first asset read.
+    # The worker-side bootstrap in wasmfs-shim.js is a __postset, emitted only if its $symbol is included.
+    # Nothing references it, so it is included here; without it the first asset read fails.
     "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$ueWorkerBoot']"
-    # ufront 2.13.2 — run the engine on a WORKER (threaded-only, decision D2).
+    # The engine runs on a worker (-sPROXY_TO_PTHREAD): synchronous per-file reads from OPFS need
+    # FileSystemSyncAccessHandle, which browsers expose only on a worker, and Atomics.wait cannot block the
+    # browser main thread.
     #
-    # WHY: synchronous per-file restore-on-read from OPFS (2.13.4, the actual point of stage 2.13) needs
-    # FileSystemSyncAccessHandle, which browsers expose ONLY on a worker; and a thread blocking on
-    # Atomics.wait cannot do so on the browser main thread. So main() has to leave the main thread.
+    # -sOFFSCREENCANVASES_TO_PTHREAD transfers #canvas to that worker, so NSDLViewport.cpp creates the WebGL
+    # context there directly (emscripten_webgl_create_context). SDL2 keeps the window and input; GL context
+    # creation and the frame present bypass SDL, whose EGL path Emscripten proxies to the main thread, which no
+    # longer has the canvas.
     #
-    # -sOFFSCREENCANVASES_TO_PTHREAD transfers #canvas to that worker, which is what makes the direct
-    # emscripten_webgl_create_context in NSDLViewport.cpp legal there. SDL2 keeps window + input; only
-    # GL-context creation and the frame present are taken off SDL (its GL path is EGL, and Emscripten
-    # proxies EGL to a main thread that can no longer see the transferred canvas — Emscripten #24792).
-    #
-    # -sASYNCIFY deliberately STAYS this step: dropping it is 2.13.3, after the worker move is proven.
+    # -sASYNCIFY is the frame-yield mechanism (emscripten_sleep and EM_ASYNC_JS in SDLLaunch.cpp).
     -pthread
     -sPROXY_TO_PTHREAD
     -sOFFSCREENCANVAS_SUPPORT
-    # QUOTED: CMake treats an unquoted '#' as a comment, which silently truncated this to
-    # "OFFSCREENCANVASES_TO_PTHREAD=" and failed the link with "string index out of range".
+    # Quoted: CMake reads an unquoted '#' as the start of a comment.
     "-sOFFSCREENCANVASES_TO_PTHREAD=#canvas"
-    # ★ ufront 2.43d — WITHOUT THIS, THE PER-FRAME PRESENT CALL IS A STUB.
-    #
-    # The viewport creates the WebGL context with explicitSwapControl=1 + renderViaOffscreenBackBuffer=1
-    # and presents each frame with emscripten_webgl_commit_frame(). Emscripten implements BOTH of those
-    # attributes ONLY under -sOFFSCREEN_FRAMEBUFFER, so without it the shipped loader reads:
-    #
-    #   var _emscripten_webgl_do_commit_frame = () => { ...checks...; return 0 };   // that is all of it
-    #
-    # with blitOffscreenFramebuffer / defaultFbo occurring ZERO times. The engine calls a no-op every
-    # frame and presentation falls back entirely to Chromium's implicit "the worker's task ended"
-    # propagation for a transferred OffscreenCanvas — which works on Linux and manages ~1 FRAME PER SECOND
-    # on Windows/D3D11. Root-caused on engine-ut99; owner-confirmed hands-on. Verify after building:
-    # blitOffscreenFramebuffer must occur in SDLLaunch.js (0 -> 2), defaultFbo (0 -> 7).
-    #
-    # ⚠ 2.17 §C found this exact fact and mis-read it, concluding the flag would only ACQUIRE a wasteful
-    # per-frame blit. That assumed the implicit path worked. The trade is "blit vs showing 1 frame in 80".
+    # The viewport creates the WebGL context with explicitSwapControl=1 + renderViaOffscreenBackBuffer=1 and
+    # presents each frame with emscripten_webgl_commit_frame(); Emscripten implements both only under
+    # -sOFFSCREEN_FRAMEBUFFER. Without it commit_frame is a stub and presentation relies on the worker's task
+    # ending, which on Windows/D3D11 shows only a fraction of the frames. A built SDLLaunch.js contains
+    # blitOffscreenFramebuffer.
     -sOFFSCREEN_FRAMEBUFFER
-    # main() itself is one of these; UnThread's music thread is NOPENAL_WEB-guarded off. ufront 2.61: openal-soft
-    # adds TWO — the web backend's mixer thread and the event thread every context starts — so 2 -> 4. A thread
-    # created with the pool empty still starts, but only once the main thread has spun up a worker.
+    # Workers created up front: main() runs on one, openal-soft starts two (the web backend's mixer thread and
+    # each context's event thread), one is spare; NOpenALDrv starts no music thread on the web. A thread created
+    # with the pool empty still starts, but only once the main thread has spun up a worker.
     -sPTHREAD_POOL_SIZE=4
-    # ufront 2.61: openal-soft reports every AL error by throwing and catching it, so catching must be ON (the
-    # first AL error would otherwise abort). Only its objects are -fexceptions; see Source/CMakeLists.txt.
+    # openal-soft reports every AL error by throwing and catching it, so catching is on (the first AL error
+    # would otherwise abort). Only its objects are -fexceptions; see Source/CMakeLists.txt.
     -sNO_DISABLE_EXCEPTION_CATCHING
     "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_close','_ue_exec_command','_wasmfs_create_jsimpl_backend','_wasmfs_create_file','_ufront_wasmfs_register','_ufront_wasmfs_set_pending']"
-    # PThread (2.13.2): the host needs the worker list to hand the FS sync channel to the engine thread.
-    # Runtime methods are NOT on Module unless exported — omitting it makes the host silently no-op.
+    # PThread: the host needs the worker list to hand the file system's sync channel to the engine thread.
+    # Runtime methods are on Module only when exported.
     "-sEXPORTED_RUNTIME_METHODS=['callMain','stringToUTF8','UTF8ToString','HEAPU8','stackSave','stackAlloc','stackRestore','lengthBytesUTF8','PThread']"
-    # The thin webrtc_* shim (step 2.6b): defines the ABI's C-imported symbols, forwarding to the
-    # host-injected Module.UE.net.*. Heavy glue is NOT baked. Unreferenced until the WebRTC net driver
-    # lands (2.6c), so it's dead-stripped now — harmless.
+    # webrtc-shim.js defines the webrtc_* functions WebRTCDrv imports and forwards them to the host-injected
+    # Module.UE.net.*; wasmfs-shim.js is the WasmFS backend's forwarder (above).
     "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
     "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
-    # ufront 2.92: WebGL 2 (NOpenGLESDrv's GLES2 calls run on it unchanged), for the multisampled emulated back buffer
+    # WebGL 2 (NOpenGLESDrv's GLES2 calls run on it unchanged), for the multisampled emulated back buffer
     # (msaa-backbuffer.js: ufront_backbuffer_samples) that is NOpenGLESDrv's antialiasing; WebGL 1 stays the fallback
     # of a browser without WebGL 2 (NSDLViewport.cpp).
     -sMAX_WEBGL_VERSION=2
@@ -152,85 +125,70 @@ if(EMSCRIPTEN)
     "SHELL:--js-library ${CMAKE_CURRENT_SOURCE_DIR}/msaa-backbuffer.js"
   )
   if(UT_WEB_PERF)
-    # ufront 2.57 -- --emit-symbol-map costs the SHIPPED build NOTHING: the map is a SIDE FILE
-    # (SDLLaunch.js.symbols), so the wasm is byte-for-byte the size it is without the flag and the code
-    # section is untouched. It is what makes a PRODUCTION crash address readable -- the shipped wasm plus
-    # this map resolves an offset to a function name offline, with no name section and no DWARF on the wire.
-    # Measured on engine-unreal1: 3,545,604 bytes either way, and 0x2e0000 resolved to
-    # FControlChannel::ReceivedBunch both from the map and from a name section built for the comparison.
-    # DWARF is the one that cannot ride along: it forces "limited binaryen optimizations", which is why the
-    # dev build's code section is more than TWICE this one's. Line numbers stay a debug-build job.
-    # !! The map names every private engine symbol, so it must never reach the published tree.
+    # --emit-symbol-map writes a side file (SDLLaunch.js.symbols) and leaves the wasm as it is; with it a crash
+    # offset in the shipped wasm resolves to a function name offline. DWARF cannot ride along (it limits
+    # binaryen's optimizations), so line numbers stay a debug-build job.
+    # The map names every private engine symbol, so it must never reach the published tree.
     target_link_options(${PROJECT_NAME} PRIVATE -O3 -g0 -sASSERTIONS=0 --emit-symbol-map)
   else()
     target_link_options(${PROJECT_NAME} PRIVATE -g -sASSERTIONS=1)
   endif()
-  # Preload the boot INI so appInit has config before FetchFS streams the rest. It comes from the
-  # TRACKED, WEB-SPECIFIC set in this repo (Engine/Config/web) — NOT the out-of-tree asset dir, whose
-  # inis belong to an untracked game install and silently revert when that image is rebuilt (they also
-  # lack the web-only [WebRTCDrv.WebRTCNetDriver] section). Engine/Config/*.ini (no subdir) stays the
-  # platform-agnostic / native reference set. appInit derives Unreal.ini from this, and that derived
-  # name is excluded from the ufront asset manifest so a stale install copy cannot shadow it.
+  # Preload the boot ini so appInit has config before the host's file system serves the rest. It is the
+  # tracked web set (Engine/Config/web), not a game install's ini, which lacks the web-only
+  # [WebRTCDrv.WebRTCNetDriver] section; Engine/Config/*.ini (no subdirectory) is the native reference set.
+  # appInit derives Unreal.ini from it, and the asset manifest excludes that name so an install copy cannot
+  # shadow it.
   if(EXISTS "${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini")
     set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS
       " --preload-file ${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini@/System/Default.ini")
   endif()
-  # The preloaded inis are INPUTS to the link: without LINK_DEPENDS, editing the web config leaves a
-  # stale .data baked (cmake sees no source change and skips the relink) — a silent trap.
+  # The preloaded ini is a link input CMake does not infer from the flag: LINK_DEPENDS relinks when it changes.
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini")
-  # The --js-library shims are link INPUTS too, and CMake does not infer that from a link option: editing
-  # a shim left a STALE .js baked while the build reported success, so the change appeared to have no
-  # effect (2.13.2: the worker never received the target descriptor and silently cached nothing). Same
-  # class of trap as the preloaded ini above, same fix.
+  # So are the --js-library files.
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
     "${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
     "${CMAKE_CURRENT_SOURCE_DIR}/msaa-backbuffer.js")
-  # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html. Output into a build-<cfg>/SDLLaunch/ subdir so the
-  # artifact path matches engine-ut2004's convention (engine-<target>/build-wasm-perf/SDLLaunch/), which is
-  # what the monorepo's packages/build derives per target.
+  # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html, in build-<cfg>/SDLLaunch/, the artifact path the
+  # host's build derives per target.
   set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME SDLLaunch
     SUFFIX ".js"
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/SDLLaunch)
 
-  # ufront 2.72 — 24-bit depth for the emulated default framebuffer: -sOFFSCREEN_FRAMEBUFFER's framebuffer is
-  # allocated with GL_DEPTH_COMPONENT16 by Emscripten regardless of the context attributes (z-fighting in bands
-  # on NOpenGLESDrv). offscreen-depth24.sh rewrites the emitted loader to D24S8 and asserts the rewrite count,
-  # so a toolchain change fails the build rather than shipping 16-bit depth again. POST_BUILD: it re-runs on
-  # every relink, and packages/build's publisher forces the relink (it deletes SDLLaunch.{js,wasm} first).
+  # 24-bit depth for the emulated default framebuffer: Emscripten allocates -sOFFSCREEN_FRAMEBUFFER's depth as
+  # GL_DEPTH_COMPONENT16 whatever the context attributes say (z-fighting in bands on NOpenGLESDrv).
+  # offscreen-depth24.sh rewrites the emitted loader to D24S8 and asserts the rewrite count, so a toolchain
+  # change fails the build. POST_BUILD, so it re-runs on every relink.
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/offscreen-depth24.sh" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/SDLLaunch.js"
     COMMENT "offscreen-depth24: D24S8 for the emulated default framebuffer")
 
-  # Emit the artifact descriptor meta.json (docs/05 §4) — packages/build validates it (schema + abiVersion
-  # === glue ABI_VERSION + checksums + loaderStyle) before assembling serve-web. abiVersion is read from the
-  # vendored frozen ABI header (single source); provenance/toolchain are best-effort.
+  # Emit the artifact descriptor meta.json, which the host's build validates (schema, abiVersion against the
+  # glue's ABI_VERSION, checksums, loaderStyle). abiVersion is read from the vendored vendor/glue/ue_abi.h;
+  # provenance and toolchain are best-effort.
   file(STRINGS ${CMAKE_SOURCE_DIR}/../vendor/glue/ue_abi.h _ue_abi_line REGEX "define[ \t]+UE_ABI_VERSION")
   string(REGEX MATCH "([0-9]+)" UE_ABI_VERSION "${_ue_abi_line}")
   execute_process(COMMAND git -C ${CMAKE_SOURCE_DIR}/.. rev-parse --short HEAD
     OUTPUT_VARIABLE META_GIT_SHA OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
   string(TIMESTAMP META_BUILT_AT "%Y-%m-%dT%H:%M:%SZ" UTC)
-  # ufront 2.70: the toolchain file knows where Emscripten is; `emcc --version` on PATH did not (a preset
-  # build has only $EMSDK set), so every shipped descriptor said "unknown".
+  # The Emscripten version comes from the toolchain's EMSCRIPTEN_ROOT_PATH: a preset build has only $EMSDK
+  # set, so emcc need not be on PATH.
   set(META_EMCC "unknown")
   if(EXISTS "${EMSCRIPTEN_ROOT_PATH}/emscripten-version.txt")
     file(READ "${EMSCRIPTEN_ROOT_PATH}/emscripten-version.txt" _emcc_ver)
     string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" META_EMCC "${_emcc_ver}")
   endif()
-  # ufront 2.70: every fetched library as repo@branch|tag, from the cache variables the fetch itself read
+  # Every fetched library as repo@branch|tag, from the cache variables the fetch itself read
   # (the web build always has NOpenALDrv, hence openal-soft and libxmp).
   include(${CMAKE_SOURCE_DIR}/cmake/ArtifactDeps.cmake)
   set(META_DEPS)
   ufront_artifact_dep(META_DEPS openal-soft OpenALSoft "${OPENALSOFT_GIT_REPOSITORY}" "${OPENALSOFT_GIT_TAG}")
   ufront_artifact_dep(META_DEPS libxmp libxmp "${LIBXMP_GIT_REPOSITORY}" "${LIBXMP_GIT_TAG}" "${LIBXMP_SOURCE_DIR}")
   find_program(NODE_EXECUTABLE node REQUIRED)
-  # ufront 2.13.2 — the emitter is an INPUT to the artifact, and CMake cannot infer that from a
-  # POST_BUILD COMMAND: editing it changes nothing the build watches, so the target does not relink,
-  # POST_BUILD never re-runs, and a STALE meta.json ships while the build reports success. Hit for real
-  # when buildFlags was corrected. Same class of trap as the preloaded config and the vendored shims,
-  # same fix — LINK_DEPENDS forces the relink that re-runs POST_BUILD.
+  # The emitter is an input to the artifact that CMake does not infer from a POST_BUILD command: LINK_DEPENDS
+  # relinks when it changes, which re-runs POST_BUILD.
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs")
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -280,10 +238,8 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE UNREAL_EXPORTS UPACKAGE_NAME=${PROJECT_NAME})
 
-# ufront 2.34 — tell the launcher which OPTIONAL render devices this build actually contains, so its
-# -*RENDERER switch table only offers what is linked. Keyed off the CMake option rather than the platform:
-# the web forces BUILD_NOPENGLDRV OFF (desktop GL), so the web preprocessor output — and the wasm — is
-# byte-for-byte what it was before desktop GL existed.
+# Tell the launcher which optional drivers this build contains, so its -*RENDERER switch table offers only
+# what is linked. Keyed off the CMake options rather than the platform.
 if(BUILD_NOPENGLDRV)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UT_HAS_NOPENGLDRV=1)
 endif()
@@ -291,9 +247,8 @@ if(BUILD_NOPENALDRV)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UT_HAS_NOPENALDRV=1)
 endif()
 
-# ufront 2.34 — OpenAL Soft is the one library the Windows build loads rather than links (see
-# cmake/OpenALMingw.cmake for why). Put it beside the .exe as part of the build, so the output directory
-# IS the runnable set and nobody has to know this.
+# OpenAL Soft is the one library the Windows build ships as a DLL (cmake/OpenALMingw.cmake). The build puts it
+# beside the .exe, so the output directory is the runnable set.
 if(OPENAL_MINGW_RUNTIME_DLL)
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -302,9 +257,9 @@ if(OPENAL_MINGW_RUNTIME_DLL)
     COMMENT "Copying ${OPENAL_MINGW_RUNTIME_DLL_NAME} (OpenAL Soft) next to the executable")
 endif()
 
-# ufront 2.70 — native Linux: our own openal-soft (cmake/OpenALSoft.cmake NATIVE) is DT_NEEDED by NOpenALDrv,
-# so the binary finds it through $ORIGIN and the build puts it there, soname and all. A run tree that takes
-# the binary takes libopenal.so.1 with it; without the file the loader stops before main.
+# Native Linux: the bundled openal-soft (cmake/OpenALSoft.cmake NATIVE) is DT_NEEDED by NOpenALDrv, so the
+# binary finds it through $ORIGIN and the build puts it there, soname and all. A run tree that takes the
+# binary takes libopenal.so.1 with it; without the file the loader stops before main.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT EMSCRIPTEN AND NOT ANDROID AND TARGET OpenAL)
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY BUILD_RPATH "$ORIGIN")
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

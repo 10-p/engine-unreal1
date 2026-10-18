@@ -119,8 +119,7 @@ class CORE_API UField : public UObject
 //
 // An UnrealScript structure definition.
 //
-// The compiled-script (32-bit) layout, for everything written into a package or bytecode (UnClass.cpp,
-// ufront 2.84).
+// The compiled-script (32-bit) layout, for every size or offset written into a package or into bytecode.
 CORE_API INT ScriptFormatElementSize( class UProperty* Property, INT& Alignment );
 CORE_API INT ScriptFormatStructSize( class UStruct* Struct );
 CORE_API INT ScriptFormatOffset( class UProperty* Property );

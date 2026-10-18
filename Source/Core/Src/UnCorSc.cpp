@@ -12,7 +12,7 @@ Revision history:
 
 #include "CorePrivate.h"
 
-// ufront 2.84 -- the last None-context zero-fill: where it wrote and how many bytes (see UProperty::ExecLet).
+// The last None-context zero-fill (execContext, execClassContext): where it wrote and how many bytes.
 BYTE* GNullContextResult = NULL;
 INT   GNullContextSize   = 0;
 
@@ -241,7 +241,7 @@ void UObject::execClassContext( FFrame& Stack, BYTE*& Result )
 
 	// Get class expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
-	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
+	appMemset( Buffer, 0, sizeof(UObject*) );	// a None context fills only 4 bytes of the pointer
 	Stack.Step( Stack.Object, Addr );
 
 	// Execute expression in class context.
@@ -377,8 +377,8 @@ void UObject::execSwitch( FFrame& Stack, BYTE*& Result )
 	// Get switch size.
 	BYTE bSize = *Stack.Code++;
 
-	// Get switch expression. (ufront 2.84: the first pointer's width of both buffers starts zeroed, so a short
-	// None-context fill still reads as None when an object case compares whole pointers below.)
+	// Get switch expression. (The first pointer's width of both buffers starts zeroed, so a short None-context
+	// fill still reads as None when an object case compares whole pointers below.)
 	BYTE SwitchBuffer[MAX_CONST_SIZE], *SwitchVal=SwitchBuffer;
 	appMemset( SwitchBuffer, 0, sizeof(UObject*) );
 	Stack.Step( Stack.Object, SwitchVal );
@@ -402,8 +402,8 @@ void UObject::execSwitch( FFrame& Stack, BYTE*& Result )
 		Stack.Step( Stack.Object, Val );
 
 		// Compare. bSize is the compiled (32-bit) size: 4 for an object. A case that is an object constant
-		// means an object switch, so compare whole pointers (ufront 2.84) -- the low halves of two different
-		// objects can be equal on LP64.
+		// means an object switch, so compare whole pointers -- the low halves of two different objects can be
+		// equal on LP64.
 		INT CmpSize = bSize;
 		if( bSize && bSize<sizeof(UObject*) && (CaseToken==EX_ObjectConst || CaseToken==EX_NoObject) )
 			CmpSize = sizeof(UObject*);
@@ -531,10 +531,8 @@ void UObject::execContext( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execContext);
 
-	// Get actor variable. (ufront 2.84: an object read from a scratch buffer starts it zeroed for a pointer's
-	// width. A None context inside -- `None.A.B`, `Pawn(None.A)` -- fills only the compiler's 4 bytes; the rest
-	// of this uninitialised buffer made the high half of the pointer read below, SIGSEGV on LP64. v400
-	// initialised these locals; v200 does not. Also execClassContext, both casts, ObjectToBool/String.)
+	// Get actor variable. (The buffer starts zeroed for a pointer's width: a None context inside -- `None.A.B`,
+	// `Pawn(None.A)` -- fills only the compiler's 4 bytes, and on LP64 the rest is the pointer's high half.)
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
 	appMemset( Buffer, 0, sizeof(UObject*) );
 	Stack.Step( this, Addr );
@@ -612,7 +610,7 @@ void UObject::execStructCmpEq( FFrame& Stack, BYTE*& Result )
 	// Get struct.
 	UStruct* Struct = (UStruct*)Stack.ReadObject();
 
-	// Get first expression. (ufront 2.84: a None context's struct is zero to its size in memory, as in ExecLet.)
+	// Get first expression. (A None context's struct is zeroed to its full size in memory.)
 	BYTE Buffer1[255], *Addr1=Buffer1;
 	GNullContextResult = NULL;
 	Stack.Step( this, Addr1 );
@@ -666,13 +664,12 @@ void UObject::execStructMember( FFrame& Stack, BYTE*& Result )
 	BYTE Buffer[255], *Addr = Result ? Buffer : NULL;
 	GNullContextResult = NULL;
 	Stack.Step( this, Addr );
-	ZeroNullContextTail( Addr, Min<INT>( ((UStruct*)Property->GetParent())->GetPropertiesSize(), sizeof(Buffer) ) );	// ufront 2.84, see ExecLet
+	ZeroNullContextTail( Addr, Min<INT>( ((UStruct*)Property->GetParent())->GetPropertiesSize(), sizeof(Buffer) ) );	// zero a None context's tail
 
-	// Set result. (ufront 2.84: a struct that came back in this frame's own Buffer -- an operator's or a native's
-	// result, a None context -- is a temporary, so its member is copied into the caller's buffer, which is sized
-	// for the member's type. Returning a pointer into Buffer had every caller read it from a returned frame
-	// (`Normal(V).Z`; AddressSanitizer stack-use-after-return, at every width). A static array member is still
-	// returned by pointer: its reader is EX_ArrayElement, whose caller's buffer holds one element.)
+	// Set result. (A struct that came back in this frame's own Buffer -- an operator's or a native's result, a
+	// None context -- is a temporary that dies with this frame, so its member is copied into the caller's buffer,
+	// which is sized for the member's type. A static array member is returned by pointer: its reader is
+	// EX_ArrayElement, whose caller's buffer holds one element.)
 	if( Addr==Buffer && Property->ArrayDim==1 )
 		appMemcpy( Result, Buffer+Property->Offset, Property->GetElementSize() );
 	else
@@ -816,7 +813,7 @@ void UObject::execDynamicCast( FFrame& Stack, BYTE*& Result )
 
 	// Compile actor expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
-	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
+	appMemset( Buffer, 0, sizeof(UObject*) );	// a None context fills only 4 bytes of the pointer
 	Stack.Step( Stack.Object, Addr );
 
 	UObject* Castee = *(UObject**)Addr;
@@ -835,7 +832,7 @@ void UObject::execMetaCast( FFrame& Stack, BYTE*& Result )
 
 	// Compile actor expression.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
-	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
+	appMemset( Buffer, 0, sizeof(UObject*) );	// a None context fills only 4 bytes of the pointer
 	Stack.Step( Stack.Object, Addr );
 
 	UObject* Castee = *(UObject**)Addr;
@@ -888,9 +885,7 @@ AUTOREGISTER_INTRINSIC( UObject, EX_ByteToString, execByteToString );
 void UObject::execIntToByte( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execIntToByte);
-	// ufront 2.84 -- converts into the caller's buffer, like every other conversion (and v400). It pointed Result
-	// at this frame's own Buffer, so every caller read the byte from a returned frame (AddressSanitizer:
-	// stack-use-after-return, at every width).
+	// Converts into the caller's buffer, like every other conversion: this frame's Buffer dies with it.
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
 	Stack.Step( Stack.Object, Addr );
 	*(BYTE*)Result = *(INT*)Addr;
@@ -1013,7 +1008,7 @@ void UObject::execObjectToBool( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execObjectToBool);
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
-	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
+	appMemset( Buffer, 0, sizeof(UObject*) );	// a None context fills only 4 bytes of the pointer
 	Stack.Step( Stack.Object, Addr );
 	*(DWORD*)Result = *(UObject**)Addr!=NULL;
 	unguardexecSlow;
@@ -1024,7 +1019,7 @@ void UObject::execObjectToString( FFrame& Stack, BYTE*& Result )
 {
 	guardSlow(UObject::execObjectToString);
 	BYTE Buffer[MAX_CONST_SIZE], *Addr=Buffer;
-	appMemset( Buffer, 0, sizeof(UObject*) );	// ufront 2.84: see execContext
+	appMemset( Buffer, 0, sizeof(UObject*) );	// a None context fills only 4 bytes of the pointer
 	Stack.Step( Stack.Object, Addr );
 	appStrcpy((char*)Result, *(UObject**)Addr ? (*(UObject**)Addr)->GetName() : "None");
 	unguardexecSlow;
@@ -2834,13 +2829,11 @@ void UObject::CallFunction( FFrame& Stack, BYTE*& Result, UFunction* Function )
 		debug(*NewStack.Code==EX_BeginFunction);
 		NewStack.Code++;
 
-		// Each parameter goes where the function's linked property reads it (ufront 2.84). EX_BeginFunction
-		// lists one byte per parameter: its size plus the gap to the next one, in the compiling engine's
-		// 32-bit layout -- an object parameter is 4 there and 8 on LP64, so summing them put every later
-		// parameter at the wrong offset and let the next one overwrite a pointer's high half. The compiler
-		// iterated the same properties in the same order to emit those bytes; here they only count the
-		// parameters. Copies use the parameter's own size, not the padded span (which also wrote a byte
-		// out-parameter's neighbours back on every width).
+		// Each parameter goes where the function's linked property reads it. EX_BeginFunction lists one byte
+		// per parameter: its size plus the gap to the next one, in the 32-bit script layout (an object is 4
+		// there, 8 on LP64), so here those bytes only count the parameters; the compiler emitted them iterating
+		// the same properties in the same order. Copies use the parameter's own size, not the padded span, so a
+		// byte out-parameter's neighbours are not written back.
 		TFieldIterator<UProperty> Parm( Function );
 		FOutParmRec Outs[MAX_FUNC_PARMS], *Out = Outs;
 		while( *NewStack.Code++ != 0 )
@@ -2854,9 +2847,8 @@ void UObject::CallFunction( FFrame& Stack, BYTE*& Result, UFunction* Function )
 			if( Out->Dest != Dest )
 			{
 				// A string is copied up to its terminator, as a string assignment copies it: a string constant is
-				// read in place from the bytecode, and its parameter's fixed size ran past the end of the
-				// function's Script (AddressSanitizer heap-buffer-overflow, at every width: the original copied
-				// the same span).
+				// read in place from the bytecode, where its parameter's fixed size can run past the end of the
+				// function's Script.
 				if( Parm->ArrayDim==1 && Parm->GetClass()==UStringProperty::StaticClass )
 					appStrncpy( (char*)Dest, (char*)Out->Dest, Out->Size );
 				else

@@ -2,10 +2,9 @@
 """
 trace.py -- symbolic dataflow over the IR produced by extract.py.
 
-Purpose: recover the *arithmetic* of UE1's MMX-only SoftDrv kernels -- lane widths, shift
-amounts, bias constants, the order light and fog get folded together -- so the portable C path can
-reproduce it exactly instead of by eye.  This is a reading aid, not a translator: it never claims
-the output is compilable.
+Shows the *arithmetic* of SoftDrv's MMX kernels -- lane widths, shift amounts, bias constants, the
+order light and fog are folded together -- so the portable C path can reproduce it exactly.  It is
+a reading aid, not a translator: the output is not compilable.
 
 Each instruction is rewritten as an assignment whose right-hand side names a portable helper
 (`add_i16x4`, `mulhi_i16x4`, `shr64`, ...).  Long expressions spill into numbered temporaries so
@@ -15,8 +14,9 @@ blocks stay readable.  Registers entering a block from elsewhere print as `eax@i
     python3 trace.py --summary <file.cpp> <function>  # constants / symbols / opcode mix only
     python3 trace.py --blocks  <file.cpp> <function>  # control-flow skeleton only
 
-`--summary` is usually what you want first: it groups every immediate by the opcode that consumed
-it, which is how the fog scale (13-bit + MMXFlashOffset13) and the knight-dither offsets fall out.
+`--summary` is the usual first step: it groups every immediate by the opcode that consumed it,
+which exposes constants such as the fog scale (13-bit + MMXFlashOffset13) and the knight-dither
+offsets.
 """
 
 import collections
@@ -28,7 +28,7 @@ from extract import BRANCHES, GPR32, MMX
 # ---------------------------------------------------------------------------
 # Instruction semantics
 #
-# name -> (arity, template).  Template placeholders: {0} = dest value, {1}, {2} = sources.
+# name -> template.  Template placeholders: {0} = dest value, {1}, {2} = sources.
 # `None` means "no modelled value" (flags-only or control flow).
 # ---------------------------------------------------------------------------
 

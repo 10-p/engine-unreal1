@@ -1,6 +1,6 @@
 //=============================================================================
-// U64Decl -- ufront 2.84: the declarations the other fixture classes never compile -- an enum, a struct with
-// object, class, string, static-array, vector and rotator members, consts, ArrayCount, vect()/rot() constants.
+// U64Decl -- the declarations the other fixture classes do not use: an enum, a struct with object, class,
+// string, static-array, vector and rotator members, consts, ArrayCount, vect()/rot() constants.
 // Compile-only: its test is the compiler round-trip (a 64-bit `Unreal.bin -MAKE` must write the same bytes as
 // the 32-bit one, but for the package GUID).
 //=============================================================================

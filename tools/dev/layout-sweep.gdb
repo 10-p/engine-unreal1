@@ -1,16 +1,15 @@
-# layout-sweep.gdb -- every script property of every intrinsic class vs the same-named C++ member
-# (ufront 2.84: engine-ut99's tool, for v200 -- Parent for Outer, FObjectManager::Objects for GObjObjects).
+# layout-sweep.gdb -- every script property of every intrinsic class vs the same-named C++ member.
 #
 #   cd <run-tree>/System && gdb -batch -x <engine-repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -MAKE
 #   cd <run-tree>/System && gdb -batch -x <engine-repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -NULLRENDERER
 #
-# Run BOTH hosts. Some reflected layouts exist only in one process (UT99's input-alias struct exists only
+# Run both hosts. Some reflected layouts exist only in one process (the input-alias struct exists only
 # where a client is), so a sweep in one host is blind to the other's. `-MAKE` stops when the editor engine is
 # destroyed; the client stops at its first game tick (map loaded, viewport open; headless under Xvfb).
 #
 # The runtime layout guard in UStruct::LinkOffsets compares only an intrinsic class's C++ sizeof with its
 # script size. It cannot see a member that moved inside a class when a later one re-aligns. This compares
-# OFFSETS, property by property: UE1 loads script properties at the offsets LinkOffsets computes, while the
+# offsets, property by property: UE1 loads script properties at the offsets LinkOffsets computes, while the
 # C++ reads its members at the compiler's offsets. Bools are compared as (32-bit unit, bit).
 # Output: a SHIFT/SIZE line per class disagreement, then `checked=<n> shifted=<n>`; then the script structs
 # with a same-named C++ F<Name> (SSHIFT/SSIZE), then `structs=<n> checked=<n> shifted=<n>`. A name can
@@ -81,7 +80,7 @@ for i in range(count):
         field = field['Next']
 print("checked=%d shifted=%d" % (checked, shifted))
 
-# (ufront 2.83) Script STRUCTS mirrored by a C++ struct F<Name>. The runtime guard only knows native
+# Script structs mirrored by a C++ struct F<Name>. The runtime guard only knows native
 # classes, but a struct's size is also a stride (TArray<FBuilderPoly>) and its members are read by C++ at
 # its own offsets, so every script struct with a same-named C++ type is compared too: size, then each
 # property. A name can match an unrelated C++ type -- read a report before acting on it.

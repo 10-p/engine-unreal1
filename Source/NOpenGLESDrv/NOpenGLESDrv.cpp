@@ -91,9 +91,8 @@ UNOpenGLESRenderDevice::UNOpenGLESRenderDevice()
 	SwapInterval = 1;
 }
 
-// ufront 2.19: this driver's vendored glad_es has NO anisotropic entry, so its GLAD_GL_* table cannot
-// answer here. Ask the live context's extension string instead — correct on native and web alike, and the
-// same lesson as XOpenGL's S3TC bug: query the context you actually render into.
+// This driver's glad_es has no anisotropic entry, so its GLAD_GL_* table cannot answer here: ask the extension
+// string of the context this driver renders into instead.
 #include <string.h>
 #ifdef __EMSCRIPTEN__
 extern "C" int ufront_backbuffer_samples( int Samples ); // msaa-backbuffer.js
@@ -120,7 +119,7 @@ static UBOOL NOpenGLESHasAniso()
 		|| NOpenGLESHasExtension( "EXT_texture_filter_anisotropic" );
 }
 
-// ufront 2.19: EXT_texture_filter_anisotropic tokens — optional extension, so define defensively.
+// EXT_texture_filter_anisotropic tokens: an optional extension, so define them where the headers do not.
 #ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
 #define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
 #endif
@@ -133,10 +132,9 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 	guard(UNOpenGLESRenderDevice::Init)
 
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
-	// ufront 2.13.2 hatch (c): the context was created with emscripten_webgl_create_context, NOT through
-	// SDL, so SDL_GL_GetProcAddress has no context to resolve against and hands back nulls — glad then
-	// fails and the device never initializes (RenDev stays NULL and the viewport asserts). Emscripten's
-	// own resolver is context-aware and works on the worker.
+	// The context was created with emscripten_webgl_create_context, not through SDL, so SDL_GL_GetProcAddress
+	// has no context to resolve against and returns nulls. Emscripten's own resolver is context-aware and
+	// works on the worker.
 	if( !gladLoadGLES2Loader( (GLADloadproc)&emscripten_webgl_get_proc_address ) )
 	{
 		debugf( NAME_Warning, "Could not load GLES2 via emscripten_webgl_get_proc_address" );
@@ -152,8 +150,7 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 
 	debugf( NAME_Log, "Got OpenGL %s", glGetString( GL_VERSION ) );
 	{
-		// ufront 2.72: the depth the default framebuffer really has. Under -sOFFSCREEN_FRAMEBUFFER this is
-		// Emscripten's emulated framebuffer; 16 here is the banding z-fight (offscreen-depth24.sh makes it 24).
+		// Log the depth and stencil the default framebuffer really has: a 16-bit depth buffer z-fights in bands.
 		GLint DepthBits = 0, StencilBits = 0;
 		glGetIntegerv( GL_DEPTH_BITS, &DepthBits );
 		glGetIntegerv( GL_STENCIL_BITS, &StencilBits );
@@ -187,11 +184,11 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 	{
 		glGenBuffers( 1, &GLBuf );
 		glBindBuffer( GL_ARRAY_BUFFER, GLBuf );
-		glBufferData( GL_ARRAY_BUFFER, VtxDataSize * sizeof(FLOAT), (void*)VtxData, GL_DYNAMIC_DRAW ); // ufront 2.72: bytes, not floats (VAO path; web has UseVAO off)
+		glBufferData( GL_ARRAY_BUFFER, VtxDataSize * sizeof(FLOAT), (void*)VtxData, GL_DYNAMIC_DRAW ); // a size in bytes, not floats
 	}
 
-	// ufront 2.19: anisotropic filtering — a real numeric control. Clamp to what the driver advertises
-	// instead of trusting the ini; 1.0 is isotropic (the GL default) so "off" needs no special case.
+	// Anisotropic filtering: clamp to what the driver advertises instead of trusting the ini; 1.0 is isotropic
+	// (the GL default), so "off" needs no special case.
 	if( MaxAnisotropy > 1.f )
 	{
 		if( NOpenGLESHasAniso() )
@@ -212,8 +209,8 @@ UBOOL UNOpenGLESRenderDevice::Init( UViewport* InViewport )
 	}
 
 #ifdef __EMSCRIPTEN__
-	// ufront 2.92: antialiasing on the web is a multisampled emulated back buffer (msaa-backbuffer.js), which needs
-	// WebGL 2 (multisampled renderbuffers); asked for or given back on every Init, since a context outlives a device.
+	// Antialiasing is a multisampled emulated back buffer (msaa-backbuffer.js), which needs WebGL 2 (multisampled
+	// renderbuffers); requested or released on every Init, since a context outlives a device.
 	{
 		const INT Got = ufront_backbuffer_samples( NumAASamples > 1 ? NumAASamples : 0 );
 		if( Got > 1 )
@@ -598,10 +595,7 @@ void UNOpenGLESRenderDevice::ReadPixels( FColor* Pixels )
 {
 	guard(UNOpenGLESRenderDevice::ReadPixels);
 
-	// ufront 2.91: was glPixelStorei( GL_UNPACK_ALIGNMENT, 0 ) -- the wrong parameter AND an invalid value, which
-	// Emscripten caches as given (libwebgl.js glPixelStorei) and then sizes every later texture upload AND this read
-	// from: (x + 0 - 1) & -0 = 0 bytes, so after one SHOT no texture uploaded and the shot itself read nothing. A
-	// read packs rows; RGBA rows are 4-byte aligned already, 1 just says so.
+	// A read packs rows (GL_PACK_ALIGNMENT); RGBA rows are 4-byte aligned already, 1 just says so.
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	glReadPixels( 0, 0, Viewport->SizeX, Viewport->SizeY, GL_RGBA, GL_UNSIGNED_BYTE, (void*)Pixels );
 
@@ -646,11 +640,9 @@ void UNOpenGLESRenderDevice::UpdateUniforms()
 	if( UniformsChanged[UF_Brightness] )
 	{
 		FlushTriangles();
-		// ufront 2.72: a modulated poly multiplies the framebuffer by 2*texel, so its neutral grey must stay exactly
-		// 0.5 — the brightness scale (0.5 + 1.5*B in the shader) lifted every modulated sprite by 1.25x at the default
-		// brightness and stacked per overlapping quad: the visible SQUARE around lingering smoke. Send the neutral
-		// value (1/3 -> a factor of exactly 1.0) while PF_Modulated is the current blend; the original drivers put
-		// brightness in the gamma ramp, which never touched a modulation factor either.
+		// A modulated poly multiplies the framebuffer by 2*texel, so its neutral grey must stay exactly 0.5; the
+		// brightness scale (0.5 + 1.5*B in the shader) would lift every modulated sprite, stacking per overlapping
+		// quad. While PF_Modulated is the current blend, send the neutral value (1/3, a factor of exactly 1.0).
 		glUniform1f( ShaderInfo->Uniforms[UF_Brightness], ( CurrentPolyFlags & PF_Modulated ) ? ( 1.f / 3.f ) : CurrentBrightness );
 		UniformsChanged[UF_Brightness] = false;
 	}
@@ -916,7 +908,7 @@ void UNOpenGLESRenderDevice::SetBlend( DWORD PolyFlags, UBOOL InverseOrder )
 			glColorMask( Show, Show, Show, Show );
 		}
 		if( Xor & PF_Modulated )
-			UniformsChanged[UF_Brightness] = true; // ufront 2.72: brightness is neutral for modulated polys (UpdateUniforms)
+			UniformsChanged[UF_Brightness] = true; // brightness is neutral for modulated polys (UpdateUniforms)
 		if( Xor & PF_Occlude )
 			glDepthMask( (PolyFlags & PF_Occlude) != 0 );
 		if( Xor & PF_Masked )
@@ -947,7 +939,7 @@ void UNOpenGLESRenderDevice::UpdateTextureFilter( const FTextureInfo& Info, DWOR
 	{
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( Info.NumMips > 1 ) ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR );
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-		// ufront 2.19: anisotropy only applies on the smooth path, and only with mips to sample across.
+		// Anisotropy only applies on the smooth path, and only with mips to sample across.
 		if( MaxAnisotropy > 1.f && Info.NumMips > 1 )
 			glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, MaxAnisotropy );
 	}
