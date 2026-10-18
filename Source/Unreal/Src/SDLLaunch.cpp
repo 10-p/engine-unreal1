@@ -209,13 +209,13 @@ static const char* RenderClassName( const char* Device )
 // True iff the render-device class is compiled into / loadable by this build.
 static UBOOL IsPackageClassAvailable( const char* Device )
 {
-#ifdef __EMSCRIPTEN__
-	// FindObject inspects only registered objects (a statically linked render device registers at startup):
-	// no file access, no throw.
+#ifdef UNREAL_STATIC
+	// Every package is linked in and its classes registered at startup, so FindObject answers: no file access,
+	// no throw.
 	return GObj.FindObject( UClass::StaticClass, ANY_PACKAGE, RenderClassName(Device) ) != NULL;
 #else
-	// Loads the class by name (LOAD_NoWarn): a compiled-in driver resolves and registers, an absent one returns
-	// NULL. UObject is the permissive base (URenderDevice's header is not included here).
+	// A package's classes register when it loads: load the class by name (LOAD_NoWarn), which returns NULL for
+	// an absent one. UObject is the permissive base (URenderDevice's header is not included here).
 	return GObj.LoadClass( UObject::StaticClass, NULL, Device, NULL, LOAD_NoWarn, NULL ) != NULL;
 #endif
 }
