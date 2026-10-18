@@ -2,16 +2,23 @@
 
 Unreal Engine 1 v200 source with modifications to make it run on modern systems and in the browser.
 Requires assets from the original Unreal v200 retail release or from the v205 demo. Other versions have not been tested.
-Based on [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1). Design notes and web-port details: [BUILD.md](BUILD.md).
+Based on [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1). Build details, options and test tools: [BUILD.md](BUILD.md).
 
-## Changes from original source
+## Changes from the original source
 
-* Added SDL2 windowing/client driver (NSDLDrv).
-* Added GLES2 and fixed pipeline GL graphics drivers (NOpenGLESDrv and NOpenGLDrv).
-* Added OpenAL + libxmp audio driver (NOpenALDrv).
-* Added GCC support and fixed a bunch of related bugs.
-* Added a 64-bit (x86_64) Linux build that still runs the retail 32-bit packages.
-* Added a WebAssembly build and a WebRTC net driver (WebRTCDrv) for the browser.
+* **WebAssembly build:** every package in one static wasm that runs on a browser worker thread, with WebGL 2, a file system served by the host page and a frame loop that returns to the browser every frame.
+* **SDL2 client driver (NSDLDrv):** a resizable window that follows its real drawable size, pointer capture in play, game pads with hot-plug.
+* **OpenGL ES renderer (NOpenGLESDrv):** the default hardware renderer on the web and on Linux, with antialiasing and anisotropic filtering.
+* **OpenGL renderer (NOpenGLDrv):** desktop GL in the native and Windows builds, with antialiasing and anisotropic filtering.
+* **Software renderer (SoftDrv):** its portable C path on every target, with volumetric fog, mesh fog and texture smoothing matched to the original MMX kernels.
+* **Null renderer (NullDrv):** a render device that draws nothing, for headless runs.
+* **WebRTC net driver (WebRTCDrv):** multiplayer and the stock LAN server browser in the browser.
+* **OpenAL Soft audio (NOpenALDrv):** one openal-soft build on the web, Linux and Windows, with EFX reverb, optional HRTF and libxmp tracker music.
+* **64-bit and ARM support:** x86_64 and arm64 builds that run the retail 32-bit packages unchanged.
+* **Windows build:** one static MinGW-w64 executable, cross-compiled from Linux or built under MSYS2.
+* **PS Vita build** (from fgsfdsfgs/UE1).
+* **GCC and Clang support:** the engine compiles cleanly with GCC, Clang, Emscripten and MinGW-w64.
+* **Languages:** localized properties load, so menus and messages follow the chosen language.
 * Editor UI is not supported.
 
 ## Building
@@ -75,6 +82,14 @@ Copy `<prefix>/lib/libSDL2-2.0.so.0` next to `Unreal.bin` (or add `<prefix>/lib`
 
 Use real copies of the game files, not symlinked folders: the engine does not find packages through symlinked directories (`Can't find file for package ...`).
 Headless check: `-NULLRENDERER` (Linux) or `-SOFTWARERENDERER` (Windows, also under wine); the log `System/Unreal.log` should reach `Init: Game engine initialized`.
+On Linux, SIGTERM, SIGINT (Ctrl-C) or SIGHUP ends the game cleanly; a second one is ignored.
+
+## Credits
+
+* Epic Games wrote Unreal and its v200 source, which this engine is built from.
+* BearIvan (Ivan Sobolevskiy) imported the v200 source and made it build with MSVC.
+* fgsfds ([fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1)) ported it to GCC and CMake and wrote the SDL2 client, the OpenGL, OpenGL ES and OpenAL drivers and the PS Vita port, with pull requests by BSzili (big-endian fixes, driver fixes, Hor+ widescreen) and babbygremlin (game speed above the standard frame rate).
+* The libraries: OpenAL Soft (Chris Robinson, kcat; LGPL), libxmp, SDL2, glad (David Herberth), glm (G-Truc Creation), TargetArch.cmake (Petroules Corporation) and Emscripten.
 
 ## Note
 

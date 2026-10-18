@@ -1,14 +1,10 @@
-# Engine/Config/web — web platform config (build-consumed)
+# Engine/Config/web — the web build's boot config
 
-`Default.ini` here is the **web** boot config: the Emscripten link `--preload-file`s it
-(`Source/Unreal/CMakeLists.txt`), and `appInit` derives `Unreal.ini` from it at boot. It carries the
-web-only settings — notably the `[WebRTCDrv.WebRTCNetDriver]` section — that a native game install's inis
-do not have.
+`Default.ini` here is the web build's boot config: the Emscripten link preloads it as `/System/Default.ini`
+(`Source/Unreal/CMakeLists.txt`, which also relinks when it changes), and `appInit` derives `Unreal.ini` from it at
+boot. It carries the web's settings, among them the `[WebRTCDrv.WebRTCNetDriver]` section a native install's
+inis do not have, the web's client and HUD defaults, and no save-slot names.
 
-`../*.ini` (the parent folder) is the **platform-agnostic / native** reference set; it is NOT what the web
-ships.
-
-Previously the web build preloaded this from the out-of-tree asset dir, so the web config lived only in an
-untracked game install and was silently reverted whenever that image was rebuilt. The ufront manifest now
-also excludes `System/Unreal.ini`, so a stale install copy cannot shadow what `appInit` derives here.
-**Edit this folder when the web config changes — never the asset tree.**
+`../*.ini` (the parent folder) is the native set, which a native install copies into `System/`; the web does not
+ship it. The frontend's asset manifest leaves `System/Unreal.ini` out, so a game install's copy cannot shadow
+the one derived from this file. Change the web config here, not in an asset tree.

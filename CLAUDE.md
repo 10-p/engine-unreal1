@@ -1,77 +1,60 @@
 # engine-unreal1 — agent guide
 
-**What this is:** the **private** engine repo for the original **Unreal (1998), Unreal Engine 1 v200**,
-web port. It holds engine source only and produces a **WASM artifact** (+ native binaries). It is **not**
-the product on its own — the public monorepo `ufront` (`10-p/unreal-frontend-arch-private`) consumes this engine's WASM
-artifact, owns the host page / UI / build assembly, and owns the browser glue behind a thin **ABI shim**.
+**What this is:** the private engine repo for **Unreal (1998), Unreal Engine 1 v200**: engine source only. It
+builds a WebAssembly artifact (and native Linux and Windows binaries). The frontend repo
+`10-p/unreal-frontend-arch-private` consumes the artifact and owns the host page, the UI, the build assembly and
+the browser glue behind a thin ABI. Building, options and test tools: `BUILD.md`.
 
-Created by **step 2.6** of the ufront re-architecture (the first cross-engine-*generation* port: UE1 vs
-UT2004's UE2.5, on the same shell + glue + ABI). Base import: **[fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1)**
-@ `41cf09a` (kept as the `upstream` remote; our private work is fresh commits on `main`).
+**Lineage:** Epic's v200 drop, imported by BearIvan, then [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1) up to
+`41cf09a`; our work is everything after that commit. The baseline is the Epic drop in `~/WorkUnreal/epic-sources/`
+(see its README). No `upstream` remote is configured: compare against `41cf09a` or the drop.
 
-## Map of the world
+**Features** are listed in the frontend's `docs/14-change-inventory.md`; a new feature adds its line there.
+
+## Map
 | Thing | Where | Role |
 |-------|------|------|
-| This engine repo (private) | `10-p/engine-unreal1` | UE1 source → WASM/native artifacts |
-| Sibling engine (the MODEL) | `10-p/engine-ut2004` | the UE2.5 port — the pattern this repo mirrors |
-| Public monorepo | `10-p/unreal-frontend-arch-private` | consumes the artifact; host/UI/glue/build; **migration state lives here** |
-| Game assets (never in git) | any local folder | Unreal v200, ~456 MB; not read by any build |
-| UE1 reference (read-only) | [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1) (add as `upstream`) | pristine fgsfdsfgs/UE1 @ `41cf09a` (identical to our base) |
-| Software-renderer REFERENCE | [10-p/UE1-funkey](https://github.com/10-p/UE1-funkey) | ARM port proving `SoftDrv` on non-x86 — **reference only, not a commit quarry** |
+| This repo (private) | `10-p/engine-unreal1` | UE1 source → web and native builds |
+| Frontend | `10-p/unreal-frontend-arch-private` | consumes `build-wasm-perf/SDLLaunch/`; host, UI, glue, publishing |
+| Game assets | any local folder (never in git) | an Unreal v200 install; no build reads it |
+| ARM device port (reference) | [10-p/UE1-funkey](https://github.com/10-p/UE1-funkey) | a SoftDrv port to a small ARM device; read it, do not cherry-pick its device workarounds |
 
-> **Migration plan & durable state are in the monorepo**, not here:
-> `docs/migration/STATE.md` (read first if continuing the migration),
-> `ROADMAP.md`, `steps/2.6-engine-unreal1.md` (this step's spec + decisions D1–D12).
+## Load-bearing facts
+- **One static binary on every preset** (`BUILD_STATIC`, `UNREAL_STATIC`, `--whole-archive` keeps the package
+  registrants). Classes of linked packages are registered at startup.
+- **`ASM=0` off MSVC:** SoftDrv and Core use their portable C paths; SoftDrv's are matched to the MMX kernels
+  (`tools/asmport/`).
+- **Main loop on the web:** `MainLoop` returns to the worker's event loop every frame through Asyncify
+  (`emscripten_sleep`, or a `setTimeout(0)` `EM_ASYNC_JS` yield), never `emscripten_set_main_loop`, whose unwind
+  collides with `main()`'s try/catch.
+- **Files:** the engine uses libc `fopen`/`opendir`; on the web WasmFS's JSImpl backend (`vendor/glue/wasmfs-shim.js`)
+  serves them from the host. Do not write an engine-side web file manager.
+- **Glue ABI:** `vendor/glue/` (ue_abi.h, net-shim.js, wasmfs-shim.js) is vendored from the frontend at ABI
+  version 2. Only these thin forwarders and `Source/Unreal/msaa-backbuffer.js` are baked into the wasm; the
+  transport, the file system and storage are injected by the host at run time. A change to the ABI is a
+  cross-engine change owned by the frontend: re-vendor, never edit here.
+- **The log reaches stdout on every build** (`FGlobalPlatform::WriteBinary`, the same lines as `Unreal.log`); the
+  frontend's E2E reads engine milestones from the browser console. Do not remove it, and do not reword a log line
+  the frontend matches (grep `packages/e2e` and `targets/` in the frontend first).
+- **Exceptions on the web:** engine objects cannot catch, so web loading fails soft (`SafeLoadError`,
+  `GetPackageLinker`, `LoadObject` resolve to NULL; a bad startup map falls back to the menu) under
+  `#ifdef __EMSCRIPTEN__`, and `appThrowf` prints `[appThrowf] <message>` first. Native keeps Epic's errors. The
+  link enables catching only for openal-soft's `-fexceptions` objects; leave the engine's objects as they are.
+- **Net on the web:** WebRTCDrv (`UWebRTCNetDriver`) over the `ue_net_*` imports; a configured
+  `IpDrv.TcpNetDriver` is replaced at startup. The package, class and `NetworkDevice` value keep their names.
 
-## Status
-The web port (step 2.6) is done; Windows (2.33) and 64-bit Linux (2.84) builds exist too (`BUILD.md`). The engine bakes only the thin `webrtc_*` shim (`vendor/glue/webrtc-shim.js`,
-vendored from `@ufront/glue` at `ABI_VERSION 1`); heavy glue (FetchFS + IDB + WebRTC session logic) is
-**injected at runtime** by the host, not baked. The WASM build emits a **bare loader**
-(`SDLLaunch.{js,wasm,data}` + `meta.json`, `loaderStyle=global-module`, no `.html`) that the monorepo's
-`packages/build` validates + assembles into `serve-web/`.
-
-## Conventions / load-bearing facts (the UE1 specifics)
-- **Renderer (step 2.6, ADR/D3):** ship the port's **native `NOpenGLESDrv` (GLES2 → WebGL directly, no
-  GL4ES)** as the default + **`SoftDrv` (software)**. Under `__EMSCRIPTEN__`, `NOpenGLESDrv` bypasses
-  `glad` and calls Emscripten's linked GLES2 symbols directly. A better HW renderer (OldUnreal/XOpenGLDrv
-  ES-target, or cwdohnal/utglr + GL4ES — each backported to v200) is a documented **future** step.
-- **`ASM=0` for the web/non-x86 build.** UnBuild.h defaults `ASM 1` (x86 inline asm). `SoftDrv`'s portable
-  C path (upstream `softdrv: make it build and run on gcc/non-x86`, present at `41cf09a`) is what the web
-  build uses.
-- **Static single binary.** `BUILD_STATIC=ON` → `-DUNREAL_STATIC` + `Src/UnStaticExports.cpp`
-  (`GExportsTable`/`appGetStaticExport`), all packages linked with `--whole-archive` (preserve the
-  package registrants). Emscripten can't do UE1's `.so`/`.dll` package loading (`docs/10` §4).
-- **Main-loop inversion (Asyncify).** UE1's blocking `MainLoop` (`Unreal/Src/SDLLaunch.cpp`,
-  `while(GIsRunning){ Engine->Tick(); appSleep(); }`) yields each frame with `emscripten_sleep` under
-  `-sASYNCIFY` — **not** `emscripten_set_main_loop`, whose unwind collides with `main()`'s `try/catch` (`BUILD.md`).
-- **File layer is POSIX — untouched.** UE1 bottoms out at libc `fopen`/POSIX `opendir` (`Core/Src/UnFile.cpp`,
-  no `FFileManager`). FetchFS (injected glue) intercepts **below** it at the Emscripten FS layer — so the
-  same shim/glue serve UE1 unchanged. **Do not** write an engine-side web file manager.
-- **Net (step 2.6c):** a new engine-local **WebRTC `UNetDriver`** (adapting engine-ut2004's `WebRTCDrv` to
-  UE1's `UNetDriver`/`UNetConnection`, `Engine/Inc/UnNetDrv.h`/`UnConn.h`); auto-switch
-  `IpDrv.TcpNetDriver` → the WebRTC driver on Emscripten. Engines are independent — **no shared code**.
-- **Console logging (step 2.6e):** under `__EMSCRIPTEN__`, `FGlobalPlatform::WriteBinary` (`Core/Src/UnPlat.cpp`,
-  the `GLog` sink) echoes each non-suppressed log line to `stdout` → the host `Module.print` → `console.log`.
-  So the browser console mirrors the MEMFS `Unreal.log` and the ufront E2E harness reads engine milestones
-  from the console (matching engine-ut2004). **Do not** remove it — the E2E net/boot assertions depend on it.
-- **Editor package + exception-safe loading (step 2.6f):** `BUILD_EDITOR` is ON for Emscripten (stripped
-  no-GUI Editor) — bot/character meshes+skins load through Editor classes. Exception CATCHING stays OFF
-  (`-fexceptions` overflows V8 on `UnrealI.u`; `-fwasm-exceptions` conflicts with ASYNCIFY), so UE1's
-  exception-based error model can't unwind across Asyncify frames → a thrown load error aborts the module.
-  Fix (mirrors engine-ut2004): make load failures resolve to **NULL** instead of throwing —
-  `Core/Src/UnObj.cpp` `SafeLoadError` (no re-throw) + `LoadObject` (return NULL on not-found), guarded by
-  `#ifdef __EMSCRIPTEN__`. **Patch new throw sites one by one** as they surface; the `[appThrowf]` console
-  line (added in `UnFile.cpp`) names each. **Do NOT** try to enable exception catching — it's a dead end here.
-  **Step 2.6g** extended this to the missing-map path: `GetPackageLinker` returns NULL (file-resolution
-  throws) + `LoadMap` NULL-checks the verify result + `UGameEngine::Init` falls back to the Entry/menu
-  instead of `appErrorf(FailedBrowse)` — so a bad `?map=…` fails soft (menu fallback), no abort.
-
-## Do NOT
-- **Do NOT** blindly cherry-pick from `10-p/UE1-funkey` — it's a very limited ARM device with device-
-  specific workarounds. Pull **only** what this web port genuinely needs, case-by-case (e.g. its
-  Editor-package inclusion). **Never** copy its device hacks (240×240 / 64 MB / DirectFB / `.opk` inis).
-- **Do NOT** bake heavy glue (FetchFS/IDB/WebRTC logic) into the WASM — only the thin `webrtc_*` shim.
-- **Do NOT** push to `upstream` (it's fgsfdsfgs/UE1). This repo stays **private, local-only**.
-- **Do NOT** commit game assets or build trees (`build-*/`) — gitignored.
-- **Do NOT** change the ABI. It's frozen at `vendor/glue/ue_abi.h` (`ABI_VERSION 1`); a change is a
-  deliberate cross-engine act owned by the monorepo (`docs/02` §5).
+## Rules
+- **Comments** explain the code as it is, in one or two lines. No stage markers or work ids, no story of a fix,
+  no where-a-report-came-from, no owner quotes, dates or commit hashes, no cross-references to other files' or
+  repos' comments, no glyphs or capitalised emphasis, no platform asides in shared code (a platform statement
+  lives inside its `#ifdef`). A comment that disagrees with the code is a bug: fix one of them. Epic's and the
+  upstream fork's comments are theirs: leave them. Log text is not a comment.
+- **Docs** (README.md, BUILD.md, this file, `Engine/Config/web/README.md`, `tools/asmport/NOTES.md`) describe the
+  current state in present tense: no phases, no history, no dates, no owner attributions, no measurements as
+  proof. Rewrite from the code; every path, flag, preset and script a doc names must exist.
+- **Names** follow behaviour. Shared CMake options take the `UE_` prefix. Do not rename ini sections or keys
+  players may have saved (e.g. `ufrontUserRenderDevice`), exported ABI symbols, or log lines the frontend
+  matches. "ufront" as a namespace stays (`[ufront.AutoFOV]`, `UfrontStableSort`, `[ufront/travel]`).
+- Commit subjects name the feature (Conventional Commits), never a stage number or a date.
+- Never commit game assets or build trees (`build-*/`, gitignored). Do not push to fgsfdsfgs/UE1.
+- Before a commit, `node <frontend>/.ufront/hygiene/scan.mjs --all --repo .` must report no hard findings.
