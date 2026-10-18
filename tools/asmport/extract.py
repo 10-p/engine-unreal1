@@ -553,7 +553,7 @@ def main(argv):
 
     if listing:
         for name, a, b in find_functions(path):
-            insns = parse_asm(path, a, b, defines)
+            insns = parse_asm(path, a, b)
             if insns:
                 print("%-34s lines %6d-%-6d  %4d insns" % (name, a, b, len(insns)))
         return 0
