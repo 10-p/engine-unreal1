@@ -1620,12 +1620,9 @@ CORE_API const char* appBaseDir()
 			if (BaseDir[i - 1] == '\\' || BaseDir[i - 1] == '/')
 				break;
 		BaseDir[i] = 0;
-#elif defined(PLATFORM_PSVITA)
-		if ( getcwd( BaseDir, sizeof(BaseDir) ) )
-			appStrncat( BaseDir, "/", sizeof(BaseDir) - 1 );
-#elif defined(__EMSCRIPTEN__)
-		// SDL_GetBasePath() returns "/" under Emscripten, but Unreal runs from its System/ dir (the host chdirs
-		// there before main). getcwd makes config and the package Paths (../System, ../Maps, ...) resolve from it.
+#elif defined(PLATFORM_PSVITA) || defined(__EMSCRIPTEN__)
+		// main() has changed to the System directory (SDL_GetBasePath() answers "/" under Emscripten), so config
+		// and the package Paths (../System, ../Maps, ...) resolve from the working directory.
 		if ( getcwd( BaseDir, sizeof(BaseDir) ) )
 			appStrncat( BaseDir, "/", sizeof(BaseDir) - 1 );
 #elif defined(PLATFORM_SDL)
