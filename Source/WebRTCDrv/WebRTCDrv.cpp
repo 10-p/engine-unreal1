@@ -2,7 +2,7 @@
 	WebRTCDrv.cpp: WebRTC network driver for UE1 (Emscripten/browser multiplayer).
 
 	Structured after IpDrv.cpp (UTcpNetDriver/UTcpipConnection), with the glue's
-	`webrtc_*` C ABI (the baked shim, forwarding to the host-injected
+	`ue_net_*` C ABI (the baked shim, forwarding to the host-injected
 	Module.UE.net) as the transport instead of BSD sockets.
 =============================================================================*/
 
@@ -16,37 +16,19 @@
 // Package.
 IMPLEMENT_PACKAGE(WebRTCDrv);
 
-// WebRTC connection state (matches the glue ABI + webrtc_get_connection_state).
-#define WEBRTC_STATE_INVALID    0
-#define WEBRTC_STATE_CONNECTING 1
-#define WEBRTC_STATE_OPEN       2
-#define WEBRTC_STATE_CLOSED     3
 
 // This game's peer-ID namespace prefix. It must match the host's network.peerPrefix (the glue registers the
 // listen peer as "<prefix>-<room>-srv").
 #define WEBRTC_PEER_PREFIX      "u1"
 
 /*-----------------------------------------------------------------------------
-	extern "C" transport bridge (WASM <-> JS).
-	They resolve to the glue's baked shim, which forwards to Module.UE.net.*.
-	UE1 does not use the deferred-connect pair (webrtc_deferred_open /
-	webrtc_check_pending_connect) — the guest joins via the startup-URL flow
-	(the frontend passes "<room>?connect" as the engine's first argument), so no
-	post-boot poll is needed.
+	Transport: the ue_net_* imports of the glue ABI (ue_abi.h). They resolve to
+	the baked net shim, which forwards to Module.UE.net.*. The guest joins through
+	the startup URL (the frontend passes "<room>?connect" as the engine's first
+	argument), so no post-boot connect poll is needed.
 -----------------------------------------------------------------------------*/
 #ifdef __EMSCRIPTEN__
-extern "C"
-{
-	void webrtc_init_listen( const char* roomName );
-	void webrtc_connect( const char* peerId );
-	int  webrtc_send( int connId, const void* data, int len );
-	int  webrtc_recv( int connId, void* buffer, int maxLen );
-	int  webrtc_accept_connection();
-	void webrtc_close( int connId );
-	void webrtc_destroy();
-	int  webrtc_get_connection_state( int connId );
-	void webrtc_set_listen_status( const char* name, const char* map, int players, int maxPlayers, const char* gametype );
-}
+#include "ue_abi.h"
 #endif
 
 // The running engine, for the listen-server status push (set in SDLLaunch.cpp after InitEngine).
@@ -84,7 +66,7 @@ class DLL_EXPORT UWebRTCConnection : public UNetConnection
 			FlushNet();
 		}
 		if( WebRTCConnId > 0 )
-			webrtc_close( WebRTCConnId );
+			ue_net_close( WebRTCConnId );
 		Super::Destroy();
 		unguard;
 	}
@@ -102,7 +84,7 @@ class DLL_EXPORT UWebRTCConnection : public UNetConnection
 			// client driver took the one client slot; see UWebRTCNetDriver::Init). Drop its traffic
 			// rather than posting it into somebody else's session.
 			if( OutNum > 0 && WebRTCConnId >= 0 )
-				webrtc_send( WebRTCConnId, OutData, OutNum );
+				ue_net_send( WebRTCConnId, OutData, OutNum );
 			QueuedBytes += OutNum + 28; // ~UDP header, for the rate limiter (parity with UTcpipConnection)
 			OutNum = 0;
 		}
@@ -153,17 +135,17 @@ class DLL_EXPORT UWebRTCNetDriver : public UNetDriver
 	{
 		guard(UWebRTCNetDriver::Destroy);
 		debugf( NAME_Exit, "[WebRTC] Destroy: room='%s'%s", *RoomName, bDetached ? " (detached — transport left alone)" : "" );
-		// The parked pipes are about to be closed wholesale by webrtc_destroy(); just drop our list.
+		// The parked pipes are about to be closed wholesale by ue_net_destroy(); just drop our list.
 		ParkedAccepts.Empty();
 		if( GClientDriver==this )
 			GClientDriver = NULL;
-		// A departing driver must not destroy the arriving driver's transport: webrtc_destroy() is global. On a
+		// A departing driver must not destroy the arriving driver's transport: ue_net_destroy() is global. On a
 		// client the two drivers overlap: Init(connect) for the pending level runs first and the old level's
 		// driver is destroyed later, inside LoadMap, when conn 0 already belongs to the new pending connection.
 		// Init marks that old driver detached, and it leaves the transport alone. On the host the old driver is
 		// destroyed before Init(listen).
 		if( !bDetached )
-			webrtc_destroy();
+			ue_net_destroy();
 		Super::Destroy();
 		unguard;
 	}
@@ -229,12 +211,12 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 			// "connection lost" and abort the travel. It must go quiet (no sends, no receives, no transport
 			// polling); the level change destroys it a moment later.
 			GClientDriver->GetServerConnection()->WebRTCConnId = -1;
-			// When that destroy comes, it must not call webrtc_destroy(): the transport it would tear down
+			// When that destroy comes, it must not call ue_net_destroy(): the transport it would tear down
 			// is now ours. See Destroy().
 			GClientDriver->bDetached = 1;
 		}
 		GClientDriver = this;
-		webrtc_connect( *ServerPeerId );
+		ue_net_connect( *ServerPeerId );
 
 		// Pending server connection + control channel (channel 0) — UE1's UTcpNetDriver creates it here
 		// too (IpDrv.cpp: GetServerConnection()->CreateChannel(CHTYPE_Control,1,0)).
@@ -270,7 +252,7 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 		// `room/serverName` — the transport slugs the name and builds `<prefix>-<room>_<slug>-srv`. The
 		// separator is a `/` because a server name may contain anything, including the `_` the peer id uses.
 		FString ListenKey = ServerName.Length() ? (RoomName + FString("/") + ServerName) : RoomName;
-		webrtc_init_listen( *ListenKey );
+		ue_net_init_listen( *ListenKey );
 	}
 
 	return 1;
@@ -301,14 +283,14 @@ void UWebRTCNetDriver::Tick()
 	TArray<INT> Incoming = ParkedAccepts;
 	ParkedAccepts.Empty();
 	INT NewConnId;
-	while( (NewConnId = webrtc_accept_connection()) > 0 )
+	while( (NewConnId = ue_net_accept_connection()) > 0 )
 		Incoming.AddItem( NewConnId );
 
 	for( INT i=0; i<Incoming.Num(); i++ )
 	{
 		INT ConnId = Incoming(i);
 		// The client may have given up (or the page closed) while we were ignoring it.
-		if( webrtc_get_connection_state( ConnId ) == WEBRTC_STATE_CLOSED )
+		if( ue_net_get_connection_state( ConnId ) == UE_NET_STATE_CLOSED )
 			continue;
 		EAcceptConnection Acc = Notify->NotifyAcceptingConnection();
 		if( Acc == ACCEPTC_Ignore )
@@ -318,7 +300,7 @@ void UWebRTCNetDriver::Tick()
 		}
 		if( Acc != ACCEPTC_Accept )
 		{
-			webrtc_close( ConnId );
+			ue_net_close( ConnId );
 			continue;
 		}
 		UWebRTCConnection* Conn = new UWebRTCConnection( ConnId, this, USOCK_Open, 0 );
@@ -337,7 +319,7 @@ void UWebRTCNetDriver::Tick()
 	if( GetServerConnection() && GetServerConnection()->WebRTCConnId >= 0 )
 	{
 		UWebRTCConnection* SC = GetServerConnection();
-		if( webrtc_get_connection_state( SC->WebRTCConnId ) == WEBRTC_STATE_CLOSED && SC->State != USOCK_Closed )
+		if( ue_net_get_connection_state( SC->WebRTCConnId ) == UE_NET_STATE_CLOSED && SC->State != USOCK_Closed )
 		{
 			debugf( NAME_DevNet, "[WebRTC] Server connection transport closed" );
 			SC->State = USOCK_Closed;
@@ -345,7 +327,7 @@ void UWebRTCNetDriver::Tick()
 		if( SC->State == USOCK_Open || SC->State == USOCK_Pending )
 		{
 			INT Size;
-			while( (Size = webrtc_recv( SC->WebRTCConnId, Data, sizeof(Data) )) > 0 )
+			while( (Size = ue_net_recv( SC->WebRTCConnId, Data, sizeof(Data) )) > 0 )
 			{
 				SC->LastReceiveTime = Time;
 				SC->ReceivedPacket( Data, Size );
@@ -357,7 +339,7 @@ void UWebRTCNetDriver::Tick()
 		UWebRTCConnection* Conn = (UWebRTCConnection*)Connections(i);
 		// Log a remote close, so the log shows the engine acting on it and not only the glue's transport
 		// giving up.
-		if( webrtc_get_connection_state( Conn->WebRTCConnId ) == WEBRTC_STATE_CLOSED && Conn->State != USOCK_Closed )
+		if( ue_net_get_connection_state( Conn->WebRTCConnId ) == UE_NET_STATE_CLOSED && Conn->State != USOCK_Closed )
 		{
 			debugf( NAME_DevNet, "[WebRTC] TickDispatch: Client connId=%i connection CLOSED by remote", Conn->WebRTCConnId );
 			Conn->State = USOCK_Closed;
@@ -365,7 +347,7 @@ void UWebRTCNetDriver::Tick()
 		if( Conn->State == USOCK_Open || Conn->State == USOCK_Pending )
 		{
 			INT Size;
-			while( (Size = webrtc_recv( Conn->WebRTCConnId, Data, sizeof(Data) )) > 0 )
+			while( (Size = ue_net_recv( Conn->WebRTCConnId, Data, sizeof(Data) )) > 0 )
 			{
 				Conn->LastReceiveTime = Time;
 				Conn->ReceivedPacket( Data, Size );
@@ -410,7 +392,7 @@ void UWebRTCNetDriver::Tick()
 				SName = "Unreal Server";
 			// TCHAR is char on v200, so these are already ANSI: no conversion, and no shared static
 			// buffer to clobber.
-			webrtc_set_listen_status( *SName, *MapName, Players, MaxPl, *GType );
+			ue_net_set_listen_status( *SName, *MapName, Players, MaxPl, *GType );
 		}
 	}
 
@@ -419,7 +401,7 @@ void UWebRTCNetDriver::Tick()
 	// asset streaming isn't throttled.
 	if( bIsListenServer && Connections.Num()==0 )
 		emscripten_sleep( 50 );
-	else if( GetServerConnection() && webrtc_get_connection_state( GetServerConnection()->WebRTCConnId ) != WEBRTC_STATE_OPEN )
+	else if( GetServerConnection() && ue_net_get_connection_state( GetServerConnection()->WebRTCConnId ) != UE_NET_STATE_OPEN )
 		emscripten_sleep( 50 );
 #endif
 

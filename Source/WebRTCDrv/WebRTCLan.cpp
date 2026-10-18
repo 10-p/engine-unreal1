@@ -27,19 +27,10 @@
 #include "UnNet.h"
 #include "WebRTCLan.h"
 
-// Discovery bridge: the glue's discovery imports, resolved at the wasm link.
-extern "C"
-{
-	void webrtc_discover_servers( const char* room );
-	int  webrtc_get_server_count();
-	int  webrtc_is_discovery_done();
-	int  webrtc_get_server_info( int index, char* name, int nameMax, char* joinKey, int joinKeyMax );
-	int  webrtc_get_server_map( int index, char* buf, int maxLen );
-	int  webrtc_get_server_gametype( int index, char* buf, int maxLen );
-	int  webrtc_get_server_players( int index );
-	int  webrtc_get_server_maxplayers( int index );
-	int  webrtc_get_server_ping( int index );
-}
+// Discovery: the ue_net_* imports of the glue ABI.
+#ifdef __EMSCRIPTEN__
+#include "ue_abi.h"
+#endif
 
 // 10.199.0.0/16 — private, and far from anything a real LAN hands out. The low 16 bits index GRooms,
 // which is why that table is append-only.
@@ -148,11 +139,11 @@ static void KickDiscovery()
 		return;
 	GLastDiscoveryAt  = Now;
 	GDiscoveryPending = 1;
-	webrtc_discover_servers( "" );   // "" = every room on this signalling server
+	ue_net_discover_servers( "" );   // "" = every room on this signalling server
 	debugf( NAME_DevNet, "[WebRTC-LAN] discovery started" );
 }
 
-// Throttled, and the throttle is required, not an optimisation. Every webrtc_* call here is `__proxy: 'sync'`,
+// Throttled, and the throttle is required, not an optimisation. Every ue_net_* call here is `__proxy: 'sync'`,
 // a cross-thread round trip from the engine pthread to the main thread, and this is reached from
 // AUdpLink::Tick once per link per frame. Under load that overflows Emscripten's proxy queue and the module
 // aborts ("emscripten_proxy_async failed"). Ask four times a second instead.
@@ -166,22 +157,22 @@ static void PumpDiscovery()
 	if( PumpNow - GLastPumpAt < 0.25 )
 		return;
 	GLastPumpAt = PumpNow;
-	if( !webrtc_is_discovery_done() )
+	if( !ue_net_is_discovery_done() )
 		return;
 	GDiscoveryPending = 0;
 
 	GServers.Empty();
-	const INT Count = webrtc_get_server_count();
+	const INT Count = ue_net_get_server_count();
 	char nameBuf[256], roomBuf[256], mapBuf[128], gtBuf[128];
 	for( INT i=0; i<Count; i++ )
 	{
-		if( !webrtc_get_server_info( i, nameBuf, sizeof(nameBuf), roomBuf, sizeof(roomBuf) ) )
+		if( !ue_net_get_server_info( i, nameBuf, sizeof(nameBuf), roomBuf, sizeof(roomBuf) ) )
 			continue;
 		FString Room( roomBuf );
 		if( GLocalRoom.Length() && appStricmp( *Room, *GLocalRoom )==0 )
 			continue;   // never advertise ourselves to ourselves
-		webrtc_get_server_map( i, mapBuf, sizeof(mapBuf) );
-		webrtc_get_server_gametype( i, gtBuf, sizeof(gtBuf) );
+		ue_net_get_server_map( i, mapBuf, sizeof(mapBuf) );
+		ue_net_get_server_gametype( i, gtBuf, sizeof(gtBuf) );
 
 		// Copy-constructed in place. `TArray<T>` is a POD container: `AddItem` is
 		//     `INT Index=Add(); (*this)(Index)=Item;` and `FArray::Add` neither zeroes nor constructs, so
@@ -197,8 +188,8 @@ static void PumpDiscovery()
 		S.Room       = Room;
 		S.Name       = nameBuf[0] ? FString(nameBuf) : Room;
 		S.Map        = mapBuf[0]  ? FString(mapBuf)  : FString("?");
-		S.Players    = webrtc_get_server_players( i );
-		S.MaxPlayers = webrtc_get_server_maxplayers( i );
+		S.Players    = ue_net_get_server_players( i );
+		S.MaxPlayers = ue_net_get_server_maxplayers( i );
 		if( S.MaxPlayers <= 0 )
 			S.MaxPlayers = 16;
 		const FString Host = WebRTCLan_HostForRoom( *S.Room );   // also reserves the room's index

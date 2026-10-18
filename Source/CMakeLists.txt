@@ -324,7 +324,7 @@ add_subdirectory(Render)
 add_subdirectory(IpDrv)
 add_subdirectory(Fire)
 
-# The WebRTC net driver is a web-only package (its transport is the host's webrtc_* ABI).
+# The WebRTC net driver is a web-only package (its transport is the host's ue_net_* ABI).
 if(EMSCRIPTEN)
   add_subdirectory(WebRTCDrv)
   list(APPEND INSTALL_TARGETS WebRTCDrv)

@@ -53,7 +53,7 @@ endif()
 
 if(EMSCRIPTEN)
   # Emits a bare loader (SDLLaunch.{js,wasm,data}), no --shell-file: the host page injects the glue (file system,
-  # storage, WebRTC) at run time. Baked in are only the thin --js-library forwarders: vendor/glue/webrtc-shim.js,
+  # storage, WebRTC) at run time. Baked in are only the thin --js-library forwarders: vendor/glue/net-shim.js,
   # vendor/glue/wasmfs-shim.js and msaa-backbuffer.js. Renderers: NOpenGLESDrv (GLES2 -> WebGL), SoftDrv and
   # NullDrv, in the --whole-archive static set. SDL2 comes from the Emscripten port.
   target_link_options(${PROJECT_NAME} PRIVATE
@@ -73,8 +73,7 @@ if(EMSCRIPTEN)
     # typed arrays rather than in linear memory. -sFORCE_FILESYSTEM (above) is still needed: WasmFS omits the
     # JS FS.* API otherwise, and the host uses it for user data, mods and the file browser.
     #
-    # The EXPORTED_FUNCTIONS entries let the host create the backend from JS. _webrtc_deferred_open is not
-    # exported: this engine does not use the deferred-connect pair, and exporting an undefined symbol fails the link.
+    # The EXPORTED_FUNCTIONS entries let the host create the backend from JS.
     -sWASMFS
     # The worker-side bootstrap in wasmfs-shim.js is a __postset, emitted only if its $symbol is included.
     # Nothing references it, so it is included here; without it the first asset read fails.
@@ -111,9 +110,9 @@ if(EMSCRIPTEN)
     # PThread: the host needs the worker list to hand the file system's sync channel to the engine thread.
     # Runtime methods are on Module only when exported.
     "-sEXPORTED_RUNTIME_METHODS=['callMain','stringToUTF8','UTF8ToString','HEAPU8','stackSave','stackAlloc','stackRestore','lengthBytesUTF8','PThread']"
-    # webrtc-shim.js defines the webrtc_* functions WebRTCDrv imports and forwards them to the host-injected
-    # Module.UE.net.*; wasmfs-shim.js is the WasmFS backend's forwarder (above).
-    "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
+    # net-shim.js defines the ue_net_* functions WebRTCDrv imports (vendor/glue/ue_abi.h) and forwards them to
+    # the host-injected Module.UE.net.*; wasmfs-shim.js is the WasmFS backend's forwarder (above).
+    "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/net-shim.js"
     "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
     # WebGL 2 (NOpenGLESDrv's GLES2 calls run on it unchanged), for the multisampled emulated back buffer
     # (msaa-backbuffer.js: ufront_backbuffer_samples) that is NOpenGLESDrv's antialiasing; WebGL 1 stays the fallback
@@ -145,7 +144,7 @@ if(EMSCRIPTEN)
     "${CMAKE_SOURCE_DIR}/../Engine/Config/web/Default.ini")
   # So are the --js-library files.
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
-    "${CMAKE_SOURCE_DIR}/../vendor/glue/webrtc-shim.js"
+    "${CMAKE_SOURCE_DIR}/../vendor/glue/net-shim.js"
     "${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
     "${CMAKE_CURRENT_SOURCE_DIR}/msaa-backbuffer.js")
   # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html, in build-<cfg>/SDLLaunch/, the artifact path the

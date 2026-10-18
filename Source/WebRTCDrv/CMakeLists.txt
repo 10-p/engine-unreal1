@@ -1,7 +1,7 @@
 project(WebRTCDrv)
 
-# The UE1 WebRTC net driver (Emscripten/browser multiplayer). Its transport is the glue's webrtc_* ABI (a
-# shim baked in at link time), not BSD sockets.
+# The UE1 WebRTC net driver (Emscripten/browser multiplayer). Its transport is the glue's ue_net_* ABI
+# (vendor/glue/ue_abi.h, a shim baked in at link time), not BSD sockets.
 set(SRC_FILES
   "WebRTCDrv.cpp"
   # The synthetic LAN that makes the stock "Find Local Servers" menu work over WebRTC. IpDrv's AUdpLink
@@ -17,6 +17,7 @@ target_include_directories(${PROJECT_NAME}
   ${CMAKE_CURRENT_SOURCE_DIR}/Inc
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/Src
+  ${CMAKE_SOURCE_DIR}/../vendor/glue
 )
 
 target_link_libraries(${PROJECT_NAME} Engine Core)
