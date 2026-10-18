@@ -139,7 +139,7 @@ static void KickDiscovery()
 		return;
 	GLastDiscoveryAt  = Now;
 	GDiscoveryPending = 1;
-	ue_net_discover_servers( "" );   // "" = every room on this signalling server
+	ue_net_discover_servers( "" );   // "" = this browser's room; "*" would mean every room on the signalling server
 	debugf( NAME_DevNet, "[WebRTC-LAN] discovery started" );
 }
 
