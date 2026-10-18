@@ -68,7 +68,7 @@ private:
 	SDL_Window* hWnd;
 	SDL_Renderer* SDLRen; // for accelerated SoftDrv
 	SDL_Texture* SDLTex; // for use with the above renderer
-	DWORD SDLTexFormat; // pixel format of SDLTex; on the threaded web build, of SoftFB (no SDL texture there)
+	DWORD FramebufferFormat; // pixel format of the software framebuffer: SDLTex, or SoftFB on the threaded web build
 	SDL_GLContext GLCtx; // for NOpenGLDrv and NOpenGLESDrv; on the threaded web build, an Emscripten WebGL handle
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
 	// On a worker there is no SDL renderer (SDL's is GLES-backed and its proxied eglCreateContext blocks the

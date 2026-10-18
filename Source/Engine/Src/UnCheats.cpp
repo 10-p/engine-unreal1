@@ -55,13 +55,13 @@ static void WhereAmI( APlayerPawn* P, char* Out )
 static UBOOL CheatsAllowed( APlayerPawn* P, const char* Command, const char* Args, FOutputDevice* Out )
 {
 	INT NetMode = ( P && P->Level ) ? P->Level->NetMode : NM_DedicatedServer;
-	UBOOL ByKey = 0;
+	UBOOL ByAllowNetCheats = 0;
 	UBOOL Allowed = P && ( NetMode==NM_Standalone || NetMode==NM_ListenServer );
 	if( !Allowed )
 	{
 		UBOOL NetCheats = 0;
 		GetConfigBool( "Engine.GameEngine", "AllowNetCheats", NetCheats );
-		Allowed = ByKey = NetCheats;
+		Allowed = ByAllowNetCheats = NetCheats;
 	}
 	char Line[512];
 	if( !Allowed )
@@ -72,7 +72,7 @@ static UBOOL CheatsAllowed( APlayerPawn* P, const char* Command, const char* Arg
 	}
 	while( Args && *Args==' ' )
 		Args++;
-	debugf( NAME_Log, "Cheat: %s %s%s", Command, Args ? Args : "", ByKey ? " (AllowNetCheats: a test setting)" : "" );
+	debugf( NAME_Log, "Cheat: %s %s%s", Command, Args ? Args : "", ByAllowNetCheats ? " (AllowNetCheats: a test setting)" : "" );
 	return 1;
 }
 

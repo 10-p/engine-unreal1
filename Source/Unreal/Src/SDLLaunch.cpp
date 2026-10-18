@@ -32,8 +32,8 @@ DLL_EXPORT FExec* GThisExecHook = &GLocalHook;
 
 #ifdef __EMSCRIPTEN__
 // The running engine, for WebRTCDrv's listen-status push and ue_exec_command; set at the end of InitEngine.
-// WebRTCDrv.cpp declares `extern UEngine* GWebRTCEngine`.
-UEngine* GWebRTCEngine = NULL;
+// WebRTCDrv.cpp declares `extern UEngine* GEngineForExec`.
+UEngine* GEngineForExec = NULL;
 #endif
 
 #ifdef PLATFORM_PSVITA
@@ -247,13 +247,13 @@ static void NormalizeSubsystem( const char* Section, const char* Key, const char
 	{
 		if( IsPackageClassAvailable( Preference[i] ) )
 		{
-			debugf( "ufront 2.34: [%s] %s=%s is not in this build -> %s",
+			debugf( "ufront: [%s] %s=%s is not in this build -> %s",
 				Section, Key, Configured[0] ? Configured : "(unset)", Preference[i] );
 			SetConfigString( Section, Key, Preference[i] );
 			return;
 		}
 	}
-	debugf( NAME_Warning, "ufront 2.34: [%s] %s=%s is not in this build and no replacement is either",
+	debugf( NAME_Warning, "ufront: [%s] %s=%s is not in this build and no replacement is either",
 		Section, Key, Configured[0] ? Configured : "(unset)" );
 }
 #endif
@@ -298,7 +298,7 @@ static void SelectRenderDevice()
 			&& UserSel[0] && appStricmp( Persisted, UserSel )==0;
 		if( IsPackageClassAvailable( Persisted ) && ( IsHardwareDefaultEligible( Persisted ) || bUserSelected ) )
 		{
-			debugf( "ufront 2.12: using the persisted %s render device %s", bUserSelected ? "user-selected" : "hardware", Persisted );
+			debugf( "ufront: using the persisted %s render device %s", bUserSelected ? "user-selected" : "hardware", Persisted );
 			SetRenderDeviceConfig( Persisted );
 			return;
 		}
@@ -331,7 +331,7 @@ static void PersistRenderChoiceIfSwitched()
 		// not a hardware default (a user-chosen SoftDrv, as opposed to a shipped one).
 		SetConfigString( "Engine.Engine", "ufrontUserRenderDevice", GRequestedRenderDevice );
 		GConfigCache.SaveAllConfigs();
-		debugf( "ufront 2.12: persisted render device %s as a user selection (sticks next boot)", GRequestedRenderDevice );
+		debugf( "ufront: persisted render device %s as a user selection (sticks next boot)", GRequestedRenderDevice );
 	}
 	else
 	{
@@ -419,7 +419,7 @@ UEngine* InitEngine()
 	PersistRenderChoiceIfSwitched();
 #ifdef __EMSCRIPTEN__
 	// Expose the engine to WebRTCDrv (listen-status push) and ue_exec_command.
-	GWebRTCEngine = Engine;
+	GEngineForExec = Engine;
 #endif
 
 	return Engine;
@@ -448,10 +448,10 @@ extern "C" char* EMSCRIPTEN_KEEPALIVE ue_exec_command( const char* Cmd )
 {
 	static FString Captured;
 	Captured = "";
-	if( GWebRTCEngine && Cmd )
+	if( GEngineForExec && Cmd )
 	{
 		FStringOut Out;
-		GWebRTCEngine->Exec( Cmd, &Out );
+		GEngineForExec->Exec( Cmd, &Out );
 		Captured = Out;
 	}
 	return (char*)(*Captured);

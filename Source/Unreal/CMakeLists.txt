@@ -62,8 +62,8 @@ if(EMSCRIPTEN)
     -sASYNCIFY
     -sASYNCIFY_STACK_SIZE=262144
     # emscripten_sleep is the frame-rate cap's sleep and WebRTCDrv's handshake wait; EM_ASYNC_JS imports (the
-    # frame yield) register themselves. emscripten_set_main_loop and __syscall_openat are also listed.
-    "-sASYNCIFY_IMPORTS=['emscripten_sleep','emscripten_set_main_loop','__syscall_openat']"
+    # frame yield) register themselves.
+    "-sASYNCIFY_IMPORTS=['emscripten_sleep']"
     -sFULL_ES2=1
     -sUSE_SDL=2
     -sALLOW_MEMORY_GROWTH=1
@@ -238,13 +238,10 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE UNREAL_EXPORTS UPACKAGE_NAME=${PROJECT_NAME})
 
-# Tell the launcher which optional drivers this build contains, so its -*RENDERER switch table offers only
-# what is linked. Keyed off the CMake options rather than the platform.
+# Tell the launcher whether NOpenGLDrv is linked, so its -*RENDERER switches and preference order offer it only
+# then. Keyed off the CMake option rather than the platform.
 if(BUILD_NOPENGLDRV)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UT_HAS_NOPENGLDRV=1)
-endif()
-if(BUILD_NOPENALDRV)
-  target_compile_definitions(${PROJECT_NAME} PRIVATE UT_HAS_NOPENALDRV=1)
 endif()
 
 # OpenAL Soft is the one library the Windows build ships as a DLL (cmake/OpenALMingw.cmake). The build puts it

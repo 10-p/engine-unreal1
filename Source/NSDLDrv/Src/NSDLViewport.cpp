@@ -497,8 +497,8 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 			// transferred to this worker and getContext() throws; the proxied call never completes and blocks
 			// the engine thread. SoftDrv renders into SoftFB instead, and Unlock blits it to the canvas through
 			// a 2D context. A null device never locks, so it pays nothing for this.
-			SDLTexFormat = SDL_PIXELFORMAT_ARGB8888;
-			ColorBytes   = SDL_BYTESPERPIXEL( SDLTexFormat );
+			FramebufferFormat = SDL_PIXELFORMAT_ARGB8888;
+			ColorBytes   = SDL_BYTESPERPIXEL( FramebufferFormat );
 			Caps         = 0;
 			INT Needed   = NewX * NewY * ColorBytes;
 			if( SoftFB && SoftFBBytes < Needed )
@@ -528,10 +528,10 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				}
 			}
 			// Create framebuffer texture.
-			SDLTexFormat = SDL_PIXELFORMAT_ARGB8888;
-			ColorBytes = SDL_BYTESPERPIXEL( SDLTexFormat );
-			Caps = ( SDL_PIXELLAYOUT( SDLTexFormat ) == SDL_PACKEDLAYOUT_565 ) ? CC_RGB565 : 0;
-			SDLTex = SDL_CreateTexture( SDLRen, SDLTexFormat, SDL_TEXTUREACCESS_STREAMING, NewX, NewY );
+			FramebufferFormat = SDL_PIXELFORMAT_ARGB8888;
+			ColorBytes = SDL_BYTESPERPIXEL( FramebufferFormat );
+			Caps = ( SDL_PIXELLAYOUT( FramebufferFormat ) == SDL_PACKEDLAYOUT_565 ) ? CC_RGB565 : 0;
+			SDLTex = SDL_CreateTexture( SDLRen, FramebufferFormat, SDL_TEXTUREACCESS_STREAMING, NewX, NewY );
 			if( !SDLTex )
 			{
 				appErrorf( "Could not create framebuffer texture: %s", SDL_GetError() );
@@ -575,7 +575,7 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 			if( SDLRen && SDLTex )
 			{
 				SDL_DestroyTexture( SDLTex );
-				SDLTex = SDL_CreateTexture( SDLRen, SDLTexFormat, SDL_TEXTUREACCESS_STREAMING, NewX, NewY );
+				SDLTex = SDL_CreateTexture( SDLRen, FramebufferFormat, SDL_TEXTUREACCESS_STREAMING, NewX, NewY );
 				if( !SDLTex )
 					appErrorf( "Could not create framebuffer texture: %s", SDL_GetError() );
 			}
@@ -838,7 +838,7 @@ void UNSDLViewport::SetClientSize( INT NewX, INT NewY, UBOOL UpdateProfile )
 		if( SDLRen && SDLTex )
 		{
 			SDL_DestroyTexture( SDLTex );
-			SDLTex = SDL_CreateTexture( SDLRen, SDLTexFormat, SDL_TEXTUREACCESS_STREAMING, NewX, NewY );
+			SDLTex = SDL_CreateTexture( SDLRen, FramebufferFormat, SDL_TEXTUREACCESS_STREAMING, NewX, NewY );
 			if( !SDLTex )
 			{
 				appErrorf( "Could not create framebuffer texture: %s", SDL_GetError() );

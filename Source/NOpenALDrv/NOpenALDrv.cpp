@@ -1,9 +1,8 @@
 #include <stdlib.h>
 
-// NOPENAL_WEB means "no background music decoder thread": on the web the libxmp stream is pumped from Update()
-// each frame instead.
+// No background music decoder thread: on the web the libxmp stream is pumped from Update() each frame instead.
 #ifdef __EMSCRIPTEN__
-#define NOPENAL_WEB 1
+#define NOPENAL_NO_MUSIC_THREAD 1
 #endif
 
 #include "AL/al.h"
@@ -749,7 +748,7 @@ void UNOpenALAudioSubsystem::Update( FPointRegion Region, FCoords& Listener )
 {
 	guard(UNOpenALAudioSubsystem::Update)
 
-#ifdef NOPENAL_WEB
+#ifdef NOPENAL_NO_MUSIC_THREAD
 	// No music thread: pump the music stream here each frame instead of in MusicThreadProc. Done before the
 	// realtime early-return so menu/title music keeps streaming when there's no live viewport.
 	UpdateMusicBuffers();
@@ -1133,7 +1132,7 @@ void UNOpenALAudioSubsystem::StartMusicThread()
 {
 	guard(UNOpenALAudioSubsystem::StartMusicThread)
 
-#ifdef NOPENAL_WEB
+#ifdef NOPENAL_NO_MUSIC_THREAD
 	// No background decoder thread: music is pumped from Update() via UpdateMusicBuffers() each frame instead.
 	// StopMusicThread() then does nothing (MusicThread stays null).
 	MusicThreadRunning = false;

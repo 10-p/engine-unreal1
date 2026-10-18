@@ -60,8 +60,8 @@ inline int  webrtc_get_connection_state( int ) { return WEBRTC_STATE_INVALID; }
 inline void webrtc_set_listen_status( const char*, const char*, int, int, const char* ) {}
 #endif
 
-// Engine pointer for the listen-server status push (set in SDLLaunch.cpp after InitEngine).
-extern UEngine* GWebRTCEngine;
+// The running engine, for the listen-server status push (set in SDLLaunch.cpp after InitEngine).
+extern UEngine* GEngineForExec;
 
 /*-----------------------------------------------------------------------------
 	UWebRTCConnection — a UNetConnection over one WebRTC data channel (by connId).
@@ -407,7 +407,7 @@ void UWebRTCNetDriver::Tick()
 			FString SName = ServerName, MapName = "?", GType = "";
 			INT Players = 1 + Connections.Num();   // the listen host counts
 			const INT MaxPl = 16;
-			UGameEngine* GE = Cast<UGameEngine>( GWebRTCEngine );
+			UGameEngine* GE = Cast<UGameEngine>( GEngineForExec );
 			if( GE && GE->GLevel )
 			{
 				if( GE->GLevel->URL.Map.Length() )
