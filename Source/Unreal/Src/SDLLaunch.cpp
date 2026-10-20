@@ -578,6 +578,9 @@ static void RedirectStdioToLogcat()
 		return;
 	dup2( GStdioPipe[1], STDOUT_FILENO );
 	dup2( GStdioPipe[1], STDERR_FILENO );
+	// A pipe makes stdout fully buffered, and the lines would reach logcat only when the buffer fills or at exit.
+	setvbuf( stdout, NULL, _IOLBF, 0 );
+	setvbuf( stderr, NULL, _IONBF, 0 );
 	pthread_t Thread;
 	if( pthread_create( &Thread, NULL, StdioToLogcat, NULL ) == 0 )
 		pthread_detach( Thread );

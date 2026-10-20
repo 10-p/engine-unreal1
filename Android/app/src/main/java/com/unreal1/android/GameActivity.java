@@ -5,8 +5,10 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.RelativeLayout;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -119,6 +121,11 @@ public class GameActivity extends SDLActivity {
         scale = Math.min(scale, 8192f / Math.max(sw, sh));
         int w = Math.max(320, Math.round(sw * scale)) & ~3, h = Math.max(240, Math.round(sh * scale));
         Log.i(TAG, "resolution scale " + scale + ": the surface is " + w + "x" + h + " for the " + sw + "x" + sh + " screen");
+        // SDL adds its surface view to its layout without layout parameters, and a SurfaceView with a fixed-size
+        // surface then measures to that size; filling the parent keeps the view the screen's size, so the compositor
+        // scales the fixed-size buffer to it.
+        mSurface.setLayoutParams(new RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         mSurface.getHolder().setFixedSize(w, h);
     }
 
@@ -169,6 +176,38 @@ public class GameActivity extends SDLActivity {
                             }
                         })
                         .create();
+                // SDL reads keys through its surface view's key listener, and the dialog takes the focus from it:
+                // the view gets it back when the dialog goes, or the next Back would stop at the activity.
+                exitDialog.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+                    @Override public void onDismiss(android.content.DialogInterface d) {
+                        if (mSurface != null) mSurface.requestFocus();
+                    }
+                });
+                // The pad's A activates the focused button (Cancel unless the D-pad moved to Exit) and B cancels:
+                // Android's own handling of a pad's buttons on a dialog depends on the device's key maps.
+                exitDialog.setOnKeyListener(new android.content.DialogInterface.OnKeyListener() {
+                    @Override public boolean onKey(android.content.DialogInterface d, int keyCode, android.view.KeyEvent event) {
+                        boolean confirm = keyCode == android.view.KeyEvent.KEYCODE_BUTTON_A
+                                || keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                                || keyCode == android.view.KeyEvent.KEYCODE_ENTER;
+                        boolean cancel = keyCode == android.view.KeyEvent.KEYCODE_BUTTON_B;
+                        boolean left = keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT;
+                        boolean right = keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
+                        if (!confirm && !cancel && !left && !right) return false;
+                        if (event.getAction() != android.view.KeyEvent.ACTION_UP) return true;
+                        if (cancel) { exitDialog.cancel(); return true; }
+                        if (left || right) {
+                            android.widget.Button b = exitDialog.getButton(left ? AlertDialog.BUTTON_NEGATIVE : AlertDialog.BUTTON_POSITIVE);
+                            if (b != null) b.requestFocus();
+                            return true;
+                        }
+                        android.view.View focused = exitDialog.getCurrentFocus();
+                        android.widget.Button target = focused instanceof android.widget.Button
+                                ? (android.widget.Button) focused : exitDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+                        if (target != null) target.performClick();
+                        return true;
+                    }
+                });
                 exitDialog.show();
                 // A pad's confirm button lands on Cancel, as console exit prompts do; Exit is one step away.
                 android.widget.Button cancel = exitDialog.getButton(AlertDialog.BUTTON_NEGATIVE);

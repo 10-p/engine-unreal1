@@ -167,17 +167,25 @@ void UNSDLClient::PublishTouchPadState()
 }
 
 //
-// Whether Back has nothing left to go back to: the entry level (no game running) with the menu closed, where
-// Escape would only open the menu again.
+// Whether Back has nothing left to go back to: no game running (the intro map, [URL] LocalMap, or the entry level)
+// with the menu up on its first page (the HUD's main menu with no parent menu). At the flyby with the menu closed,
+// Back is Escape and opens it.
 //
 UBOOL UNSDLClient::BackLeavesGame()
 {
 	guard(UNSDLClient::BackLeavesGame);
 	UGameEngine* GameEngine = Cast<UGameEngine>( Engine );
-	if( !GameEngine || !GameEngine->GLevel || GameEngine->GLevel!=GameEngine->GEntry )
+	ULevel* Level = GameEngine ? GameEngine->GLevel : NULL;
+	if( !Level || !MenuActive() )
 		return 0;
-	const UBOOL Leaves = !MenuActive();
-	debugf( NAME_Log, "NSDLClient: Back on the entry level with the menu %s%s", Leaves ? "closed" : "open", Leaves ? ": asking to exit" : "" );
+	if( Level!=GameEngine->GEntry && appStricmp( *Level->URL.Map, *FURL::DefaultLocalMap )!=0 )
+		return 0;
+	AMenu* Menu = NULL;
+	for( INT i=0; i<Viewports.Num() && !Menu; i++ )
+		if( Viewports(i)->Actor && Viewports(i)->Actor->myHUD )
+			Menu = Viewports(i)->Actor->myHUD->MainMenu;
+	const UBOOL Leaves = Menu && !Menu->ParentMenu;
+	debugf( NAME_Log, "NSDLClient: Back on the entry level's menu (%s)%s", Menu ? Menu->GetClass()->GetName() : "no menu", Leaves ? ": asking to exit" : "" );
 	return Leaves;
 	unguard;
 }

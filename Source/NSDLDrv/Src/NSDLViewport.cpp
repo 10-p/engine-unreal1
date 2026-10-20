@@ -424,6 +424,11 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 0 );
 			}
 			SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, GLProfile );
+#if defined(__ANDROID__)
+			// SDL asks EGL for a 16-bit depth buffer by default, and the GLES renderer z-fights in bands on one; the
+			// web build has the same 24-bit requirement.
+			SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
+#endif
 #if !defined(__EMSCRIPTEN__) || !defined(__EMSCRIPTEN_PTHREADS__)
 			// Multisampling belongs to the window's GL surface, so it is requested before the window and its
 			// context exist, from the render device's NumAASamples. It holds for the life of the window.
