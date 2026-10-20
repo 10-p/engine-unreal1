@@ -148,7 +148,8 @@ if(TARGET_IS_64BIT)
     # LLP64 (Windows x64): `long` is 32-bit there, which the typedefs cover, but the build is untested.
     # Refuse rather than produce an unverified binary.
     message(FATAL_ERROR "64-bit MSVC builds are not supported. Use -A Win32.")
-  elseif(TARGET_IS_X86 AND NOT UE_ALLOW_64BIT)
+  elseif(TARGET_IS_X86 AND NOT UE_ALLOW_64BIT AND NOT ANDROID)
+    # (Android takes the width of its ABI: its x86_64 is a 64-bit engine like arm64.)
     message(STATUS "Building x86 binary with x86_64 compiler (pass -DUE_ALLOW_64BIT=ON for x86_64)")
     set(TARGET_IS_64BIT FALSE)
     set(TARGET_ARCH "x86")
