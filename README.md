@@ -82,6 +82,8 @@ Copy `<prefix>/lib/libSDL2-2.0.so.0` next to `Unreal.bin` (or add `<prefix>/lib`
    ```
 3. Put the game folder (`System`, `Maps`, `Textures`, `Sounds`, `Music` of an Unreal v200 install) on the device as `Unreal`, then in the app choose it and copy it to internal storage, or play it in place from `/sdcard/Unreal` with All files access.
 
+The Android build runs on a Retroid Pocket 6 (Android 13, Adreno 740): the menus with its built-in pad, the intro and the first level at 1920x1080 with 4x antialiasing at the 120 fps cap, sound on OpenSL ES, the resolution scale, Back as Escape and the exit prompt.
+
 ## Running
 
 1. Install the original retail v200 release of Unreal or the v205 demo.
