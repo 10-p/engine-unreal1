@@ -10,6 +10,14 @@
 #ifdef __EMSCRIPTEN__
 #include <unistd.h> // chdir
 #endif
+#ifdef __ANDROID__
+#include <android/log.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#endif
 
 #include "Engine.h"
 
@@ -532,8 +540,54 @@ void ExitEngine( UEngine* Engine )
 	unguard;
 }
 
+#ifdef __ANDROID__
+//
+// An app's stdout and stderr go nowhere: a pipe takes them and a thread writes each line to logcat under the tag
+// Unreal. Every Unreal.log line is mirrored to stdout (FGlobalPlatform::WriteBinary), so the whole log lands there:
+// `adb logcat -s Unreal UnrealBridge SDL`.
+//
+static int GStdioPipe[2] = { -1, -1 };
+static void* StdioToLogcat( void* )
+{
+	char Line[1024];
+	size_t Len = 0;
+	char Buf[512];
+	ssize_t N;
+	while( (N = read( GStdioPipe[0], Buf, sizeof(Buf) )) > 0 )
+	{
+		for( ssize_t i=0; i<N; i++ )
+		{
+			if( Buf[i] == '\n' || Len == sizeof(Line)-1 )
+			{
+				Line[Len] = 0;
+				if( Len )
+					__android_log_write( ANDROID_LOG_INFO, "Unreal", Line );
+				Len = 0;
+				if( Buf[i] == '\n' )
+					continue;
+			}
+			if( Buf[i] != '\r' )
+				Line[Len++] = Buf[i];
+		}
+	}
+	return NULL;
+}
+static void RedirectStdioToLogcat()
+{
+	if( pipe( GStdioPipe ) != 0 )
+		return;
+	dup2( GStdioPipe[1], STDOUT_FILENO );
+	dup2( GStdioPipe[1], STDERR_FILENO );
+	pthread_t Thread;
+	if( pthread_create( &Thread, NULL, StdioToLogcat, NULL ) == 0 )
+		pthread_detach( Thread );
+}
+#endif
+
 #ifdef PLATFORM_WIN32
 INT WINAPI WinMain( HINSTANCE hInInstance, HINSTANCE hPrevInstance, char* InCmdLine, INT nCmdShow )
+#elif defined(__ANDROID__)
+static int UnrealMain( int argc, const char** argv )
 #else
 int main( int argc, const char** argv )
 #endif
@@ -545,6 +599,15 @@ int main( int argc, const char** argv )
 	// Remember arguments since we don't have GetCommandLine().
 	appSetCmdLine( argc, argv );
 	PlatformPreInit();
+#endif
+
+#ifdef __ANDROID__
+	// The app's JNI bridge sets UNREAL_ANDROID_BASEDIR to the game folder's System directory and changes into it
+	// before SDL starts; changing into it again here keeps the base directory right whatever the process's start-up
+	// did to the working directory (appBaseDir caches getcwd()).
+	const char* AndroidBaseDir = getenv( "UNREAL_ANDROID_BASEDIR" );
+	if( AndroidBaseDir && AndroidBaseDir[0] && chdir( AndroidBaseDir ) != 0 )
+		fprintf( stderr, "chdir(%s) failed: %s\n", AndroidBaseDir, strerror(errno) );
 #endif
 
 #ifdef __EMSCRIPTEN__
@@ -599,3 +662,36 @@ int main( int argc, const char** argv )
 	GIsStarted = 0;
 	return 0;
 }
+
+#ifdef __ANDROID__
+//
+// SDLActivity loads libUnreal.so and calls SDL_main on its SDL thread, whose stack is Android's default 1 MB. The
+// engine runs on a thread of its own with the 8 MB a Linux main thread has (the package loader and the script VM
+// recurse deeply); SDL_main waits for it. SDL's Android calls attach whichever thread makes them.
+//
+struct FUnrealMainArgs { int argc; char** argv; int Result; };
+static void* UnrealMainThread( void* Arg )
+{
+	FUnrealMainArgs* Args = (FUnrealMainArgs*)Arg;
+	Args->Result = UnrealMain( Args->argc, (const char**)Args->argv );
+	return NULL;
+}
+extern "C" __attribute__((visibility("default"))) int SDL_main( int argc, char** argv )
+{
+	RedirectStdioToLogcat();
+	FUnrealMainArgs Args = { argc, argv, 1 };
+	pthread_attr_t Attr;
+	pthread_attr_init( &Attr );
+	pthread_attr_setstacksize( &Attr, 8 * 1024 * 1024 );
+	pthread_t Thread;
+	if( pthread_create( &Thread, &Attr, UnrealMainThread, &Args ) != 0 )
+	{
+		__android_log_print( ANDROID_LOG_ERROR, "Unreal", "could not start the engine thread: running it on the SDL thread" );
+		Args.Result = UnrealMain( argc, (const char**)argv );
+	}
+	else
+		pthread_join( Thread, NULL );
+	pthread_attr_destroy( &Attr );
+	return Args.Result;
+}
+#endif

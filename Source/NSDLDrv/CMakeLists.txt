@@ -3,6 +3,7 @@ project(NSDLDrv CXX)
 set(SRC_FILES
   "Src/NSDLViewport.cpp"
   "Src/NSDLClient.cpp"
+  "Src/NSDLAndroid.cpp"
   "Src/NSDLDrv.cpp"
 )
 

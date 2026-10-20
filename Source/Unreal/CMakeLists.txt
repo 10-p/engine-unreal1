@@ -19,6 +19,13 @@ if(TARGET_IS_WINDOWS)
   # The .rc names its icon relative to itself; give the resource compiler that directory.
   set_source_files_properties("Src/Res/LaunchRes.rc" PROPERTIES
     COMPILE_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}/Src/Res")
+elseif(ANDROID)
+  # libUnreal.so: the library SDLActivity loads after libSDL2.so (GameActivity.getLibraries) and whose SDL_main it
+  # calls. The root CMakeLists clears the shared-library prefix for the packages; the app loads this one by name.
+  add_library(${PROJECT_NAME} SHARED ${SRC_FILES})
+  set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "lib" OUTPUT_NAME "Unreal")
+  # bionic has pthread and libm in libc; log is the logcat sink, android the native activity API SDL's video uses.
+  target_link_libraries(${PROJECT_NAME} log android)
 else()
   add_executable(${PROJECT_NAME} ${SRC_FILES})
 endif()
@@ -34,7 +41,12 @@ if(USE_SDL)
   # Under Emscripten, SDL2 comes from the -sUSE_SDL=2 port (link flags below) and NSDLDrv from the
   # --whole-archive static set; linking NSDLDrv again here would double-define its symbols, which wasm-ld rejects.
   if(NOT EMSCRIPTEN)
-    target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY} NSDLDrv)
+    target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY})
+    # A static build has NSDLDrv in the --whole-archive set below; listing its archive here too would make lld
+    # (Android) define its objects twice.
+    if(NOT BUILD_STATIC)
+      target_link_libraries(${PROJECT_NAME} NSDLDrv)
+    endif()
   endif()
   target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIR})
 elseif(TARGET_IS_WINDOWS)

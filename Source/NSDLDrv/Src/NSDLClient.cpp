@@ -24,6 +24,8 @@ void UNSDLClient::InternalClassInitializer( UClass* Class )
 		new(Class, "DefaultDisplay",    RF_Public)UIntProperty(CPP_PROPERTY(DefaultDisplay),     "Display",  CPF_Config );
 		new(Class, "StartupFullscreen", RF_Public)UBoolProperty(CPP_PROPERTY(StartupFullscreen), "Display",  CPF_Config );
 		new(Class, "UseJoystick",       RF_Public)UBoolProperty(CPP_PROPERTY(UseJoystick),       "Joystick", CPF_Config );
+		new(Class, "UseMouse",          RF_Public)UBoolProperty(CPP_PROPERTY(UseMouse),          "Display",  CPF_Config );
+		new(Class, "TouchPad",          RF_Public)UBoolProperty(CPP_PROPERTY(TouchPad),          "Joystick", CPF_Config );
 		new(Class, "DeadZoneXYZ",       RF_Public)UFloatProperty(CPP_PROPERTY(DeadZoneXYZ),      "Joystick", CPF_Config );
 		new(Class, "DeadZoneRUV",       RF_Public)UFloatProperty(CPP_PROPERTY(DeadZoneRUV),      "Joystick", CPF_Config );
 		new(Class, "ScaleXYZ",          RF_Public)UFloatProperty(CPP_PROPERTY(ScaleXYZ),         "Joystick", CPF_Config );
@@ -41,8 +43,15 @@ UNSDLClient::UNSDLClient()
 {
 	guard(UNSDLClient::UWindowsClient);
 	Controller = NULL;
+	TouchPadJoystick = NULL;
 	DefaultDisplay = 0;
 	UseJoystick = true;
+#if defined(__ANDROID__)
+	UseMouse = false;	// a phone is played with its pads and the on-screen pad
+#else
+	UseMouse = true;
+#endif
+	TouchPad = true;	// Android only
 	ScaleXYZ = 100.f;
 	ScaleRUV = 100.f;
 	DeadZoneXYZ = 0.1f;
@@ -85,6 +94,19 @@ void UNSDLClient::Init( UEngine* InEngine )
 
 	Controller = NULL;
 
+	// Without the mouse, touches are not turned into mouse events either (SDL's default does).
+	if( !UseMouse )
+	{
+		SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, "0" );
+		debugf( NAME_Init, "NSDLClient: UseMouse=False: mouse events are ignored" );
+	}
+#if defined(__ANDROID__)
+	// The system's Back is a key (SDL_SCANCODE_AC_BACK, the game's Escape) instead of closing the activity.
+	SDL_SetHint( SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1" );
+	// Landscape only, either way up: SDLActivity sets the orientation from this hint when the window is created.
+	SDL_SetHint( SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight" );
+#endif
+
 	// The game-controller subsystem is always up; whether a pad is used is UseJoystick, which the
 	// viewport reads every tick (UNSDLViewport::TickInput), so the game's own option takes effect at once.
 	if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
@@ -104,6 +126,10 @@ void UNSDLClient::Init( UEngine* InEngine )
 			OpenPad( i, NULL );
 	}
 	else debugf( NAME_Init, "NSDLClient: UseJoystick=False: no game pads" );
+
+	// The on-screen pad, a virtual SDL controller (Android): after the pads present, so a real pad is the one opened.
+	if( UseJoystick )
+		InitTouchPad();
 
 	// Not calling SDL_StartTextInput because that pops up on-screen keyboards sometimes.
 	SDL_EventState( SDL_TEXTINPUT, SDL_ENABLE );
@@ -131,6 +157,7 @@ void UNSDLClient::Destroy()
 		SDL_GameControllerClose(Controller);
 		Controller = NULL;
 	}
+	ExitTouchPad();
 
 	SDL_QuitSubSystem( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER );
 
@@ -403,6 +430,19 @@ void UNSDLClient::TryRenderDevice( UViewport* Viewport, const char* ClassName, U
 			Viewport->Client->Engine->Audio->SetViewport( Viewport );
 	}
 
+	unguard;
+}
+
+//
+// Whether a viewport's console is in its Menuing state (the menus are up).
+//
+UBOOL UNSDLClient::MenuActive()
+{
+	guard(UNSDLClient::MenuActive);
+	for( INT i=0; i<Viewports.Num(); i++ )
+		if( ((UNSDLViewport*)Viewports(i))->InMenu() )
+			return 1;
+	return 0;
 	unguard;
 }
 

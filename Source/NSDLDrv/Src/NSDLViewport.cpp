@@ -178,8 +178,19 @@ void UNSDLViewport::InitKeyMap()
 	INIT_KEY_RANGE( SDL_SCANCODE_F1,   SDL_SCANCODE_F12,  IK_F1,      IK_F12 );
 	INIT_KEY_RANGE( SDL_SCANCODE_F13,  SDL_SCANCODE_F24,  IK_F13,     IK_F24 );
 
+#if defined(__ANDROID__)
+	// The system's Back (trapped by the client: SDL_HINT_ANDROID_TRAP_BACK_BUTTON) is Escape: back in the menus,
+	// the menu in a game.
+	KeyMap[SDL_SCANCODE_AC_BACK] = IK_Escape;
+#endif
+
 	#undef INIT_KEY_RANGE
 }
+
+#if defined(__ANDROID__)
+// A Back press went to the exit question (its release goes nowhere either).
+static UBOOL GBackAskedExit = 0;
+#endif
 
 //
 // Static init.
@@ -380,9 +391,16 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		}
 		else
 		{
+#if defined(__ANDROID__)
+			// The whole screen (immersive). SDL's Android window is the surface, the screen's size or the fixed size
+			// the app gave it (GameActivity.applyRenderScale); it cannot be resized from here, and SetClientSize
+			// takes its size whatever is asked.
+			Flags = SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN;
+#else
 			// Resizable, so the window can be resized and the viewport follows: the WINDOWEVENT_RESIZED
 			// handler in TickInput() syncs the engine viewport and framebuffer.
 			Flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE;
+#endif
 		}
 		if( DoOpenGL )
 		{
@@ -878,6 +896,11 @@ void UNSDLViewport::SetClientSize( INT NewX, INT NewY, UBOOL UpdateProfile )
 	if( hWnd )
 	{
 		SDL_SetWindowSize( hWnd, NewX, NewY );
+#if defined(__ANDROID__)
+		// The surface's size is the frame's: a requested size is not one the window can take.
+		SDL_GetWindowSize( hWnd, &NewX, &NewY );
+		NewX = Align( NewX, 4 );
+#endif
 		// Resize output texture if required.
 		if( SDLRen && SDLTex )
 		{
@@ -953,7 +976,9 @@ void UNSDLViewport::EndFullscreen()
 {
 	guard(UNSDLViewport::EndFullscreen);
 
+#if !defined(__ANDROID__)	// (Android: the window stays the whole screen.)
 	SDL_SetWindowFullscreen( hWnd, 0 );
+#endif
 	SetClientSize( SavedX, SavedY, false );
 
 	unguard;
@@ -980,6 +1005,10 @@ void UNSDLViewport::UpdateInput( UBOOL Reset )
 void UNSDLViewport::SetMouseCapture( UBOOL Capture, UBOOL Clip, UBOOL OnlyFocus )
 {
 	guard(UNSDLViewport::SetMouseCapture);
+
+	// Without the mouse there is nothing to capture.
+	if( !Client->UseMouse )
+		return;
 
 	// If only focus, reject.
 #ifndef __EMSCRIPTEN__
@@ -1052,6 +1081,18 @@ static INT GHeldTapNum = 0;
 static INT GPadsOn = -1;	// UseJoystick as last seen (-1: not yet; the client's Init said it)
 
 //
+// Whether the console is in its Menuing state: the pad's buttons then take the menu map (JoyButtonMapUI). Not
+// while the key-binding menu waits for a key, which is its own state.
+//
+UBOOL UNSDLViewport::InMenu()
+{
+	return Console
+		&& ((UObject*)Console)->GetMainFrame()
+		&& ((UObject*)Console)->GetMainFrame()->StateNode
+		&& ((UObject*)Console)->GetMainFrame()->StateNode->GetFName() == "Menuing";
+}
+
+//
 // Nothing may stay held when the pad goes (removed, or UseJoystick off): every pad key is released (both
 // maps) and the axes the frame loop re-sends are zeroed.
 //
@@ -1110,6 +1151,9 @@ UBOOL UNSDLViewport::TickInput()
 		GPadsOn = On;
 	}
 
+	// The on-screen pad's state (Android), read by SDL when it updates its joysticks in the poll below.
+	Client->FeedTouchPad();
+
 	while( SDL_PollEvent( &Ev ) )
 	{
 		switch( Ev.type )
@@ -1133,14 +1177,35 @@ UBOOL UNSDLViewport::TickInput()
 					Exec("ToggleFullscreen", this);
 					break;
 				}
+#if defined(__ANDROID__)
+				// Back with nothing left to go back to asks whether to exit the game.
+				if( Ev.key.keysym.scancode == SDL_SCANCODE_AC_BACK && !Ev.key.repeat && Client->BackLeavesGame() )
+				{
+					GBackAskedExit = 1;
+					Client->AskToExit();
+					break;
+				}
+#endif
 			case SDL_KEYUP:
+#if defined(__ANDROID__)
+				// The release of a Back that asked to exit is not Escape's either.
+				if( Ev.type == SDL_KEYUP && Ev.key.keysym.scancode == SDL_SCANCODE_AC_BACK && GBackAskedExit )
+				{
+					GBackAskedExit = 0;
+					break;
+				}
+#endif
 				CauseInputEvent( KeyMap[Ev.key.keysym.scancode], ( Ev.type == SDL_KEYDOWN ) ? IST_Press : IST_Release );
 				break;
 			case SDL_MOUSEBUTTONDOWN:
 			case SDL_MOUSEBUTTONUP:
+				if( !Client->UseMouse )
+					break;
 				CauseInputEvent( MouseButtonMap[Ev.button.button], ( Ev.type == SDL_MOUSEBUTTONDOWN ) ? IST_Press : IST_Release );
 				break;
 			case SDL_MOUSEWHEEL:
+				if( !Client->UseMouse )
+					break;
 				if( Ev.wheel.y )
 				{
 					CauseInputEvent( IK_MouseW, IST_Axis, Ev.wheel.y );
@@ -1160,6 +1225,12 @@ UBOOL UNSDLViewport::TickInput()
 			// UNSDLClient::OpenPad), and the one in use closes when it goes.
 			case SDL_CONTROLLERDEVICEADDED:
 				{
+					// A real pad takes over from the on-screen pad (Android), which stays attached and takes the place
+					// back when the real one goes (below).
+					if( SDL_GameController* GC = Client->GetController() )
+						if( Client->IsTouchPad( SDL_JoystickInstanceID( SDL_GameControllerGetJoystick( GC ) ) ) && !SDL_JoystickIsVirtual( Ev.cdevice.which ) )
+							if( Client->ClosePad( SDL_JoystickInstanceID( SDL_GameControllerGetJoystick( GC ) ) ) )
+								ReleasePad();
 					DWORD Held = 0;
 					if( Client->OpenPad( Ev.cdevice.which, &Held ) && Held )
 					{
@@ -1175,11 +1246,7 @@ UBOOL UNSDLViewport::TickInput()
 							SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN,
 							SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT, SDL_CONTROLLER_BUTTON_GUIDE,
 						};
-						const UBOOL bIsInUI = Console &&
-							((UObject*)Console)->GetMainFrame() &&
-							((UObject*)Console)->GetMainFrame()->StateNode &&
-							((UObject*)Console)->GetMainFrame()->StateNode->GetFName() == "Menuing";
-						const BYTE* JoyMap = bIsInUI ? JoyButtonMapUI : JoyButtonMap;
+						const BYTE* JoyMap = InMenu() ? JoyButtonMapUI : JoyButtonMap;
 						for( INT b=0; b<17; b++ )
 						{
 							if( !(Held & (1u<<b)) )
@@ -1206,17 +1273,18 @@ UBOOL UNSDLViewport::TickInput()
 				break;
 			case SDL_CONTROLLERDEVICEREMOVED:
 				if( Client->ClosePad( Ev.cdevice.which ) )
+				{
 					ReleasePad();	// nothing may stay held
+					// The next pad present takes the place (the on-screen pad, Android, attached while a real one had it).
+					for( INT i=0; i<SDL_NumJoysticks() && !Client->GetController(); i++ )
+						Client->OpenPad( i, NULL );
+				}
 				break;
 			case SDL_CONTROLLERBUTTONDOWN:
 			case SDL_CONTROLLERBUTTONUP:
 				{
 					// HACK: Swap to alternate bindings when in menus, but not when waiting for keypress in the keybind menu.
-					const UBOOL bIsInUI = Console &&
-						((UObject*)Console)->GetMainFrame() &&
-						((UObject*)Console)->GetMainFrame()->StateNode &&
-						((UObject*)Console)->GetMainFrame()->StateNode->GetFName() == "Menuing";
-					const BYTE* JoyMap = bIsInUI ? JoyButtonMapUI : JoyButtonMap;
+					const BYTE* JoyMap = InMenu() ? JoyButtonMapUI : JoyButtonMap;
 					CauseInputEvent( JoyMap[Ev.cbutton.button], ( Ev.type == SDL_CONTROLLERBUTTONDOWN ) ? IST_Press : IST_Release );
 				}
 				break;
@@ -1224,6 +1292,8 @@ UBOOL UNSDLViewport::TickInput()
 				// The sticks and triggers are read from the pad's state every tick (below), not from these.
 				break;
 			case SDL_MOUSEMOTION:
+				if( !Client->UseMouse )
+					break;
 				if( !Client->FullscreenViewport && !SDL_GetRelativeMouseMode() )
 				{
 					// If cursor isn't captured, just do MousePosition.
@@ -1296,6 +1366,9 @@ UBOOL UNSDLViewport::TickInput()
 	}
 
 	InputUpdateTime = CurTime;
+
+	// What the on-screen pad draws (menus or game) and whether it is in use, for the app's UI thread (Android).
+	Client->PublishTouchPadState();
 
 	return QuitRequested;
 

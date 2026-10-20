@@ -3,9 +3,9 @@ project(NOpenALDrv C CXX)
 set(SRC_FILES "NOpenALDrv.cpp")
 
 # libxmp (the tracker decoder for Unreal's .umx music) is fetched and built from source as a static library
-# on the web, Linux and MinGW, so no system libxmp is needed; it is portable C. Depackers and ProWizard are
-# disabled: Unreal music is raw modules.
-if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOMPILING))
+# on the web, Linux, Android and MinGW, so no system libxmp is needed; it is portable C. Depackers and ProWizard
+# are disabled: Unreal music is raw modules.
+if(EMSCRIPTEN OR ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOMPILING))
   include(FetchContent)
   set(LIBXMP_SOURCE_DIR "" CACHE PATH "Local libxmp checkout. Empty => fetch from git.")
   set(LIBXMP_GIT_REPOSITORY "https://github.com/libxmp/libxmp.git" CACHE STRING "Upstream libxmp git repo")
@@ -39,7 +39,7 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR (MINGW AND CMAKE_CROSSCOM
   # OpenAL. Native Linux keeps the parent's OPENAL_LIBRARY: the fork's bundled libopenal.so.1 when
   # UE_BUNDLED_OPENAL is ON (the default), else the system libopenal. MinGW keeps the prebuilt OpenAL Soft
   # import library from OpenALMingw.cmake.
-  if(EMSCRIPTEN)
+  if(EMSCRIPTEN OR ANDROID)
     # the openal-soft `OpenAL` target the parent builds with Source/cmake/OpenALSoft.cmake (EFX and HRTF included)
     set(OPENAL_LIBRARY OpenAL)
   endif()

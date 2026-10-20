@@ -52,6 +52,7 @@ class NSDLDRV_API UNSDLViewport : public UViewport
 	void SetClientSize( INT NewX, INT NewY, UBOOL UpdateProfile );
 	void EndFullscreen();
 	UBOOL TickInput(); // returns true if the viewport has requested death
+	UBOOL InMenu(); // the console is in its Menuing state (the pad's menu map applies)
 
 private:
 	// Static variables.
@@ -109,6 +110,8 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	INT DefaultDisplay;
 	UBOOL StartupFullscreen;
 	UBOOL UseJoystick;
+	UBOOL UseMouse;		// mouse events reach the game (False: ignored, never captured; the compiled default on Android)
+	UBOOL TouchPad;		// Android: the on-screen pad, a virtual SDL controller fed by the app (NSDLAndroid.cpp)
 	UBOOL InvertY;
 	UBOOL InvertV;
 	FLOAT ScaleXYZ;
@@ -145,10 +148,23 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	UBOOL OpenPad( INT DeviceIndex, DWORD* Held );
 	UBOOL ClosePad( INT InstanceId );
 	inline const SDL_DisplayMode& GetDefaultDisplayMode() const { return DefaultDisplayMode; }
+	UBOOL MenuActive(); // a viewport's console is in its Menuing state
+
+	// The on-screen pad (NSDLAndroid.cpp; nothing off Android).
+	void InitTouchPad();
+	void ExitTouchPad();
+	void FeedTouchPad();
+	UBOOL IsTouchPad( INT InstanceId );
+	void PublishTouchPadState();
+
+	// Android's Back with nothing left to go back to (NSDLAndroid.cpp; nothing off Android).
+	UBOOL BackLeavesGame();
+	void AskToExit();
 
 private:
 	// Variables.
 	SDL_GameController* Controller;
+	void* TouchPadJoystick; // SDL_Joystick* of the on-screen pad (a virtual SDL controller), Android
 	SDL_DisplayMode DefaultDisplayMode;
 	TArray<SDL_Rect> DisplayResolutions;
 };

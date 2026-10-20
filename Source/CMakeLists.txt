@@ -69,6 +69,30 @@ if(EMSCRIPTEN)
   # objects.
 endif()
 
+# Android build: the Gradle project in Android/ configures this file with the NDK (Android/app/build.gradle). The
+# game is one shared library, libUnreal.so, that SDL's activity loads: the static package set with NOpenGLESDrv on
+# the device's OpenGL ES 2, SoftDrv and NullDrv, openal-soft (static, on OpenSL ES) and libxmp. SDL2 is fetched and
+# built shared (cmake/SDL2Android.cmake), so the library and the Java classes the app compiles come from one checkout.
+if(ANDROID)
+  message(STATUS "Building for Android (${ANDROID_ABI}, API ${ANDROID_PLATFORM})")
+  set(BUILD_STATIC ON)
+  set(USE_SDL ON)
+  set(BUILD_EDITOR ON)
+  set(BUILD_WINDRV OFF)
+  set(BUILD_NOPENGLDRV OFF)       # no desktop GL on Android
+  set(BUILD_NOPENGLESDRV ON)
+  set(BUILD_SOFTDRV ON)
+  set(BUILD_NULLDRV ON)
+  set(BUILD_NULLSOUNDDRV ON)
+  set(BUILD_NOPENALDRV ON)
+  add_definitions(-DASM=0)        # Core/SoftDrv use their portable (non-x86) code paths
+  # As for Emscripten's clang above: a non-POD FString through variadic debugf is not an error.
+  add_compile_options(-Wno-error=non-pod-varargs -Wno-non-pod-varargs)
+  # Epic's code calls methods through null pointers on purpose (`if( this )` checks), which clang would otherwise
+  # delete; on Android a null page faults.
+  add_compile_options(-fno-delete-null-pointer-checks)
+endif()
+
 if(VITA)
   set(BUILD_STATIC ON)
 endif()
@@ -264,6 +288,9 @@ if(USE_SDL)
         # prebuilt MinGW binaries. Under MSYS2 on Windows this branch is skipped (not cross-compiling) and
         # pacman's mingw-w64-i686-SDL2 answers -lSDL2.
         include(SDL2Mingw)
+      elseif(ANDROID)
+        # SDL2 from source, the shared libSDL2.so the app loads (cmake/SDL2Android.cmake).
+        include(SDL2Android)
       else()
         set(SDL2_LIBRARY "-lSDL2")
       endif()
@@ -298,6 +325,9 @@ if(BUILD_NOPENALDRV)
       elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND UE_BUNDLED_OPENAL)
         # Native Linux links the fork's own libopenal.so.1 (the `OpenAL` target, built below by
         # cmake/OpenALSoft.cmake NATIVE and copied beside the binary), not the system library.
+        set(OPENAL_LIBRARY OpenAL)
+      elseif(ANDROID)
+        # Android links the fork as a static archive into libUnreal.so (cmake/OpenALSoft.cmake ANDROID, below).
         set(OPENAL_LIBRARY OpenAL)
       else()
         set(OPENAL_LIBRARY "-lopenal")
@@ -387,6 +417,10 @@ if(BUILD_NOPENALDRV)
     # plays through the same library as the web rather than the distro's.
     include(OpenALSoft)
     ufront_openal_soft(PLATFORM NATIVE EAX OFF)
+  elseif(ANDROID)
+    # Android links the same fork statically, playing through the NDK's OpenSL ES.
+    include(OpenALSoft)
+    ufront_openal_soft(PLATFORM ANDROID EAX OFF)
   endif()
   add_subdirectory(NOpenALDrv)
   list(APPEND INSTALL_TARGETS NOpenALDrv)
@@ -399,6 +433,15 @@ if(BUILD_EDITOR)
 endif()
 
 add_subdirectory(Unreal)
+
+# The Android app's process set-up (Android/app/src/main/cpp/android_bridge.cpp): a small JNI library that
+# GameActivity calls before SDL starts, to give the engine its game folder (UNREAL_ANDROID_BASEDIR, the working
+# directory, $HOME).
+if(ANDROID)
+  add_library(unreal1_android_bridge SHARED ${CMAKE_SOURCE_DIR}/../Android/app/src/main/cpp/android_bridge.cpp)
+  set_target_properties(unreal1_android_bridge PROPERTIES PREFIX "lib")
+  target_link_libraries(unreal1_android_bridge PRIVATE android log)
+endif()
 
 # assemble all modules and pdbs in one dir
 

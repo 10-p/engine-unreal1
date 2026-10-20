@@ -8,6 +8,7 @@
 #            binary, found through $ORIGIN, so native plays through the same library as the web rather than
 #            the distro's. Its backends are whatever the host's headers allowed at configure time, each
 #            dlopen'd at run time.
+#     ANDROID a STATIC archive linked into libUnreal.so, on the NDK's OpenSL ES (its one backend).
 #
 # The fork: https://github.com/10-p/openal-soft-web `ufront/web` = openal-soft 1.25.2 + the Web Audio backend
 # + the wasm build patches (all under __EMSCRIPTEN__). A branch, so a rebuild takes its tip
@@ -32,8 +33,8 @@ function(ufront_openal_soft)
   if(NOT ARG_EAX)
     set(ARG_EAX OFF)
   endif()
-  if(NOT ARG_PLATFORM MATCHES "^(WEB|NATIVE)$")
-    message(FATAL_ERROR "ufront_openal_soft: PLATFORM must be WEB or NATIVE (got '${ARG_PLATFORM}')")
+  if(NOT ARG_PLATFORM MATCHES "^(WEB|NATIVE|ANDROID)$")
+    message(FATAL_ERROR "ufront_openal_soft: PLATFORM must be WEB, NATIVE or ANDROID (got '${ARG_PLATFORM}')")
   endif()
   include(FetchContent)
   set(OPENALSOFT_GIT_REPOSITORY "https://github.com/10-p/openal-soft-web.git"
@@ -56,6 +57,19 @@ function(ufront_openal_soft)
     set(ALSOFT_CPUEXT_NEON OFF CACHE BOOL "" FORCE)
     set(ALSOFT_BACKEND_WEB ON CACHE BOOL "" FORCE)
     set(ALSOFT_REQUIRE_SSE4_1 ON CACHE BOOL "" FORCE)  # fail rather than fall back to the slower C mixers
+  elseif(ARG_PLATFORM STREQUAL "ANDROID")
+    set(LIBTYPE STATIC CACHE STRING "" FORCE)
+    set(ALSOFT_DLOPEN OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_BACKEND_OPENSL ON CACHE BOOL "" FORCE)
+    set(ALSOFT_REQUIRE_OPENSL ON CACHE BOOL "" FORCE)
+    # The desktop backends never probe the NDK's sysroot for headers it does not have.
+    foreach(_al_be PIPEWIRE PULSEAUDIO ALSA OSS JACK SNDIO)
+      set(ALSOFT_BACKEND_${_al_be} OFF CACHE BOOL "" FORCE)
+    endforeach()
+    # No C++20 modules: the NDK's clang rejects libc++'s range adaptors instantiated across a module boundary.
+    # No RTKit: Android has no D-Bus.
+    set(ALSOFT_ENABLE_MODULES OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_RTKIT OFF CACHE BOOL "" FORCE)
   else()
     set(LIBTYPE SHARED CACHE STRING "" FORCE)           # -> libopenal.so.1, beside the binary
     set(ALSOFT_DLOPEN ON CACHE BOOL "" FORCE)           # backends load libpulse/libasound at run time
