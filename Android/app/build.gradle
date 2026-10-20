@@ -84,6 +84,10 @@ android {
     externalNativeBuild {
         cmake {
             path = file('../../Source/CMakeLists.txt')
+            // A minimum: openal-soft's CMakeLists needs 3.26 or later (BUILD_LOCAL_INTERFACE), and without a version
+            // AGP downloads its own 3.22.1 even when a newer one is installed. The SDK's cmake;4.1.2 (CI) and a
+            // cmake.dir of 4.2.3 (local.properties) both satisfy it.
+            version = '4.1.2+'
         }
     }
 
