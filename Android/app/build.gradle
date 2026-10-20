@@ -1,0 +1,108 @@
+plugins { id 'com.android.application' }
+
+// SDL2: one checkout for both halves of SDL, the C library the engine's CMakeLists builds (handed to it as
+// FETCHCONTENT_SOURCE_DIR_SDL2) and the Java classes of SDLActivity (its android-project sources), so the
+// two always match. -Psdl2Dir=<dir> (or SDL2_SOURCE_DIR) takes a local checkout; without one the branch
+// Source/cmake/SDL2Android.cmake fetches is cloned once into Android/build/SDL2.
+def sdl2Branch = 'release-2.32.x'
+def sdl2Given = project.findProperty('sdl2Dir') ?: System.getenv('SDL2_SOURCE_DIR')
+def sdl2Dir = file(sdl2Given ?: "${rootDir}/build/SDL2")
+def sdl2Java = new File(sdl2Dir, 'android-project/app/src/main/java')
+if (!new File(sdl2Java, 'org/libsdl/app/SDLActivity.java').isFile()) {
+    if (sdl2Given)
+        throw new GradleException("sdl2Dir=${sdl2Dir} is not an SDL2 checkout (no android-project/app/src/main/java)")
+    logger.lifecycle("Fetching SDL2 (${sdl2Branch}) into ${sdl2Dir}")
+    sdl2Dir.parentFile.mkdirs()
+    def git = ['git', 'clone', '--depth', '1', '-b', sdl2Branch, 'https://github.com/libsdl-org/SDL.git', sdl2Dir.path].execute()
+    git.waitForProcessOutput(System.out, System.err)
+    if (git.exitValue() != 0)
+        throw new GradleException("could not clone SDL2 into ${sdl2Dir}")
+}
+
+// The ABIs: 64-bit ARM devices (arm64-v8a) and the emulator (x86_64); -Pabis=arm64-v8a builds one.
+def unrealAbis = (project.findProperty('abis') ?: 'arm64-v8a,x86_64').split(',').collect { it.trim() }
+
+// What the APK installs into the game folder's System/ before each start (GameActivity): the Android
+// Default.ini, generated from the native one by tools/dev/sync-android-ini.py.
+abstract class UnrealSystemOverlay extends DefaultTask {
+    @InputDirectory abstract DirectoryProperty getConfigDir()
+    @OutputDirectory abstract DirectoryProperty getOutputDir()
+    @TaskAction void run() {
+        def out = new File(outputDir.get().asFile, 'system')
+        out.deleteDir()
+        out.mkdirs()
+        ['Default.ini'].each { name ->
+            java.nio.file.Files.copy(new File(configDir.get().asFile, name).toPath(), new File(out, name).toPath())
+        }
+    }
+}
+def unrealSystemOverlay = tasks.register('unrealSystemOverlay', UnrealSystemOverlay) {
+    configDir.set(file("${rootDir}/../Engine/Config/android"))
+    outputDir.set(layout.buildDirectory.dir('generated/unreal/assets'))
+}
+
+android {
+    namespace = 'com.unreal1.android'
+    // Android 16, what current devices run; the app keeps Android 14's behaviour (targetSdk).
+    compileSdk = 36
+    // Ubuntu's google-android-ndk-r28c-installer (BUILD.md, "Android"), also AGP's default.
+    ndkVersion = '28.2.13676358'
+
+    defaultConfig {
+        applicationId = 'com.unreal1.android'
+        // Android 11: All files access, which reading the game folder in place needs.
+        minSdk = 30
+        targetSdk = 34
+        versionCode = 1
+        versionName = '0.1'
+        ndk { abiFilters.addAll(unrealAbis) }
+        externalNativeBuild {
+            cmake {
+                abiFilters.addAll(unrealAbis)
+                def cmakeArgs = [
+                    '-DANDROID_STL=c++_shared',
+                    "-DFETCHCONTENT_SOURCE_DIR_SDL2=${sdl2Dir}".toString(),
+                ]
+                // The engine optimised in every variant (the Gradle debug variant would build it at -O0);
+                // -PnativeDebug keeps the variant's own CMAKE_BUILD_TYPE.
+                if (!project.hasProperty('nativeDebug'))
+                    cmakeArgs += '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
+                arguments.addAll(cmakeArgs)
+                // libUnreal.so (the Unreal target, every package in it, openal-soft and libxmp static) with
+                // libSDL2.so, and the process set-up bridge.
+                targets.addAll(['Unreal', 'unreal1_android_bridge'])
+            }
+        }
+    }
+
+    buildTypes {
+        // Installable as it is (the debug key): a release build for testing on a device, not for a store.
+        release { signingConfig = signingConfigs.debug }
+    }
+
+    // The engine's own CMakeLists (the presets' root): its ANDROID branches build the game as libUnreal.so.
+    externalNativeBuild {
+        cmake {
+            path = file('../../Source/CMakeLists.txt')
+        }
+    }
+
+    sourceSets {
+        main { java.srcDir(sdl2Java) }
+    }
+
+    // The libraries extracted to the file system at install, as SDLActivity's loading by name expects.
+    packaging { jniLibs { useLegacyPackaging = true } }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    // targetSdk 34 is below what the Play store asks for; the APK is for testing on a device.
+    lint { disable.add('ExpiredTargetSdkVersion') }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(unrealSystemOverlay, { it.outputDir })
+    }
+}

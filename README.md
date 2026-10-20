@@ -17,6 +17,7 @@ Based on [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1). Build details, optio
 * **64-bit and ARM support:** x86_64 and arm64 builds that run the retail 32-bit packages unchanged.
 * **Windows build:** one static MinGW-w64 executable, cross-compiled from Linux or built under MSYS2.
 * **PS Vita build** (from fgsfdsfgs/UE1).
+* **Android build:** a Gradle/NDK project (`Android/`): the engine as `libUnreal.so` under SDL's activity, NOpenGLESDrv on the device's OpenGL ES, openal-soft on OpenSL ES, the game folder copied into internal storage from a folder chosen with the system's folder picker (or read in place from shared storage), a resolution scale, an exit prompt on Back, and an on-screen pad that is a virtual SDL controller (the mouse is off).
 * **GCC and Clang support:** the engine compiles cleanly with GCC, Clang, Emscripten and MinGW-w64.
 * **Languages:** localized properties load, so menus and messages follow the chosen language.
 * Editor UI is not supported.
@@ -72,6 +73,14 @@ Copy `<prefix>/lib/libSDL2-2.0.so.0` next to `Unreal.bin` (or add `<prefix>/lib`
    cmake --preset wasm-perf && cmake --build --preset wasm-perf -j$(nproc)
    ```
 3. The result is `build-wasm-perf/SDLLaunch/` (`SDLLaunch.{js,wasm,data}` + `meta.json`). It is not playable on its own: the frontend repo serves it.
+
+### Android
+1. Install JDK 17, the Android SDK (platform 36, build-tools 36.0.0, NDK r28c) and CMake, and write `Android/local.properties` for them (see [BUILD.md](BUILD.md), "Android").
+2. Build and install:
+   ```
+   cd Android && ./gradlew assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
+3. Put the game folder (`System`, `Maps`, `Textures`, `Sounds`, `Music` of an Unreal v200 install) on the device as `Unreal`, then in the app choose it and copy it to internal storage, or play it in place from `/sdcard/Unreal` with All files access.
 
 ## Running
 

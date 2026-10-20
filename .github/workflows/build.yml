@@ -1,10 +1,10 @@
 name: build
 
-# Builds the Linux, Windows and web targets on every push and pull request and uploads the binaries as
-# workflow artifacts; a push to main also replaces the rolling "latest" release (the `latest` job).
+# Builds the Linux, Windows, web and Android targets on every push and pull request and uploads the binaries
+# as workflow artifacts; a push to main also replaces the rolling "latest" release (the `latest` job).
 #
 # It does not run the game: a hosted runner has no GPU. It checks that every target builds, that the Linux
-# build is one engine binary and that the Windows exe imports only system DLLs.
+# build is one engine binary, that the Windows exe imports only system DLLs and that the APK packages every ABI.
 
 on:
   push:
@@ -182,6 +182,54 @@ jobs:
           # the newest build of main stays downloadable from the `latest` release.
           retention-days: 7
 
+  android:
+    name: android (arm64 + x86_64 APK)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 17: the Gradle daemon's (Android/gradle/gradle-daemon-jvm.properties).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Only platform-tools: the action's default list names `tools`, which the current SDK repository does not
+      # have. The NDK and CMake come from the next step.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      # The NDK and the CMake the Gradle plugin asks for; the NDK version matches app/build.gradle's ndkVersion,
+      # because AGP silently downloads its own on a mismatch. CI writes its own local.properties for this
+      # runner's SDK.
+      - name: Install the NDK + CMake and point the build at this runner's SDK
+        run: |
+          sdkmanager --install "ndk;28.2.13676358" "cmake;4.1.2" >/dev/null
+          printf 'sdk.dir=%s\nndk.dir=%s/ndk/28.2.13676358\n' "$ANDROID_HOME" "$ANDROID_HOME" > Android/local.properties
+
+      - name: Build the APK
+        run: ./gradlew assembleDebug --console=plain
+        working-directory: Android
+
+      # Both ABIs must be in there: a silent drop to one still installs and fails only on the device not tested.
+      - name: Assert every ABI is packaged
+        run: |
+          set -euo pipefail
+          apk=Android/app/build/outputs/apk/debug/app-debug.apk
+          for abi in arm64-v8a x86_64; do
+            unzip -l "$apk" | grep -q "lib/$abi/libUnreal.so" || { echo "::error::missing $abi"; exit 1; }
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unreal1-android
+          path: Android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          # A short retention keeps the artifacts under the storage quota (a full quota fails the upload);
+          # the newest build of main stays downloadable from the `latest` release.
+          retention-days: 7
+
   # ---------------------------------------------------------------------------
   # The rolling "latest" release: the newest build of main as release assets, which do not expire
   # (artifacts expire by age alone, so a repository without pushes would have nothing left to download).
@@ -192,7 +240,7 @@ jobs:
   # `permissions: contents: write` is required: the repository's default workflow token is read-only.
   latest:
     name: rolling "latest" release
-    needs: [linux, windows, web]
+    needs: [linux, windows, web, android]
     if: github.event_name == 'push' && (github.ref_name == 'main')
     runs-on: ubuntu-24.04
     permissions:

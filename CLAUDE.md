@@ -1,7 +1,7 @@
 # engine-unreal1 — agent guide
 
 **What this is:** the private engine repo for **Unreal (1998), Unreal Engine 1 v200**: engine source only. It
-builds a WebAssembly artifact (and native Linux and Windows binaries). The frontend repo
+builds a WebAssembly artifact (and native Linux and Windows binaries, and an Android APK from `Android/`). The frontend repo
 `10-p/unreal-frontend-arch-private` consumes the artifact and owns the host page, the UI, the build assembly and
 the browser glue behind a thin ABI. Building, options and test tools: `BUILD.md`.
 
@@ -17,6 +17,7 @@ the browser glue behind a thin ABI. Building, options and test tools: `BUILD.md`
 | This repo (private) | `10-p/engine-unreal1` | UE1 source → web and native builds |
 | Frontend | `10-p/unreal-frontend-arch-private` | consumes `build-wasm-perf/SDLLaunch/`; host, UI, glue, publishing |
 | Game assets | any local folder (never in git) | an Unreal v200 install; no build reads it |
+| Android app | `Android/` | the Gradle/NDK project: SDL's activity, the launcher, the on-screen pad (BUILD.md "Android") |
 | ARM device port (reference) | [10-p/UE1-funkey](https://github.com/10-p/UE1-funkey) | a SoftDrv port to a small ARM device; read it, do not cherry-pick its device workarounds |
 
 ## Load-bearing facts
