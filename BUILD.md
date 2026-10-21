@@ -17,6 +17,7 @@ root (`build-<preset>/`, gitignored).
 | `native64` | `build-native64/Unreal/…` | the same at x86_64 (LP64) |
 | `native64-asan` | `build-native64-asan/Unreal/…` | `native64` with AddressSanitizer |
 | `windows` | `build-windows/Unreal/Unreal.exe` + `OpenAL32.dll` | 32-bit Windows, MinGW-w64 (cross or MSYS2) |
+| `windows64` | `build-windows64/Unreal/Unreal.exe` + `OpenAL32.dll` | 64-bit Windows, MinGW-w64 (x86_64), the shipped 32-bit `.u` unchanged |
 | `wasm` | `build-wasm/SDLLaunch/` | web, the development build: -O2 with DWARF and assertions |
 | `wasm-debug` | `build-wasm-debug/SDLLaunch/` | web at -O0, for a bug the optimiser is suspected of |
 | `wasm-perf` | `build-wasm-perf/SDLLaunch/` | web, the shipping build: -O2 compile, -O3 link, no debug info, no assertions |
@@ -162,7 +163,8 @@ unshare -rn <repo>/tools/dev/census/play.sh <tree> -NOPENGLESRENDERER "DmDeck16?
 ## Windows (MinGW-w64)
 
 `windows` cross-compiles for `i686-w64-mingw32` (`Source/cmake/toolchain-mingw-w64.cmake`) or builds from an MSYS2
-`MINGW32` prompt, where pacman's SDL2 is used and nothing is fetched for it. The preset builds a 32-bit exe.
+`MINGW32` prompt, where pacman's SDL2 is used and nothing is fetched for it. The preset builds a 32-bit exe;
+`windows64` builds a 64-bit one for `x86_64-w64-mingw32` (Windows is LLP64: `long` stays 4 bytes, pointers are 8).
 
 - SDL.h renames `main()` to `SDL_main`, and SDL2main provides the `WinMain` that calls it (`-lmingw32 -lSDL2main`
   before `-lSDL2`).

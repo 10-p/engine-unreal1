@@ -60,6 +60,8 @@ Copy `<prefix>/lib/libSDL2-2.0.so.0` next to `Unreal.bin` (or add `<prefix>/lib`
    cmake --preset windows && cmake --build --preset windows -j$(nproc)
    ```
 3. The result is `build-windows/Unreal/Unreal.exe` plus `OpenAL32.dll`, which must stay next to it.
+4. For 64-bit Windows, install the x86_64 toolchain (`g++-mingw-w64-x86-64-posix`) and use the `windows64` preset; the
+   result is in `build-windows64/Unreal/`.
 
 ### Windows x86 (MSYS2 on Windows)
 1. Install MSYS2 and open the `MINGW32` prompt. **Do not** use the `MINGW64` or `MSYS` prompts.

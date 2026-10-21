@@ -556,12 +556,12 @@ void appInit()
 	MEMORYSTATUS M;
 	GlobalMemoryStatus(&M);
 	GPhysicalMemory=M.dwTotalPhys;
-	debugf( NAME_Init, "Memory total: Phys=%iK Pagef=%iK Virt=%iK", M.dwTotalPhys/1024, M.dwTotalPageFile/1024, M.dwTotalVirtual/1024 );
+	debugf( NAME_Init, "Memory total: Phys=%iM Pagef=%iM Virt=%iM", (INT)(M.dwTotalPhys/1048576), (INT)(M.dwTotalPageFile/1048576), (INT)(M.dwTotalVirtual/1048576) );
 
 	// Working set.
-	DWORD WsMin=0, WsMax=0;
+	SIZE_T WsMin=0, WsMax=0;
 	GetProcessWorkingSetSize( GetCurrentProcess(), &WsMin, &WsMax );
-	debugf( NAME_Init, "Working set: %X / %X", WsMin, WsMax );
+	debugf( NAME_Init, "Working set: %X / %X", (DWORD)WsMin, (DWORD)WsMax );
 	//SetProcessWorkingSetSize( GetCurrentProcess(), 32*1024*1024, 64*1024*1024 );
  
 	// Check Windows version.
@@ -956,7 +956,7 @@ void appLaunchURL( const char* URL, const char* Parms, char* Error256 )
 	Error256[0]=0;
 	debugf( NAME_Log, "LaunchURL %s", URL );
 #ifdef PLATFORM_WIN32
-	INT Code = (INT)ShellExecute(NULL,"open",URL,Parms,"",SW_SHOWNORMAL);
+	INT Code = (INT)(PTRINT)ShellExecute(NULL,"open",URL,Parms,"",SW_SHOWNORMAL);
 	if( Code<=32 )
 		appSprintf( Error256, LocalizeError("UrlFailed") );
 #endif
