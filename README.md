@@ -80,7 +80,7 @@ Copy `<prefix>/lib/libSDL2-2.0.so.0` next to `Unreal.bin` (or add `<prefix>/lib`
 1. Install JDK 17, the Android SDK (platform 36, build-tools 36.0.0, NDK r28c) and CMake, and write `Android/local.properties` for them (see [BUILD.md](BUILD.md), "Android").
 2. Build and install:
    ```
-   cd Android && ./gradlew assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk
+   cd Android && ./gradlew assembleRelease && adb install -r app/build/outputs/apk/release/app-release.apk
    ```
 3. Put the game folder (`System`, `Maps`, `Textures`, `Sounds`, `Music` of an Unreal v200 install) on the device as `Unreal`, then in the app choose it and copy it to internal storage, or play it in place from `/sdcard/Unreal` with All files access.
 

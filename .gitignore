@@ -11,6 +11,7 @@ Source/UnrealED/obj
 /build-wasm-debug/
 /build-native/
 /build-windows/
+/build-windows64/
 __pycache__/
 /build-soft/
 tools/asmport/oracle/oracle

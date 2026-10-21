@@ -191,10 +191,11 @@ directory comes from the binary's path) and dereference asset symlinks (`cp -rL`
 ## Android
 
 `Android/` is a Gradle project (Android Gradle plugin 9.4.0, Gradle 9.6.0 through the wrapper) whose
-`externalNativeBuild` is `Source/CMakeLists.txt`, configured with the NDK for `arm64-v8a` (devices such as the
-Retroid Pocket 6) and `x86_64` (the emulator). The APK holds the engine (`libUnreal.so`: the static package set,
-openal-soft and libxmp in it, `SDL_main` in `Source/Unreal/Src/SDLLaunch.cpp`), `libSDL2.so`, the process set-up
-bridge (`libunreal1_android_bridge.so`) and the Android `Default.ini`; the game folder stays on the device's storage.
+`externalNativeBuild` is `Source/CMakeLists.txt`, configured with the NDK for `armeabi-v7a` and `arm64-v8a` (32-bit
+and 64-bit ARM devices in one APK; `-Pabis=x86_64` builds one for a fast emulator). The APK holds the engine
+(`libUnreal.so`: the static package set, openal-soft and libxmp in it, `SDL_main` in
+`Source/Unreal/Src/SDLLaunch.cpp`), `libSDL2.so`, the process set-up bridge (`libunreal1_android_bridge.so`) and the
+Android `Default.ini`; the game folder stays on the device's storage.
 
 Ubuntu's packages (Debian's `google-android-*-installer`s fetch Google's SDK parts into `/usr/lib/android-sdk`):
 
@@ -207,13 +208,17 @@ printf 'sdk.dir=/usr/lib/android-sdk\ncmake.dir=/usr\n' > Android/local.properti
 
 ```
 cd Android
-./gradlew assembleDebug        # -> app/build/outputs/apk/debug/app-debug.apk (assembleRelease: the same, debug-signed)
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-#   -Pabis=arm64-v8a      one ABI only (default arm64-v8a,x86_64)
+./gradlew assembleRelease      # -> app/build/outputs/apk/release/app-release.apk (assembleDebug: the debuggable one)
+adb install -r app/build/outputs/apk/release/app-release.apk
+#   -Pabis=arm64-v8a      one ABI only (default armeabi-v7a,arm64-v8a)
 #   -Psdl2Dir=<dir>       a local SDL2 checkout (or SDL2_SOURCE_DIR)
 #   -PnativeDebug         the engine at the Gradle variant's own build type (-O0 for debug)
 ```
 
+- Signing: every variant is signed with the key the Gradle property `ueAndroidSigning` names, a properties file kept
+  outside the repository (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`), set in `~/.gradle/gradle.properties`
+  or as `UE_ANDROID_SIGNING`. One key signs every release, so each APK installs over the last; without the property
+  the build uses the debug key.
 - The Gradle daemon runs on an installed JDK 17 (`gradle/gradle-daemon-jvm.properties`), whatever `java` is on the
   `PATH`; Android Studio opens `Android/` as it is.
 - The SDK parts are the packages' exactly: `compileSdk` 36 (platform 36), build-tools 36.0.0 (what AGP 9.4 asks for)
@@ -222,7 +227,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   All files access, which reading the game folder in place from shared storage needs).
 - `if(ANDROID)` in `Source/CMakeLists.txt` forces the set: static, SDL, Editor, NOpenGLESDrv (the device's OpenGL
   ES 2 through SDL's EGL), SoftDrv, NullDrv, NOpenALDrv, the null audio device, no NOpenGLDrv, `ASM=0`,
-  `-fno-delete-null-pointer-checks`. The arm64 compiler builds the 64-bit (LP64) engine (above).
+  `-fno-delete-null-pointer-checks`. The arm64 compiler builds the 64-bit (LP64) engine (above), the armeabi-v7a one
+  the 32-bit engine.
 - SDL2: one checkout for SDL's C library (`Source/cmake/SDL2Android.cmake` builds it shared, handed the checkout as
   `FETCHCONTENT_SOURCE_DIR_SDL2`) and SDL's Java classes (`SDLActivity`, compiled from its `android-project`
   sources), so the two always match; the build clones `release-2.32.x` once into `Android/build/SDL2`. The engine's
