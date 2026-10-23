@@ -150,7 +150,15 @@ DISPLAY=:98 gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin 
 ASAN_OPTIONS=alloc_dealloc_mismatch=0:detect_leaks=0 <repo>/tools/dev/botmatch.sh <asan-tree> 240
 unshare -rn <repo>/tools/dev/census/play.sh <tree> -NOPENGLESRENDERER "DmDeck16?game=UnrealI.DeathMatchGame" /tmp/p \
     "stat global" "rmode 1" shot "savegame 5" "open ?load=5"
+<repo>/tools/dev/inputtest/run.sh <tree> <repo>/tools/dev/inputtest/move.scen <out-dir> \
+    "DmDeck16.unr?Game=UnrealI.DeathMatchGame" -SOFTWARERENDERER "-ini:System:[UnrealI.DeathMatchGame]:InitialBots=0"
+<repo>/tools/dev/inputtest/rate.py <out-dir>/game.log 0                              # speed and direction per tag
 ```
+
+- `-INPUTTEST=<file>` opens the input test channel (`Source/NSDLDrv/Src/NSDLInputTest.h`): commands appended to the
+  file drive a virtual SDL game controller that takes the pad's place, run console commands and watch the player
+  once per input tick. `tools/dev/inputtest/run.sh` runs the native build under Xvfb with it and feeds it a scenario
+  (`move.scen`: the move stick's speed against tilt and its directions); `rate.py` reads the watch lines.
 
 - `tools/test/U64Test` holds the script VM checks; it is compiled by the 32-bit `Unreal.bin -MAKE`
   (`EditPackages[n]=U64Test` in Unreal.ini, the folder beside `System`), and must pass on 32-bit before 64-bit.

@@ -2,6 +2,7 @@
 #include <ctype.h>
 
 #include "NSDLDrv.h"
+#include "NSDLInputTest.h"
 #include "UnRender.h"
 
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
@@ -238,6 +239,10 @@ UNSDLViewport::UNSDLViewport( ULevel* InLevel, UNSDLClient* InClient )
 
 	Destroyed = false;
 	QuitRequested = false;
+	InputTest = NULL;
+	char InputTestFile[256];
+	if( Parse( appCmdLine(), "INPUTTEST=", InputTestFile, ARRAY_COUNT(InputTestFile) ) )
+		InputTest = new FNSDLInputTest( InputTestFile );
 
 	unguard;
 }
@@ -250,6 +255,8 @@ void UNSDLViewport::Destroy()
 	{
 		Client->FullscreenViewport = NULL;
 	}
+	delete InputTest;
+	InputTest = NULL;
 	UViewport::Destroy();
 	unguard;
 }
@@ -1134,6 +1141,9 @@ UBOOL UNSDLViewport::TickInput()
 	for( INT k = 0; k < GHeldTapNum; k++ )
 		CauseInputEvent( GHeldTap[k], IST_Release );
 	GHeldTapNum = 0;
+
+	if( InputTest )
+		InputTest->Tick( this );
 
 	// UseJoystick, every tick. The game's own joystick option (`set ini:Engine.Engine.ViewportManager UseJoystick
 	// ...`) sets it on this live client, so it takes effect at once: off closes the pad (keys released), back on
