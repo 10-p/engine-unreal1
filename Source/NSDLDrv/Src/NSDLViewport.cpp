@@ -1004,7 +1004,10 @@ void UNSDLViewport::UpdateInput( UBOOL Reset )
 	guard(UNSDLViewport::UpdateInput);
 
 	if( Reset )
+	{
 		appMemset( (void*)JoyAxis, 0, sizeof(JoyAxis) );
+		MoveStick[0] = MoveStick[1] = 0;
+	}
 
 	unguard;
 }
@@ -1065,6 +1068,8 @@ void UNSDLViewport::UpdatePadAxis( INT Axis, INT NewValue )
 	const BYTE Key = JoyAxisMap[Axis];
 	const INT PrevValue = JoyAxis[Axis];
 	INT DeadZone = 0;
+	if( Axis == SDL_CONTROLLER_AXIS_LEFTX || Axis == SDL_CONTROLLER_AXIS_LEFTY )
+		MoveStick[Axis - SDL_CONTROLLER_AXIS_LEFTX] = (SWORD)Clamp( NewValue, -32767, 32767 );
 	if ( Key < IK_JoyX )
 	{
 		// Treat the axis like a trigger.
@@ -1123,6 +1128,42 @@ void UNSDLViewport::ReleasePad()
 		if( JoyAxisMap[a] && JoyAxisMap[a] < IK_JoyX && JoyAxis[a] >= JoyAxisPressThreshold )
 			CauseInputEvent( JoyAxisMap[a], IST_Release );
 		JoyAxis[a] = 0;
+	}
+	MoveStick[0] = MoveStick[1] = 0;
+	unguard;
+}
+
+// The move stick's walk is one bit of the player's walk button (bRun), apart from the 1 the Walking key sets: that
+// key's press and release overwrite the byte, and the stick sets its bit again on the next tick.
+static const BYTE PadWalkBit = 0x40;
+
+//
+// The left stick. Its dead zone is radial, so a direction between the axes keeps both parts; out of it, X and Y go
+// to their bindings, and a tilt below PadWalkTilt walks, on any pad but the touch pad (IsTouchPad).
+//
+void UNSDLViewport::TickMoveStick( FLOAT DeltaTime )
+{
+	guard(UNSDLViewport::TickMoveStick);
+	UBOOL Walk = 0;
+	const FLOAT X = MoveStick[0] / 32767.f, Y = MoveStick[1] / 32767.f;
+	const FLOAT Tilt = Min( (FLOAT)appSqrt( X*X + Y*Y ), 1.f );
+	if( Tilt > 0.f && Tilt >= Client->DeadZoneXYZ )
+	{
+		const FLOAT Scale = Client->ScaleXYZ * DeltaTime;
+		if( X != 0.f )
+			CauseInputEvent( IK_JoyX, IST_Axis, X * Scale * JoyAxisDefaultScale[SDL_CONTROLLER_AXIS_LEFTX] );
+		if( Y != 0.f )
+			CauseInputEvent( IK_JoyY, IST_Axis, Y * Scale * JoyAxisDefaultScale[SDL_CONTROLLER_AXIS_LEFTY] * ( Client->InvertY ? -1.f : 1.f ) );
+		SDL_GameController* GC = Client->GetController();
+		Walk = Tilt < Client->PadWalkTilt
+			&& !( GC && Client->IsTouchPad( SDL_JoystickInstanceID( SDL_GameControllerGetJoystick( GC ) ) ) );
+	}
+	if( Actor )
+	{
+		if( Walk )
+			Actor->bRun |= PadWalkBit;
+		else
+			Actor->bRun &= ~PadWalkBit;
 	}
 	unguard;
 }
@@ -1364,11 +1405,14 @@ UBOOL UNSDLViewport::TickInput()
 		for( INT a = 0; a < SDL_CONTROLLER_AXIS_MAX; a++ )
 			UpdatePadAxis( a, SDL_GameControllerGetAxis( GC, (SDL_GameControllerAxis)a ) );
 
-	// Constantly hammer the input system with axis events for axes that are not zero.
+	// Constantly hammer the input system with axis events for axes that are not zero; the left stick is TickMoveStick's.
+	TickMoveStick( DeltaTime );
 	for ( INT i = 0; i < SDL_CONTROLLER_AXIS_MAX; ++i )
 	{
 		const BYTE Key = JoyAxisMap[i];
 		const SWORD Value = JoyAxis[i];
+		if ( i == SDL_CONTROLLER_AXIS_LEFTX || i == SDL_CONTROLLER_AXIS_LEFTY )
+			continue;
 		if ( Value && Key && Key >= IK_JoyX )
 		{
 			const FLOAT FltValue = Clamp( Value / 32767.f, -1.f, 1.f );

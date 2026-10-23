@@ -318,7 +318,12 @@ bottom hides it.
 - **Language.** `[Engine.Engine] Language` (`Init: Language: <ext>` in the log); localized properties are read from
   `<Package>.<lang>`, falling back to `<Package>.int` per key.
 - **Game pads.** `[NSDLDrv.NSDLClient] UseJoystick` (on by default) is read every tick, so the game's own option
-  opens or closes the first pad at once; pads hot-plug; sticks and triggers are read from the pad's state.
+  opens or closes the first pad at once; pads hot-plug; sticks and triggers are read from the pad's state. The left
+  stick is the move stick: its dead zone (`DeadZoneXYZ`, 0.1) is radial, so every direction between the axes keeps
+  both of its parts, and a tilt out of it but below `PadWalkTilt` (0.5 of the stick's travel; 0 never) walks, as the
+  Walking button does, on any pad but the touch pad: the stick keeps a bit of its own set in the player's `bRun` (the
+  Walking key writes the whole byte; the stick sets its bit again the next tick), and the moves a client sends to its
+  server carry `bRun`. The right stick keeps a dead zone per axis (`DeadZoneRUV`).
 - **Saves** sort their name, import and export tables with a stable sort, so the same save gives the same file on
   every platform.
 
