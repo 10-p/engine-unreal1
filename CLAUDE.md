@@ -25,9 +25,9 @@ the browser glue behind a thin ABI. Building, options and test tools: `BUILD.md`
   registrants). Classes of linked packages are registered at startup.
 - **`ASM=0` off MSVC:** SoftDrv and Core use their portable C paths; SoftDrv's are matched to the MMX kernels
   (`tools/asmport/`).
-- **Main loop on the web:** `MainLoop` returns to the worker's event loop every frame through Asyncify
-  (`emscripten_sleep`, or a `setTimeout(0)` `EM_ASYNC_JS` yield), never `emscripten_set_main_loop`, whose unwind
-  collides with `main()`'s try/catch.
+- **Main loop on the web:** `MainLoop` returns to the worker's event loop every frame through Asyncify (the
+  `ufront_wait_frame` `EM_ASYNC_JS` wait: the display's next frame, a timer while the page is hidden or with
+  `-TIMERFRAMES`), never `emscripten_set_main_loop`, whose unwind collides with `main()`'s try/catch.
 - **Files:** the engine uses libc `fopen`/`opendir`; on the web WasmFS's JSImpl backend (`vendor/glue/wasmfs-shim.js`)
   serves them from the host. Do not write an engine-side web file manager.
 - **Glue ABI:** `vendor/glue/` (ue_abi.h, net-shim.js, wasmfs-shim.js) is vendored from the frontend at ABI

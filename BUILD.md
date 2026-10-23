@@ -80,9 +80,10 @@ fetched libraries, the main link flags and the files' checksums. The frontend's 
   `emscripten_webgl_commit_frame` under `-sOFFSCREEN_FRAMEBUFFER`; SDL2 keeps the window and input. SoftDrv
   draws into a driver-owned framebuffer that the viewport blits through a 2D context.
 - **Frame loop.** `MainLoop` (`Source/Unreal/Src/SDLLaunch.cpp`) returns to the worker's event loop every frame,
-  because that is when the canvas is composited: `emscripten_sleep` for the frame-cap budget left, otherwise a
-  `setTimeout(0)` yield (`EM_ASYNC_JS`). Both are Asyncify (`-sASYNCIFY`); `emscripten_set_main_loop` is not
-  used, because its unwind would cross `main()`'s try/catch.
+  because that is when the canvas is composited, and resumes at the display's next frame (with a frame-rate cap,
+  the first display frame its due time reaches; a timer while the page is hidden, or with `-TIMERFRAMES`). The wait
+  is Asyncify (`-sASYNCIFY`, an `EM_ASYNC_JS` import); `emscripten_set_main_loop` is not used, because its unwind
+  would cross `main()`'s try/catch.
 - **Files.** WasmFS with a JSImpl backend: `vendor/glue/wasmfs-shim.js` forwards the backend's operations to the
   host-injected `Module.UE.fs.backend`, which serves game files on demand. `Engine/Config/web/Default.ini` is
   preloaded as `/System/Default.ini`; `main()` changes to `/System`, and `appBaseDir` is the working directory.

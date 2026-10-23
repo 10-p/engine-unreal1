@@ -71,8 +71,7 @@ if(EMSCRIPTEN)
   target_link_options(${PROJECT_NAME} PRIVATE
     -sASYNCIFY
     -sASYNCIFY_STACK_SIZE=262144
-    # emscripten_sleep is the frame-rate cap's sleep and WebRTCDrv's handshake wait; EM_ASYNC_JS imports (the
-    # frame yield) register themselves.
+    # emscripten_sleep is WebRTCDrv's handshake wait; EM_ASYNC_JS imports (the frame wait) register themselves.
     "-sASYNCIFY_IMPORTS=['emscripten_sleep']"
     -sFULL_ES2=1
     -sUSE_SDL=2
@@ -99,7 +98,7 @@ if(EMSCRIPTEN)
     # creation and the frame present bypass SDL, whose EGL path Emscripten proxies to the main thread, which no
     # longer has the canvas.
     #
-    # -sASYNCIFY is the frame-yield mechanism (emscripten_sleep and EM_ASYNC_JS in SDLLaunch.cpp).
+    # -sASYNCIFY is the frame-wait mechanism (EM_ASYNC_JS in SDLLaunch.cpp).
     -pthread
     -sPROXY_TO_PTHREAD
     -sOFFSCREENCANVAS_SUPPORT
