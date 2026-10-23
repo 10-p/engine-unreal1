@@ -1,6 +1,7 @@
 package com.unreal1.android;
 
 import android.app.AlertDialog;
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import org.libsdl.app.SDLActivity;
+import org.libsdl.app.SDLSurface;
 
 /**
  * The game: SDL's activity, in the ":game" process (the engine starts once per process, so the process
@@ -45,7 +47,7 @@ public class GameActivity extends SDLActivity {
      * The frame's size as a multiple of the screen's (the launcher's resolution scale): below 1 fewer
      * pixels than the screen, above 1 more (supersampling). The surface SDL draws to gets that size
      * ({@link android.view.SurfaceHolder#setFixedSize}) and the compositor scales it to the screen, so the
-     * engine sees a window of that size and nothing else changes.
+     * engine sees a window of that size; touches reach SDL in the surface's pixels ({@link FrameSurface}).
      */
     static final String EXTRA_RENDER_SCALE = "com.unreal1.android.RENDER_SCALE";
 
@@ -105,6 +107,12 @@ public class GameActivity extends SDLActivity {
         } catch (Throwable t) {
             Log.e(TAG, "could not add the on-screen pad", t);
         }
+    }
+
+    /** SDL's surface, whose pointer events SDL reads in the buffer's pixels at every resolution scale. */
+    @Override
+    protected SDLSurface createSDLSurface(Context context) {
+        return new FrameSurface(context);
     }
 
     /**
