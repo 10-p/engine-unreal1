@@ -482,6 +482,7 @@ void appInit()
 
 	// Parameters.
 	GIsStrict = ParseParam( appCmdLine(), "STRICT" );
+	GUfrontLog = ParseParam( appCmdLine(), "UFRONTLOG" );
 
 	// Ini.
 	char Ini[MAX_INI_NAME + 1] = "";

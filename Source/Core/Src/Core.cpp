@@ -40,6 +40,7 @@ CORE_API UBOOL GIsSlowTask=0;
 CORE_API UBOOL GIsGuarded=0;
 CORE_API UBOOL GIsRequestingExit=0;
 CORE_API UBOOL GIsStrict=0;
+CORE_API UBOOL GUfrontLog=0;
 CORE_API UBOOL GScriptEntryTag=0;
 CORE_API UBOOL GNoAutoReplace=0;
 

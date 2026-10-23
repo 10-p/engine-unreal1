@@ -591,7 +591,8 @@ APlayerPawn* ULevel::SpawnPlayActor( UPlayer* Player, ENetRole RemoteRole, const
 		}
 		else
 		{
-			debugf( NAME_Log, "SpawnPlayActor: Spawned travelling actor %s (%s)", ActorName, ClassName );
+			if( GUfrontLog )
+				debugf( NAME_Log, "SpawnPlayActor: Spawned travelling actor %s (%s)", ActorName, ClassName );
 			Accept = new(Accepted)FAcceptInfo(Spawned,ActorName);
 		}
 

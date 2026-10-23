@@ -140,7 +140,8 @@ static void KickDiscovery()
 	GLastDiscoveryAt  = Now;
 	GDiscoveryPending = 1;
 	ue_net_discover_servers( "" );   // "" = this browser's room; "*" would mean every room on the signalling server
-	debugf( NAME_DevNet, "[WebRTC-LAN] discovery started" );
+	if( GUfrontLog )
+		debugf( NAME_DevNet, "[WebRTC-LAN] discovery started" );
 }
 
 // Throttled, and the throttle is required, not an optimisation. Every ue_net_* call here is `__proxy: 'sync'`,
@@ -193,10 +194,12 @@ static void PumpDiscovery()
 		if( S.MaxPlayers <= 0 )
 			S.MaxPlayers = 16;
 		const FString Host = WebRTCLan_HostForRoom( *S.Room );   // also reserves the room's index
-		debugf( NAME_DevNet, "[WebRTC-LAN] '%s' room=%s map=%s %i/%i -> %s", *S.Name, *S.Room, *S.Map, S.Players, S.MaxPlayers, *Host );
+		if( GUfrontLog )
+			debugf( NAME_DevNet, "[WebRTC-LAN] '%s' room=%s map=%s %i/%i -> %s", *S.Name, *S.Room, *S.Map, S.Players, S.MaxPlayers, *Host );
 		new( GServers )FLanServer( S );
 	}
-	debugf( NAME_DevNet, "[WebRTC-LAN] discovery done: %i server(s)", GServers.Num() );
+	if( GUfrontLog )
+		debugf( NAME_DevNet, "[WebRTC-LAN] discovery done: %i server(s)", GServers.Num() );
 }
 
 static void QueueBeacons( const void* LinkId )

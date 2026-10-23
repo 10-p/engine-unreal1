@@ -1050,7 +1050,8 @@ void UNOpenALAudioSubsystem::UpdateReverb( FPointRegion& Region )
 			static UBOOL LoggedReverb = 0;
 			if( !LoggedReverb )
 			{
-				debugf( "NOpenALDrv: EAX reverb applied for zone %s (MasterGain %d)", ReverbZone->GetName(), (INT)ReverbZone->MasterGain );
+				if( GUfrontLog )
+					debugf( "NOpenALDrv: EAX reverb applied for zone %s (MasterGain %d)", ReverbZone->GetName(), (INT)ReverbZone->MasterGain );
 				LoggedReverb = 1;
 			}
 		}

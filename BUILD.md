@@ -297,7 +297,11 @@ bottom hides it.
   device's sample count when it creates the window. Log lines: `GLES2:`/`OpenGL: antialiasing <n>x
   (multisampled window|multisampled back buffer)` or `… antialiasing off`.
 - **AutoFOV.** `[ufront.AutoFOV]` `AutoFOV` (0 off, 1 Hor+, 2 Adaptive, the default), `ReferenceAspect`,
-  `WeaponScale`; `[AutoFOV]` log lines.
+  `WeaponScale`; `[AutoFOV]` log lines with `-UFRONTLOG`.
+- **`-UFRONTLOG`.** Also logs the port's diagnostic and repeated lines (`GUfrontLog`): the `[AutoFOV]` lines, the
+  per-actor travel lines (`[ufront/travel] SKIP`/`EXPORT`, `SpawnPlayActor: Spawned travelling actor`), the
+  `[WebRTC-LAN]` discovery rounds and the first reverb zone. The tests pass it; a player's log leaves them out.
+  Status lines, warnings, errors and console-command answers are always logged.
 - **Command line.** `-ini:<File>:[<Section>]:<Key>=<Value>` sets a config key at startup (`User` and `System` both
   mean the one default ini); a token that does not fit the 4,096-character command line is dropped whole, with a
   warning.

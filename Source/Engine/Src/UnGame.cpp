@@ -1014,10 +1014,12 @@ void ExportTravel( FOutputDevice& Out, AActor* Actor )
 	// CPF_Travel properties.
 	if( !Actor->bTravel )
 	{
-		debugf( NAME_DevNet, "[ufront/travel] SKIP  %s (%s) — bTravel=false", Actor->GetName(), Actor->GetClass()->GetPathName() );
+		if( GUfrontLog )
+			debugf( NAME_DevNet, "[ufront/travel] SKIP  %s (%s) — bTravel=false", Actor->GetName(), Actor->GetClass()->GetPathName() );
 		return;
 	}
-	debugf( NAME_DevNet, "[ufront/travel] EXPORT %s (%s)", Actor->GetName(), Actor->GetClass()->GetPathName() );
+	if( GUfrontLog )
+		debugf( NAME_DevNet, "[ufront/travel] EXPORT %s (%s)", Actor->GetName(), Actor->GetClass()->GetPathName() );
 	Out.Logf( "Class=%s Name=%s\r\n{\r\n", Actor->GetClass()->GetPathName(), Actor->GetName() );
 	for( TFieldIterator<UProperty> It(Actor->GetClass()); It; ++It )
 	{
