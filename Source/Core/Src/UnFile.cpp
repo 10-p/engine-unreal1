@@ -21,6 +21,7 @@
 #else
 #include <ctype.h>
 #include <dirent.h>
+#include <limits.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -467,8 +468,8 @@ CORE_API TArray<FString> appFindFiles( const char* Spec )
 #else
 	DIR *Dirp;
 	struct dirent* Direntp;
-	char Path[256];
-	char File[256];
+	char Path[PATH_MAX];
+	char File[PATH_MAX];
 	char *Filestart;
 	char *Cur;
 	UBOOL Match;
@@ -1589,14 +1590,14 @@ static char GLanguage[32]="int";
 CORE_API const char* Localize( const char* Section, const char* Key, const char* Package, const char* LangExt )
 {
 	guard(Localize);
-	char Filename[256];
+	FString Filename;	// a path of any length
 	LangExt = LangExt ? LangExt : GLanguage;
 TryAgain:
-	appSprintf( Filename, "%s%s.%s", appBaseDir(), Package, LangExt );
+	Filename = FString( appBaseDir() ) + Package + "." + LangExt;
 	static char Results[8][256];
 	static INT iResult=0;
 	iResult = (iResult+1) % ARRAY_COUNT(Results);
-	if( !GetConfigString( Section, Key, Results[iResult], ARRAY_COUNT(Results[0]), Filename ) )
+	if( !GetConfigString( Section, Key, Results[iResult], ARRAY_COUNT(Results[0]), *Filename ) )
 	{
 		if( appStricmp(LangExt,"int")!=0 )
 		{

@@ -127,10 +127,12 @@ UBOOL FConfigFile::GetSection( const char* Section, char* Out, INT OutLen )
 	char* End = Out;
 	for( TIterator<FKeyValue> It(Sec->KeyValues); It; ++It )
 	{
+		// Whole "key=value" entries while they fit, with the final terminator.
 		const char* Key = It.GetCurrent().Key;
-		if( ( End - Out ) + appStrlen( Key ) + 1 >= OutLen )
+		const char* Val = It.GetCurrent().Val;
+		if( ( End - Out ) + appStrlen( Key ) + 1 + appStrlen( Val ) + 1 >= OutLen )
 			break;
-		End += appSprintf( End, "%s=%s", Key, It.GetCurrent().Val ) + 1;
+		End += appSprintf( End, "%s=%s", Key, Val ) + 1;
 	}
 
 	*End++ = '\0';
