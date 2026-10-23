@@ -191,8 +191,8 @@ directory comes from the binary's path) and dereference asset symlinks (`cp -rL`
 ## Android
 
 `Android/` is a Gradle project (Android Gradle plugin 9.4.0, Gradle 9.6.0 through the wrapper) whose
-`externalNativeBuild` is `Source/CMakeLists.txt`, configured with the NDK for `armeabi-v7a` and `arm64-v8a` (32-bit
-and 64-bit ARM devices in one APK; `-Pabis=x86_64` builds one for a fast emulator). The APK holds the engine
+`externalNativeBuild` is `Source/CMakeLists.txt`, configured with the NDK for `armeabi-v7a`, `arm64-v8a` and
+`x86_64` (32-bit and 64-bit ARM devices, x86 Chromebooks and the emulator, in one APK). The APK holds the engine
 (`libUnreal.so`: the static package set, openal-soft and libxmp in it, `SDL_main` in
 `Source/Unreal/Src/SDLLaunch.cpp`), `libSDL2.so`, the process set-up bridge (`libunreal1_android_bridge.so`) and the
 Android `Default.ini`; the game folder stays on the device's storage.
@@ -210,7 +210,6 @@ printf 'sdk.dir=/usr/lib/android-sdk\ncmake.dir=/usr\n' > Android/local.properti
 cd Android
 ./gradlew assembleRelease      # -> app/build/outputs/apk/release/app-release.apk (assembleDebug: the debuggable one)
 adb install -r app/build/outputs/apk/release/app-release.apk
-#   -Pabis=arm64-v8a      one ABI only (default armeabi-v7a,arm64-v8a)
 #   -Psdl2Dir=<dir>       a local SDL2 checkout (or SDL2_SOURCE_DIR)
 #   -PnativeDebug         the engine at the Gradle variant's own build type (-O0 for debug)
 ```
