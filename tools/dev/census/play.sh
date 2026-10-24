@@ -12,8 +12,7 @@
 #
 # Run it under `unshare -rn`: loopback only, nothing can reach a real server. v200 logs only to a file
 # (unbuffered), named here with LOG= and copied to <out-dir>/engine.log; the game runs on a pty (`script -f`)
-# whose capture, <out-dir>/client.log, holds stderr -- where a sanitizer reports. Screenshots come from the X
-# root (xwd), not the game.
+# whose capture, <out-dir>/client.log, holds stderr. Screenshots come from the X root (xwd), not the game.
 # v200's console stays open after Return, so each command closes it again (otherwise every second grave would
 # close it and the next command would be typed into the game as keys).
 set -u
@@ -66,6 +65,6 @@ if game > /dev/null; then
     game > /dev/null && { echo "did not exit: SIGTERM"; stopgame; }
 fi
 wait 2>/dev/null
-BAD='SIGSEGV|Signal|Assertion failed|appError|Critical|General protection|Segmentation fault|\[layout\]|ERROR: AddressSanitizer|runtime error:'
+BAD='SIGSEGV|Signal|Assertion failed|appError|Critical|General protection|Segmentation fault|\[layout\]'
 cp "$ELOG" "$OUT/engine.log"
 echo "exit: $(grep -aoE 'COMMAND_EXIT_CODE="[0-9]+"' "$LOG")  crash markers: $(cat "$LOG" "$OUT/engine.log" | grep -caE "$BAD")"

@@ -46,18 +46,6 @@
       }
     },
     {
-      "name": "native64-asan",
-      "inherits": "native64",
-      "displayName": "Native x86_64 + AddressSanitizer",
-      "description": "native64 with -fsanitize=address (the flags keep -DASM=0). Run with ASAN_OPTIONS=alloc_dealloc_mismatch=0 (UE1's sized operator delete pairing is reported but benign). Put the binary in the run tree's System/ itself: the engine takes its base dir from the executable path. Builds in build-native64-asan/.",
-      "binaryDir": "${sourceDir}/../build-native64-asan",
-      "cacheVariables": {
-        "CMAKE_C_FLAGS": "-DASM=0 -fsanitize=address -fno-omit-frame-pointer",
-        "CMAKE_CXX_FLAGS": "-DASM=0 -fsanitize=address -fno-omit-frame-pointer",
-        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address"
-      }
-    },
-    {
       "name": "wasm",
       "displayName": "Web (Emscripten/WASM) -- dev default",
       "description": "Emscripten web build: -O2 + DWARF + assertions. The everyday dev build — named stacks and readable errors while the engine still runs at a playable speed. Builds in build-wasm/. Run `source <emsdk>/emsdk_env.sh` first (sets EMSDK).",
@@ -119,7 +107,6 @@
   "buildPresets": [
     { "name": "native", "configurePreset": "native" },
     { "name": "native64", "configurePreset": "native64" },
-    { "name": "native64-asan", "configurePreset": "native64-asan" },
     { "name": "wasm", "configurePreset": "wasm" },
     { "name": "wasm-debug", "configurePreset": "wasm-debug" },
     { "name": "wasm-perf", "configurePreset": "wasm-perf" },

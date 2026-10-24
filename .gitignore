@@ -17,7 +17,6 @@ __pycache__/
 tools/asmport/oracle/oracle
 # The 64-bit and Android build trees, and script packages compiled from tools/test
 /build-native64/
-/build-native64-asan/
 /build-native64-cov/
 /build-android-*/
 /tools/test/**/*.u

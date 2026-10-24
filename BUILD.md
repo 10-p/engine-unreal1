@@ -15,7 +15,6 @@ root (`build-<preset>/`, gitignored).
 |---|---|---|
 | `native` | `build-native/Unreal/Unreal.bin` + `libopenal.so.1` | 32-bit Linux, one static binary (needs a 32-bit SDL2) |
 | `native64` | `build-native64/Unreal/…` | the same at x86_64 (LP64) |
-| `native64-asan` | `build-native64-asan/Unreal/…` | `native64` with AddressSanitizer |
 | `windows` | `build-windows/Unreal/Unreal.exe` + `OpenAL32.dll` | 32-bit Windows, MinGW-w64 (cross or MSYS2) |
 | `windows64` | `build-windows64/Unreal/Unreal.exe` + `OpenAL32.dll` | 64-bit Windows, MinGW-w64 (x86_64), the shipped 32-bit `.u` unchanged |
 | `wasm` | `build-wasm/SDLLaunch/` | web, the development build: -O2 with DWARF and assertions |
@@ -152,7 +151,6 @@ gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -MAKE       
 DISPLAY=:98 gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin -NULLRENDERER
 ./Unreal.bin "DmDeck16?game=U64Test.U64Game" -server        # U64 DONE passed=<n> failed=0
 <repo>/tools/dev/botmatch.sh <server-tree> 300 [<client-tree>]                     # a dedicated server + a client
-ASAN_OPTIONS=alloc_dealloc_mismatch=0:detect_leaks=0 <repo>/tools/dev/botmatch.sh <asan-tree> 240
 unshare -rn <repo>/tools/dev/census/play.sh <tree> -NOPENGLESRENDERER "DmDeck16?game=UnrealI.DeathMatchGame" /tmp/p \
     "stat global" "rmode 1" shot "savegame 5" "open ?load=5"
 <repo>/tools/dev/inputtest/run.sh <tree> <repo>/tools/dev/inputtest/move.scen <out-dir> \

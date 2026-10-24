@@ -14,7 +14,6 @@
 # kills the wrapper and leaves the game running. Console output is 4 KB block-buffered and stdbuf's preload
 # library is 64-bit only, so every game runs on a pty (`script -f`) and prints line by line at either width. A
 # game is stopped by its own command line, never by a regex over a map name (DM-Deck16][ is not a valid regex).
-# A sanitizer report counts as a crash marker (an ASan abort in the client otherwise looks like a player leaving).
 set -eu
 SRV=$(readlink -f "${1:?usage: botmatch.sh <server-run-tree> <seconds> [<client-run-tree>] [<map>]}")
 SECS=${2:?}
@@ -44,6 +43,6 @@ wait 2>/dev/null || true
 cp -p "$OUT"/ini/srv/*.ini "$SRV/System/"; cp -p "$OUT"/ini/cli/*.ini "$CLI/System/"
 # v200 logs to a file only (unbuffered, so a killed game's log is complete); each process names its own.
 cp "$SRV/System/botmatch-server.log" "$OUT/server.log"; cp "$CLI/System/botmatch-client.log" "$OUT/client.log"
-BAD='SIGSEGV|Signal|Assertion failed|appError|Critical|General protection|Segmentation fault|\[layout\]|ERROR: AddressSanitizer|runtime error:'
+BAD='SIGSEGV|Signal|Assertion failed|appError|Critical|General protection|Segmentation fault|\[layout\]'
 echo "server=$(file -b "$SRV/System/Unreal.bin" | cut -d, -f1-2) client=$(file -b "$CLI/System/Unreal.bin" | cut -d, -f1-2)"
-echo "joined=$(grep -ac 'Join succeeded' "$OUT/server.log") maps=$(grep -ac 'LoadMap:' "$OUT/server.log") client_maps=$(grep -ac 'LoadMap:' "$OUT/client.log") accessed_none=$(grep -ac 'Accessed None' "$OUT/server.log") warnings=$(grep -aci 'warning' "$OUT/server.log") crash_markers=$(grep -acE "$BAD" "$OUT/server.log" "$OUT/client.log" "$OUT/server.pty" "$OUT/client.pty" | awk -F: '{s+=$2} END{print s}')"	# sanitizer reports go to stderr (the pty)
+echo "joined=$(grep -ac 'Join succeeded' "$OUT/server.log") maps=$(grep -ac 'LoadMap:' "$OUT/server.log") client_maps=$(grep -ac 'LoadMap:' "$OUT/client.log") accessed_none=$(grep -ac 'Accessed None' "$OUT/server.log") warnings=$(grep -aci 'warning' "$OUT/server.log") crash_markers=$(grep -acE "$BAD" "$OUT/server.log" "$OUT/client.log" "$OUT/server.pty" "$OUT/client.pty" | awk -F: '{s+=$2} END{print s}')"
