@@ -286,6 +286,8 @@ app's overlay (`Source/NSDLDrv/Src/NSDLAndroid.cpp`, `Android/app/src/main/java/
 in the menus a D-pad, A B X Y, Start, Back and the shoulders and triggers (the menus' pad map: A is Enter, B
 Escape, the D-pad the arrows); in a game a move stick (left half) and a look stick (right half) where the finger
 lands, the triggers, A B X Y, the shoulders, the stick clicks, a small D-pad, Start and Back (the `Joy` bindings).
+The move stick tilts fully `MOVE_FULL_TILT_DP` (12 dp) from its base, in the drag's direction, with a dead zone of
+`MOVE_DEAD_ZONE_DP` (3 dp) for a resting finger; past full tilt its base follows the finger. It never walks.
 It is the pad the game reads unless a real pad was connected first (it then stays off and its overlay hides; a real
 pad connected later takes over, and the on-screen pad takes the place back when it goes); the "pad" key at the
 bottom hides it.
