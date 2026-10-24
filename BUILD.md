@@ -302,7 +302,9 @@ bottom hides it.
   `-NULLRENDERER` pick the device before `Engine->Init`; a switch whose device initializes is saved as the
   player's choice (`[Engine.Engine] ufrontUserRenderDevice`). Without a switch the saved device is used when it is
   a hardware default or the player's choice, else the preference order: NOpenGLDrv first on Windows, NOpenGLESDrv
-  first elsewhere.
+  first elsewhere. A device that cannot start (no GL driver; NOpenGLESDrv on Windows without ANGLE's DLLs) gives way
+  to SoftDrv (`No configured render device started: falling back to SoftDrv.SoftwareRenderDevice`) and is not
+  saved.
 - **Subsystems.** Before `Engine->Init`, a configured `ViewportManager`, `AudioDevice` or `NetworkDevice` the build
   does not contain (a retail ini names `Galaxy.GalaxyAudioSubsystem`) is replaced by the best one it has
   (NSDLClient; NOpenALDrv, then SoundDrv; TcpNetDriver, or WebRTCNetDriver on the web) and logged.
