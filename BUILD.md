@@ -114,6 +114,11 @@ the binary: a run tree that takes `Unreal.bin` takes `libopenal.so.1` with it. I
 host's headers allowed (the configure log lists them under `Building OpenAL with support for the following
 backends`), each loaded at run time. `-DUE_BUNDLED_OPENAL=OFF` links the system library instead.
 
+A server advertises its address to the LAN (the beacon behind "Find Local Servers"). When the host name resolves to
+a loopback address (Debian and Ubuntu map it to `127.0.1.1`), the address of the first interface that
+is up and not a loopback is used instead (one that can broadcast first; `WinSock: <name> resolves to a loopback
+address, using <ip>` in the log); `-MULTIHOME=<ip>` names it outright.
+
 The log goes to `System/Unreal.log` (`LOG=<file>` names another) and every line is mirrored to stdout. SIGTERM,
 SIGINT and SIGHUP request a clean exit (the first one prints `<SIGNAL>: exit requested`, and `Exit requested by
 <SIGNAL>` is logged); a second one is reported and ignored. The engine takes its base directory from the

@@ -314,6 +314,38 @@ IMPLEMENT_CLASS(UTcpipConnection);
 	UTcpNetDriver init and exit.
 -----------------------------------------------------------------------------*/
 
+#if !defined(PLATFORM_WIN32) && !defined(__EMSCRIPTEN__)
+#include <ifaddrs.h>
+// The host name often resolves to a loopback address (Debian and Ubuntu map it to 127.0.1.1), which other
+// machines cannot reach. Finds the IPv4 address of the first interface that is up and not a loopback, one that
+// can broadcast first. Returns 0 when there is none.
+static UBOOL FindLanAddress( in_addr& Out )
+{
+	ifaddrs* List = NULL;
+	if( getifaddrs( &List )!=0 )
+		return 0;
+	UBOOL Found = 0;
+	for( INT Pass=0; Pass<2 && !Found; Pass++ )
+	{
+		for( ifaddrs* I=List; I && !Found; I=I->ifa_next )
+		{
+			if
+			(	I->ifa_addr
+			&&	I->ifa_addr->sa_family==AF_INET
+			&&	(I->ifa_flags & IFF_UP)
+			&&	!(I->ifa_flags & IFF_LOOPBACK)
+			&&	(Pass==1 || (I->ifa_flags & IFF_BROADCAST)) )
+			{
+				Out = ((sockaddr_in*)I->ifa_addr)->sin_addr;
+				Found = 1;
+			}
+		}
+	}
+	freeifaddrs( List );
+	return Found;
+}
+#endif
+
 //
 // Initialize the windows sockets network driver.
 //
@@ -364,6 +396,12 @@ UBOOL UTcpNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL, c
 			return 0;
 		}
 		HostAddr = *(in_addr*)( *HostEnt->h_addr_list );
+#if !defined(PLATFORM_WIN32) && !defined(__EMSCRIPTEN__)
+		// A server's address is advertised to the LAN (the beacon, GetAddressURL): a loopback one is replaced.
+		if( IPBYTE(HostAddr,1)==127 && FindLanAddress( HostAddr ) )
+			debugf( NAME_Init, "WinSock: %s resolves to a loopback address, using %i.%i.%i.%i",
+				HostName, IPBYTE(HostAddr,1), IPBYTE(HostAddr,2), IPBYTE(HostAddr,3), IPBYTE(HostAddr,4) );
+#endif
 	}
 
 	// Create UDP socket and enable broadcasting.
