@@ -5,6 +5,7 @@ set(SRC_FILES
   "Src/NSDLClient.cpp"
   "Src/NSDLAndroid.cpp"
   "Src/NSDLDrv.cpp"
+  "Src/NSDLInputTest.cpp"
 )
 
 add_library(${PROJECT_NAME} ${LIB_TYPE} ${SRC_FILES})

@@ -150,7 +150,15 @@ DISPLAY=:98 gdb -batch -x <repo>/tools/dev/layout-sweep.gdb --args ./Unreal.bin 
 ASAN_OPTIONS=alloc_dealloc_mismatch=0:detect_leaks=0 <repo>/tools/dev/botmatch.sh <asan-tree> 240
 unshare -rn <repo>/tools/dev/census/play.sh <tree> -NOPENGLESRENDERER "DmDeck16?game=UnrealI.DeathMatchGame" /tmp/p \
     "stat global" "rmode 1" shot "savegame 5" "open ?load=5"
+<repo>/tools/dev/inputtest/run.sh <tree> <repo>/tools/dev/inputtest/move.scen <out-dir> \
+    "DmDeck16.unr?Game=UnrealI.DeathMatchGame" -SOFTWARERENDERER "-ini:System:[UnrealI.DeathMatchGame]:InitialBots=0"
+<repo>/tools/dev/inputtest/rate.py <out-dir>/game.log 0                              # speed and direction per tag
 ```
+
+- `-INPUTTEST=<file>` opens the input test channel (`Source/NSDLDrv/Src/NSDLInputTest.h`): commands appended to the
+  file drive a virtual SDL game controller that takes the pad's place, run console commands and watch the player
+  once per input tick. `tools/dev/inputtest/run.sh` runs the native build under Xvfb with it and feeds it a scenario
+  (`move.scen`: the move stick's speed against tilt and its directions); `rate.py` reads the watch lines.
 
 - `tools/test/U64Test` holds the script VM checks; it is compiled by the 32-bit `Unreal.bin -MAKE`
   (`EditPackages[n]=U64Test` in Unreal.ini, the folder beside `System`), and must pass on 32-bit before 64-bit.
@@ -279,6 +287,8 @@ app's overlay (`Source/NSDLDrv/Src/NSDLAndroid.cpp`, `Android/app/src/main/java/
 in the menus a D-pad, A B X Y, Start, Back and the shoulders and triggers (the menus' pad map: A is Enter, B
 Escape, the D-pad the arrows); in a game a move stick (left half) and a look stick (right half) where the finger
 lands, the triggers, A B X Y, the shoulders, the stick clicks, a small D-pad, Start and Back (the `Joy` bindings).
+The move stick tilts fully `MOVE_FULL_TILT_DP` (12 dp) from its base, in the drag's direction, with a dead zone of
+`MOVE_DEAD_ZONE_DP` (3 dp) for a resting finger; past full tilt its base follows the finger. It never walks.
 It is the pad the game reads unless a real pad was connected first (it then stays off and its overlay hides; a real
 pad connected later takes over, and the on-screen pad takes the place back when it goes); the "pad" key at the
 bottom hides it.
@@ -315,7 +325,12 @@ bottom hides it.
 - **Language.** `[Engine.Engine] Language` (`Init: Language: <ext>` in the log); localized properties are read from
   `<Package>.<lang>`, falling back to `<Package>.int` per key.
 - **Game pads.** `[NSDLDrv.NSDLClient] UseJoystick` (on by default) is read every tick, so the game's own option
-  opens or closes the first pad at once; pads hot-plug; sticks and triggers are read from the pad's state.
+  opens or closes the first pad at once; pads hot-plug; sticks and triggers are read from the pad's state. The left
+  stick is the move stick: its dead zone (`DeadZoneXYZ`, 0.1) is radial, so every direction between the axes keeps
+  both of its parts, and a tilt out of it but below `PadWalkTilt` (0.5 of the stick's travel; 0 never) walks, as the
+  Walking button does, on any pad but the touch pad: the stick keeps a bit of its own set in the player's `bRun` (the
+  Walking key writes the whole byte; the stick sets its bit again the next tick), and the moves a client sends to its
+  server carry `bRun`. The right stick keeps a dead zone per axis (`DeadZoneRUV`).
 - **Saves** sort their name, import and export tables with a stable sort, so the same save gives the same file on
   every platform.
 

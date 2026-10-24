@@ -33,6 +33,10 @@ final class PadOverlayView extends View {
     private static final int ST_ATTACHED = 1, ST_IN_USE = 2, ST_MENU = 4;
     // The client's stick dead zone (Unreal.ini DeadZoneXYZ, DeadZoneRUV): a stick's first movement starts past it.
     private static final float BINDING_DEAD_ZONE = 0.1f;
+    // The move stick: full tilt this far from its base (dp, the same on every screen), nothing within the dead zone
+    // (a resting finger); past full tilt the base follows the finger.
+    private static final float MOVE_FULL_TILT_DP = 12f;
+    private static final float MOVE_DEAD_ZONE_DP = 3f;
     private static final long POLL_MS = 100L;
 
     /** A round key: a pad button, or a trigger (axis >= 0). */
@@ -49,6 +53,7 @@ final class PadOverlayView extends View {
     private static final class Stick {
         final int axisX, axisY;
         float left, top, right, bottom, radius, restX, restY;
+        float rim, dead;    // full tilt and the dead zone, from the base (pixels)
         float baseX, baseY, knobX, knobY;
         int pointer = -1;
         Stick(int axisX, int axisY) { this.axisX = axisX; this.axisY = axisY; }
@@ -158,9 +163,14 @@ final class PadOverlayView extends View {
         moveStick.left = 0; moveStick.right = w * 0.45f; moveStick.top = h * 0.30f; moveStick.bottom = h;
         moveStick.radius = r * 2.4f;
         moveStick.restX = pad + 3.6f * r; moveStick.restY = h - pad - 3.6f * r;
+        float density = getResources().getDisplayMetrics().density;
+        moveStick.rim = MOVE_FULL_TILT_DP * density;
+        moveStick.dead = MOVE_DEAD_ZONE_DP * density;
         lookStick.left = w * 0.45f; lookStick.right = w; lookStick.top = 0; lookStick.bottom = h;
         lookStick.radius = r * 2.0f;
         lookStick.restX = w * 0.66f; lookStick.restY = h * 0.62f;
+        lookStick.rim = lookStick.radius;
+        lookStick.dead = lookStick.radius * 0.04f;
 
         toggle.cx = w * 0.5f; toggle.cy = h - pad - 0.7f * r; toggle.r = r * 0.6f;
     }
@@ -275,19 +285,20 @@ final class PadOverlayView extends View {
     private void moveStick(Stick st, float x, float y) {
         float dx = x - st.baseX, dy = y - st.baseY;
         float len = (float) Math.hypot(dx, dy);
-        if (len > st.radius) {
+        if (len > st.rim) {
             // The base follows the finger, so pulling back always reverses at once.
-            float k = (len - st.radius) / len;
+            float k = (len - st.rim) / len;
             st.baseX += dx * k;
             st.baseY += dy * k;
             dx = x - st.baseX;
             dy = y - st.baseY;
-            len = st.radius;
+            len = st.rim;
         }
         st.knobX = x;
         st.knobY = y;
-        float m = len / st.radius, vx = 0f, vy = 0f;
-        if (m > 0.04f) {
+        // The move stick's tilt runs from its dead zone's edge, the look stick's from its base.
+        float m = st == moveStick ? (len - st.dead) / (st.rim - st.dead) : len / st.rim, vx = 0f, vy = 0f;
+        if (len > st.dead) {
             float out = BINDING_DEAD_ZONE + (1f - BINDING_DEAD_ZONE) * m;
             vx = dx / len * out;
             vy = dy / len * out;
