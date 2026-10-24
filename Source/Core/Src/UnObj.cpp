@@ -737,14 +737,12 @@ IMPLEMENT_CLASS(UObject);
 //
 static UBOOL LocalizedPropertyText( const char* Section, const char* Key, const char* Package, char* Value, INT Size )
 {
-	char Filename[256];
-	appSprintf( Filename, "%s%s.%s", appBaseDir(), Package, GetLanguage() );
-	if( GetConfigString( Section, Key, Value, Size, Filename ) )
+	FString Stem = FString( appBaseDir() ) + Package + ".";	// a path of any length
+	if( GetConfigString( Section, Key, Value, Size, *(Stem + GetLanguage()) ) )
 		return 1;
 	if( appStricmp( GetLanguage(), "int" )==0 )
 		return 0;
-	appSprintf( Filename, "%s%s.int", appBaseDir(), Package );
-	return GetConfigString( Section, Key, Value, Size, Filename );
+	return GetConfigString( Section, Key, Value, Size, *(Stem + "int") );
 }
 
 //
@@ -862,9 +860,9 @@ void UObject::SaveConfig( DWORD Flags, const char* Filename )
 void FObjectManager::ResetConfig( UClass* Class, const char* SrcFilename, const char* DestFilename )
 {
 	guard(FObjectManager::ResetConfig);
-	char Buffer[32767], Src[256];
-	appSprintf( Src, "%s%s", appBaseDir(), SrcFilename ? SrcFilename : "Default.ini" );
-	if( GetConfigSection( Class->GetPathName(), Buffer, ARRAY_COUNT(Buffer), Src ) )
+	char Buffer[32767];
+	FString Src = FString( appBaseDir() ) + (SrcFilename ? SrcFilename : "Default.ini");	// a path of any length
+	if( GetConfigSection( Class->GetPathName(), Buffer, ARRAY_COUNT(Buffer), *Src ) )
 	{
 		char* NewKey;
 		for( char* Key=Buffer; *Key; Key=NewKey )
@@ -3071,18 +3069,18 @@ void CacheDrivers( UBOOL ForceRefresh )
 		{
 			if( GSys->Paths[i] )
 			{
-				char Filename[256];
-				appSprintf( Filename, "%s%s", appBaseDir(), PATH(GSys->Paths[i]) );
-				char* Tmp = appStrstr( Filename, "*." );
-				if( Tmp )
+				// The .int files of the path entry's folder, under the base directory (paths as strings, of any length).
+				FString Folder( PATH(GSys->Paths[i]) );
+				const char* Wildcard = appStrstr( *Folder, "*." );
+				if( Wildcard )
 				{
-					appStrcpy( Tmp, "*.int" );
-					TArray<FString> Files = appFindFiles( Filename );
+					Folder.GetCharArray().Remove( Wildcard - *Folder, appStrlen(Wildcard) );
+					TArray<FString> Files = appFindFiles( *(FString( appBaseDir() ) + Folder + "*.int") );
 					UfrontSortLikeNTFS( Files );	// Windows' order, on every file system
 					for( INT j=0; j<Files.Num(); j++ )
 					{
-						appSprintf( Tmp, "%s%s", appBaseDir(), *Files(j) );
-						if( GetConfigSection( "Public", Buffer, ARRAY_COUNT(Buffer), Tmp ) )
+						// Each file is read from the base directory.
+						if( GetConfigSection( "Public", Buffer, ARRAY_COUNT(Buffer), *(FString( appBaseDir() ) + Files(j)) ) )
 						{
 							char* Next;
 							for( char* Key=Buffer; *Key; Key=Next )

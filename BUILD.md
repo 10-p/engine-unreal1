@@ -257,7 +257,8 @@ adb install -r app/build/outputs/apk/release/app-release.apk
   chosen folder (or the shared one). Its resolution scale (a slider from 0.25 to 1 and a field that takes 0.1 to 4,
   above 1 supersampling; 1, the screen's own resolution, by default) sizes the surface SDL draws to
   (`GameActivity.applyRenderScale`, `SurfaceHolder.setFixedSize`): the compositor scales it to the screen and the
-  engine sees a window of that size.
+  engine sees a window of that size. SDL's surface view (`FrameSurface`) scales every touch and mouse position from
+  the screen to that surface before SDL reads it, so a position lands where it is drawn at every scale.
 - The log goes to logcat: every `Unreal.log` line is mirrored to stdout, which the library pipes line by line to the
   tag `Unreal` (`adb logcat -s Unreal UnrealBridge SDL`); `System/Unreal.log` is written as on a desktop. The GL
   window asks EGL for a 24-bit depth buffer (SDL's Android default is 16 bits).
