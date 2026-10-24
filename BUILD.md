@@ -287,8 +287,11 @@ app's overlay (`Source/NSDLDrv/Src/NSDLAndroid.cpp`, `Android/app/src/main/java/
 in the menus a D-pad, A B X Y, Start, Back and the shoulders and triggers (the menus' pad map: A is Enter, B
 Escape, the D-pad the arrows); in a game a move stick (left half) and a look stick (right half) where the finger
 lands, the triggers, A B X Y, the shoulders, the stick clicks, a small D-pad, Start and Back (the `Joy` bindings).
-The move stick tilts fully `MOVE_FULL_TILT_DP` (12 dp) from its base, in the drag's direction, with a dead zone of
-`MOVE_DEAD_ZONE_DP` (3 dp) for a resting finger; past full tilt its base follows the finger. It never walks.
+The move stick moves in the drag's direction and tilts fully as the launcher's "On-screen pad: move stick" settings
+say: full speed at a drag of 12 dp from its base (4 to 60) and a dead zone of 3 dp for a resting finger (0 to 10,
+always below full speed), saved with the launcher's other settings and handed to the game when it starts
+(`GameActivity.EXTRA_MOVE_FULL_TILT_DP`, `EXTRA_MOVE_DEAD_ZONE_DP`); past full tilt its base follows the finger. It
+never walks.
 It is the pad the game reads unless a real pad was connected first (it then stays off and its overlay hides; a real
 pad connected later takes over, and the on-screen pad takes the place back when it goes); the "pad" key at the
 bottom hides it.
@@ -327,8 +330,8 @@ bottom hides it.
 - **Game pads.** `[NSDLDrv.NSDLClient] UseJoystick` (on by default) is read every tick, so the game's own option
   opens or closes the first pad at once; pads hot-plug; sticks and triggers are read from the pad's state. The left
   stick is the move stick: its dead zone (`DeadZoneXYZ`, 0.1) is radial, so every direction between the axes keeps
-  both of its parts, and a tilt out of it but below `PadWalkTilt` (0.5 of the stick's travel; 0 never) walks, as the
-  Walking button does, on any pad but the touch pad: the stick keeps a bit of its own set in the player's `bRun` (the
+  both of its parts, and a tilt out of it but below `[NSDLDrv.NSDLClient] PadWalkTilt` (0.5 of the stick's travel;
+  0 never) walks, as the Walking button does, on any pad but the touch pad: the stick keeps a bit of its own set in the player's `bRun` (the
   Walking key writes the whole byte; the stick sets its bit again the next tick), and the moves a client sends to its
   server carry `bRun`. The right stick keeps a dead zone per axis (`DeadZoneRUV`).
 - **Saves** sort their name, import and export tables with a stable sort, so the same save gives the same file on

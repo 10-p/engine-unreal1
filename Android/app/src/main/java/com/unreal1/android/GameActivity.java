@@ -2,6 +2,7 @@ package com.unreal1.android;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -14,6 +15,7 @@ import android.widget.RelativeLayout;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 
 import org.libsdl.app.SDLActivity;
 import org.libsdl.app.SDLSurface;
@@ -50,6 +52,24 @@ public class GameActivity extends SDLActivity {
      * engine sees a window of that size; touches reach SDL in the surface's pixels ({@link FrameSurface}).
      */
     static final String EXTRA_RENDER_SCALE = "com.unreal1.android.RENDER_SCALE";
+
+    /**
+     * The on-screen pad's move stick (the launcher's settings), in dp: full tilt at this drag from its base, 4 to 60,
+     * and the dead zone for a resting finger, 0 to 10 and below full tilt. Absent: the defaults.
+     */
+    static final String EXTRA_MOVE_FULL_TILT_DP = "com.unreal1.android.MOVE_FULL_TILT_DP";
+    static final String EXTRA_MOVE_DEAD_ZONE_DP = "com.unreal1.android.MOVE_DEAD_ZONE_DP";
+    static final float MOVE_FULL_TILT_DP = 12f, MOVE_FULL_TILT_MIN_DP = 4f, MOVE_FULL_TILT_MAX_DP = 60f;
+    static final float MOVE_DEAD_ZONE_DP = 3f, MOVE_DEAD_ZONE_MAX_DP = 10f;
+
+    static float moveFullTilt(float dp) {
+        return Math.max(MOVE_FULL_TILT_MIN_DP, Math.min(MOVE_FULL_TILT_MAX_DP, dp));
+    }
+
+    /** A dead zone in its range, and at least 1 dp below full tilt. */
+    static float moveDeadZone(float dp, float fullTiltDp) {
+        return Math.max(0f, Math.min(Math.min(MOVE_DEAD_ZONE_MAX_DP, fullTiltDp - 1f), dp));
+    }
 
     private AlertDialog exitDialog;
 
@@ -102,7 +122,12 @@ public class GameActivity extends SDLActivity {
         applyRenderScale();
 
         try {
-            addContentView(new PadOverlayView(this), new FrameLayout.LayoutParams(
+            Intent in = getIntent();
+            float fullTilt = moveFullTilt(in != null ? in.getFloatExtra(EXTRA_MOVE_FULL_TILT_DP, MOVE_FULL_TILT_DP) : MOVE_FULL_TILT_DP);
+            float deadZone = moveDeadZone(in != null ? in.getFloatExtra(EXTRA_MOVE_DEAD_ZONE_DP, MOVE_DEAD_ZONE_DP) : MOVE_DEAD_ZONE_DP,
+                    fullTilt);
+            Log.i(TAG, String.format(Locale.US, "on-screen pad's move stick: full tilt %.1f dp, dead zone %.1f dp", fullTilt, deadZone));
+            addContentView(new PadOverlayView(this, fullTilt, deadZone), new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         } catch (Throwable t) {
             Log.e(TAG, "could not add the on-screen pad", t);

@@ -33,10 +33,6 @@ final class PadOverlayView extends View {
     private static final int ST_ATTACHED = 1, ST_IN_USE = 2, ST_MENU = 4;
     // The client's stick dead zone (Unreal.ini DeadZoneXYZ, DeadZoneRUV): a stick's first movement starts past it.
     private static final float BINDING_DEAD_ZONE = 0.1f;
-    // The move stick: full tilt this far from its base (dp, the same on every screen), nothing within the dead zone
-    // (a resting finger); past full tilt the base follows the finger.
-    private static final float MOVE_FULL_TILT_DP = 12f;
-    private static final float MOVE_DEAD_ZONE_DP = 3f;
     private static final long POLL_MS = 100L;
 
     /** A round key: a pad button, or a trigger (axis >= 0). */
@@ -73,9 +69,14 @@ final class PadOverlayView extends View {
 
     private int state = 0;
     private boolean hidden = false;
+    // The move stick: full tilt this far from its base (dp, the same on every screen), nothing within the dead zone
+    // (a resting finger); past full tilt the base follows the finger.
+    private final float moveFullTiltDp, moveDeadZoneDp;
 
-    PadOverlayView(Context ctx) {
+    PadOverlayView(Context ctx, float moveFullTiltDp, float moveDeadZoneDp) {
         super(ctx);
+        this.moveFullTiltDp = moveFullTiltDp;
+        this.moveDeadZoneDp = moveDeadZoneDp;
         setFocusable(false);
         setWillNotDraw(false);
         stroke.setStyle(Paint.Style.STROKE);
@@ -164,8 +165,8 @@ final class PadOverlayView extends View {
         moveStick.radius = r * 2.4f;
         moveStick.restX = pad + 3.6f * r; moveStick.restY = h - pad - 3.6f * r;
         float density = getResources().getDisplayMetrics().density;
-        moveStick.rim = MOVE_FULL_TILT_DP * density;
-        moveStick.dead = MOVE_DEAD_ZONE_DP * density;
+        moveStick.rim = moveFullTiltDp * density;
+        moveStick.dead = moveDeadZoneDp * density;
         lookStick.left = w * 0.45f; lookStick.right = w; lookStick.top = 0; lookStick.bottom = h;
         lookStick.radius = r * 2.0f;
         lookStick.restX = w * 0.66f; lookStick.restY = h * 0.62f;
