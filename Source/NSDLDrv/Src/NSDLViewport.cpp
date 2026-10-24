@@ -682,6 +682,16 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 		Client->TryRenderDevice( this, "ini:Engine.Engine.GameRenderDevice", Client->StartupFullscreen );
 	if( !RenDev )
 		Client->TryRenderDevice( this, "ini:Engine.Engine.WindowedRenderDevice", 0 );
+	// GameRenderDevice and WindowedRenderDevice name the same device, so one that cannot start here (no GL driver,
+	// no GLES library) leaves none: the software renderer is the last resort. GameRenderDevice then names it, so
+	// the device that failed is not kept as the player's choice.
+	if( !RenDev )
+	{
+		debugf( NAME_Warning, "No configured render device started: falling back to SoftDrv.SoftwareRenderDevice" );
+		Client->TryRenderDevice( this, "SoftDrv.SoftwareRenderDevice", 0 );
+		if( RenDev )
+			SetConfigString( "Engine.Engine", "GameRenderDevice", "SoftDrv.SoftwareRenderDevice" );
+	}
 	check(RenDev);
 
 	if( !Temporary )
