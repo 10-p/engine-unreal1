@@ -1,10 +1,13 @@
 package com.unreal1.android;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Point;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.ViewGroup;
@@ -116,8 +119,8 @@ public class GameActivity extends SDLActivity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
-        getWindow().setNavigationBarContrastEnforced(false);
-        getWindow().setDecorFitsSystemWindows(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getWindow().setNavigationBarContrastEnforced(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getWindow().setDecorFitsSystemWindows(false);
 
         applyRenderScale();
 
@@ -149,7 +152,7 @@ public class GameActivity extends SDLActivity {
         float scale = getIntent() != null ? getIntent().getFloatExtra(EXTRA_RENDER_SCALE, 1f) : 1f;
         if (scale <= 0f || Math.abs(scale - 1f) < 0.001f || mSurface == null) return;
         scale = Math.max(0.1f, Math.min(4f, scale));
-        Rect b = getWindowManager().getMaximumWindowMetrics().getBounds();
+        Rect b = maximumWindowBounds(this);
         int sw = Math.max(b.width(), b.height()), sh = Math.min(b.width(), b.height());
         scale = Math.min(scale, 8192f / Math.max(sw, sh));
         int w = Math.max(320, Math.round(sw * scale)) & ~3, h = Math.max(240, Math.round(sh * scale));
@@ -257,5 +260,13 @@ public class GameActivity extends SDLActivity {
             Log.i(TAG, "the game ended: ending its process");
             android.os.Process.killProcess(android.os.Process.myPid());
         }
+    }
+
+    /** The largest window's bounds: WindowMetrics from Android 11, the display's real size before. */
+    static Rect maximumWindowBounds(Activity a) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return a.getWindowManager().getMaximumWindowMetrics().getBounds();
+        Point p = new Point();
+        a.getWindowManager().getDefaultDisplay().getRealSize(p);
+        return new Rect(0, 0, p.x, p.y);
     }
 }

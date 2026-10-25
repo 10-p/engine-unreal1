@@ -234,8 +234,9 @@ adb install -r app/build/outputs/apk/release/app-release.apk
   `PATH`; Android Studio opens `Android/` as it is.
 - The SDK parts are the packages' exactly: `compileSdk` 36 (platform 36), build-tools 36.0.0 (what AGP 9.4 asks for)
   and NDK 28.2.13676358. The SDK in `/usr/lib/android-sdk` is read-only, so a part AGP would download instead fails
-  the build with its name. `targetSdk` stays 34 (Android 14's behaviour for the app); `minSdk` is 30 (Android 11:
-  All files access, which reading the game folder in place from shared storage needs).
+  the build with its name. `targetSdk` stays 34 (Android 14's behaviour for the app); `minSdk` is 24 (Android 7:
+  reading the game folder in place from shared storage asks for All files access from Android 11, the storage
+  permission before).
 - `if(ANDROID)` in `Source/CMakeLists.txt` forces the set: static, SDL, Editor, NOpenGLESDrv (the device's OpenGL
   ES 2 through SDL's EGL), SoftDrv, NullDrv, NOpenALDrv, the null audio device, no NOpenGLDrv, `ASM=0`,
   `-fno-delete-null-pointer-checks`. The arm64 compiler builds the 64-bit (LP64) engine (above), the armeabi-v7a one
