@@ -271,6 +271,10 @@ adb install -r app/build/outputs/apk/release/app-release.apk
   (`GameActivity.applyRenderScale`, `SurfaceHolder.setFixedSize`): the compositor scales it to the screen and the
   engine sees a window of that size. SDL's surface view (`FrameSurface`) scales every touch and mouse position from
   the screen to that surface before SDL reads it, so a position lands where it is drawn at every scale.
+  The launcher's renderer selection, at the bottom of its page (the game's choice, then NOpenGLES and Software; Null
+  for debugging), adds that render device's `-*RENDERER` switch after any command line the launcher was started
+  with. The game keeps the device it last started with, also under "The game's choice": a device whose GPU draws the
+  default wrong is switched once.
 - The log goes to logcat: every `Unreal.log` line is mirrored to stdout, which the library pipes line by line to the
   tag `Unreal` (`adb logcat -s Unreal UnrealBridge SDL`); `System/Unreal.log` is written as on a desktop. The GL
   window asks EGL for a 24-bit depth buffer (SDL's Android default is 16 bits).
