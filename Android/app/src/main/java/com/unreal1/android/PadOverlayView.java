@@ -12,16 +12,19 @@ import java.util.ArrayList;
 
 /**
  * The on-screen pad: an Xbox pad drawn over the game, whose buttons and sticks go to the engine's
- * virtual SDL controller (GameActivity's native calls; SDL2Drv/Src/SDL2Android.cpp), so the game reads it
- * as it reads any pad: the menus by their pad navigation, the match by the pad bindings. The mouse plays no
- * part (the client ignores it on Android).
+ * virtual SDL controller (GameActivity's native calls; NSDLDrv/Src/NSDLAndroid.cpp), so the game reads it
+ * as it reads any pad: the menus by their pad map, a game by the Joy bindings. The mouse plays no part (the
+ * client ignores it on Android).
  *
  * Two layouts, chosen by the engine's state: in the menus a large D-pad, A B X Y, Start and Back, the
- * shoulders and triggers; in a match a move stick on the left half and a look stick on the right half
- * (each one appears where the finger lands), the triggers (RT fires, LT is the alternate fire and the
- * shield), A B X Y, the shoulders, the stick clicks (R3 locks on), a small D-pad, Start (the menu) and
- * Back (the scores). Nothing is drawn and no touch is taken while the engine has no on-screen pad in use
- * (not started yet, or a real pad took player one's port). The "pad" key at the bottom hides and shows it.
+ * shoulders and triggers; in a game a move stick on the left half and a look stick on the right half
+ * (each one appears where the finger lands), the triggers, A B X Y, the shoulders, the stick clicks, a small
+ * D-pad, Start and Back. Nothing is drawn while the engine has no on-screen pad in use (not started yet, or a real
+ * pad has player one's place). The "pad" key at the bottom hides and shows it.
+ *
+ * A real pad's input hides the whole overlay and gives that pad player one's place; a touch on the screen shows
+ * the overlay again and gives the place back to the on-screen pad (GameActivity.nativeTouchPadWant). That touch
+ * does nothing else.
  */
 final class PadOverlayView extends View {
     // SDL_GameControllerButton values.
@@ -69,6 +72,8 @@ final class PadOverlayView extends View {
 
     private int state = 0;
     private boolean hidden = false;
+    // Hidden by a real pad's input until the screen is touched; revealing: the touch that showed it, until it lifts.
+    private boolean padHidden = false, revealing = false;
     // The move stick: full tilt this far from its base (dp, the same on every screen), nothing within the dead zone
     // (a resting finger); past full tilt the base follows the finger.
     private final float moveFullTiltDp, moveDeadZoneDp;
@@ -82,10 +87,17 @@ final class PadOverlayView extends View {
         stroke.setStyle(Paint.Style.STROKE);
         text.setTextAlign(Paint.Align.CENTER);
         text.setTypeface(Typeface.DEFAULT_BOLD);
-        postDelayed(poll, POLL_MS);
     }
 
     // ---- the engine's state ---------------------------------------------------------------------
+
+    /** The engine's state is read while the overlay can be seen; in the background nothing runs. */
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        removeCallbacks(poll);
+        if (isVisible) postDelayed(poll, POLL_MS);
+    }
 
     private final Runnable poll = new Runnable() {
         @Override public void run() {
@@ -102,6 +114,16 @@ final class PadOverlayView extends View {
     };
 
     private boolean active() { return (state & ST_ATTACHED) != 0 && (state & ST_IN_USE) != 0; }
+
+    /** A real pad's button or stick (GameActivity): the overlay hides and that pad becomes player one's. */
+    void onRealPadInput() {
+        if (!padHidden) {
+            padHidden = true;
+            releaseAll();
+            invalidate();
+        }
+        try { GameActivity.nativeTouchPadWant(false); } catch (Throwable ignored) { }
+    }
     private boolean menu() { return (state & ST_MENU) != 0; }
     private ArrayList<Key> keys() { return menu() ? menuKeys : gameKeys; }
 
@@ -181,7 +203,7 @@ final class PadOverlayView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (!active()) return;
+        if (!active() || padHidden) return;
         drawKey(canvas, toggle, hidden ? 0x30 : 0x50);
         if (hidden) return;
         for (Key k : keys()) drawKey(canvas, k, 0xFF);
@@ -217,11 +239,24 @@ final class PadOverlayView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        int action = ev.getActionMasked(), index = ev.getActionIndex();
+        if (revealing) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) revealing = false;
+            return true;
+        }
+        if (action == MotionEvent.ACTION_DOWN && (state & ST_ATTACHED) != 0 && (padHidden || !active())) {
+            // The pad shows again and takes player one's place back from a real pad.
+            padHidden = false;
+            revealing = true;
+            try { GameActivity.nativeTouchPadWant(true); } catch (Throwable ignored) { }
+            invalidate();
+            return true;
+        }
+        if (padHidden) return true;
         if (!active()) {
             releaseAll();
             return false;
         }
-        int action = ev.getActionMasked(), index = ev.getActionIndex();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_POINTER_DOWN:

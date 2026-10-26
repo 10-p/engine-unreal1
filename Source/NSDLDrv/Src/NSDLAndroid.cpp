@@ -6,7 +6,9 @@
 	UI thread. The client gives SDL a virtual game controller (SDL_JoystickAttachVirtualEx) and copies
 	that state into it before every event poll, so the on-screen pad reaches the game as any SDL pad
 	does (NSDLViewport.cpp: the menus' pad map, the Joy bindings). The overlay asks which layout to
-	draw (menus or game) and whether the pad is in use through nativeTouchPadState.
+	draw (menus or game) and whether the pad is in use through nativeTouchPadState, and asks for
+	player one's place through nativeTouchPadWant: for the on-screen pad when the screen is touched,
+	for a real pad when that pad is used.
 
 	Back with nothing left to go back to (the entry level with the menu closed) asks the activity to
 	confirm exiting the game (GameActivity.showExitDialog); everywhere else Back is Escape
@@ -38,6 +40,16 @@ enum
 };
 static std::atomic<INT>		GTouchState( 0 );
 
+// Which pad the overlay last asked to be player one's: the on-screen pad after a touch on it, a real pad after that
+// pad's input (the app sees a real pad's input even while the game reads the on-screen pad). Taken by SwitchTouchPad.
+enum
+{
+	TOUCHPAD_WantNone	= 0,
+	TOUCHPAD_WantTouch	= 1,
+	TOUCHPAD_WantReal	= 2,
+};
+static std::atomic<INT>		GTouchPadWant( TOUCHPAD_WantNone );
+
 extern "C"
 {
 
@@ -61,6 +73,11 @@ JNIEXPORT void JNICALL Java_com_unreal1_android_GameActivity_nativeTouchPadAxis(
 JNIEXPORT jint JNICALL Java_com_unreal1_android_GameActivity_nativeTouchPadState( JNIEnv*, jclass )
 {
 	return GTouchState.load();
+}
+
+JNIEXPORT void JNICALL Java_com_unreal1_android_GameActivity_nativeTouchPadWant( JNIEnv*, jclass, jboolean Touch )
+{
+	GTouchPadWant.store( Touch ? TOUCHPAD_WantTouch : TOUCHPAD_WantReal );
 }
 
 } // extern "C"
@@ -167,6 +184,38 @@ void UNSDLClient::PublishTouchPadState()
 }
 
 //
+// The overlay's last request (GTouchPadWant) into the pad the game reads: the on-screen pad, or the first real pad
+// present. Returns whether the pad in use was closed, so the viewport releases what it held.
+//
+UBOOL UNSDLClient::SwitchTouchPad()
+{
+	guard(UNSDLClient::SwitchTouchPad);
+	const INT Want = GTouchPadWant.exchange( TOUCHPAD_WantNone );
+	if( Want == TOUCHPAD_WantNone || !TouchPadJoystick || !UseJoystick )
+		return 0;
+	const SDL_JoystickID TouchId = SDL_JoystickInstanceID( (SDL_Joystick*)TouchPadJoystick );
+	const UBOOL TouchInUse = Controller && SDL_JoystickInstanceID( SDL_GameControllerGetJoystick( Controller ) ) == TouchId;
+	if( (Want == TOUCHPAD_WantTouch) == TouchInUse )
+		return 0;
+	INT Target = -1;
+	for( INT i=0; i<SDL_NumJoysticks() && Target<0; i++ )
+	{
+		const UBOOL IsTouch = SDL_JoystickGetDeviceInstanceID( i ) == TouchId;
+		if( Want == TOUCHPAD_WantTouch ? IsTouch : (!IsTouch && SDL_IsGameController( i )) )
+			Target = i;
+	}
+	if( Target < 0 )
+		return 0;
+	const UBOOL Closed = Controller && ClosePad( SDL_JoystickInstanceID( SDL_GameControllerGetJoystick( Controller ) ) );
+	if( !OpenPad( Target, NULL ) )
+		for( INT i=0; i<SDL_NumJoysticks() && !Controller; i++ )
+			OpenPad( i, NULL );
+	debugf( NAME_Init, "NSDLClient: %s", Want == TOUCHPAD_WantTouch ? "the on-screen pad takes the place of the real pad (a touch)" : "a real pad takes the place of the on-screen pad (its input)" );
+	return Closed;
+	unguard;
+}
+
+//
 // Whether Back has nothing left to go back to: no game running (the intro map, [URL] LocalMap, or the entry level)
 // with the menu up on its first page (the HUD's main menu with no parent menu). At the flyby with the menu closed,
 // Back is Escape and opens it.
@@ -224,6 +273,7 @@ void UNSDLClient::ExitTouchPad() {}
 void UNSDLClient::FeedTouchPad() {}
 UBOOL UNSDLClient::IsTouchPad( INT InstanceId ) { return 0; }
 void UNSDLClient::PublishTouchPadState() {}
+UBOOL UNSDLClient::SwitchTouchPad() { return 0; }
 UBOOL UNSDLClient::BackLeavesGame() { return 0; }
 void UNSDLClient::AskToExit() {}
 

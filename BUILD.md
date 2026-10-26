@@ -302,7 +302,19 @@ always below full speed), saved with the launcher's other settings and handed to
 never walks.
 It is the pad the game reads unless a real pad was connected first (it then stays off and its overlay hides; a real
 pad connected later takes over, and the on-screen pad takes the place back when it goes); the "pad" key at the
-bottom hides it.
+bottom hides it. The pad last used is player one's: a real pad's button, or a stick, trigger or hat pushed half way
+(Android's input events, `GameActivity.dispatchKeyEvent`/`dispatchGenericMotionEvent`), hides the whole overlay and
+gives that pad the place; a touch on the screen shows the overlay again and gives the place back to the on-screen
+pad (`nativeTouchPadWant`, `UNSDLClient::SwitchTouchPad`). The touch that shows it does nothing else, nor does the
+real pad's press that takes the place.
+
+In the background (the home screen, the recent apps, another app on top) the game is suspended. SDL's activity
+pauses on `onStop`, and its event pump then blocks the game thread until the app returns, so nothing ticks;
+NOpenALDrv pauses its OpenAL device (`alcDevicePauseSOFT`, ALC_SOFT_pause_device) on SDL's
+`SDL_APP_DIDENTERBACKGROUND`, just before the block, so openal-soft's mixer and the OpenSL ES output stop and no
+sound plays, and resumes it on `SDL_APP_WILLENTERFOREGROUND`; the overlay stops reading the engine's state while it
+cannot be seen. Back in the foreground SDL restores the GL context on the new surface and the game goes on where it
+was (`NOpenALDrv: output paused (the app is in the background)` / `output resumed` in the log).
 
 ## Run-time behaviour shared with the other engines
 

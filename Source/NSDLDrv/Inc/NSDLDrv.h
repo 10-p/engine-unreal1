@@ -163,6 +163,7 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	void FeedTouchPad();
 	UBOOL IsTouchPad( INT InstanceId );
 	void PublishTouchPadState();
+	UBOOL SwitchTouchPad();
 
 	// Android's Back with nothing left to go back to (NSDLAndroid.cpp; nothing off Android).
 	UBOOL BackLeavesGame();
