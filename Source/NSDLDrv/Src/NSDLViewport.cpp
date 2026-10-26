@@ -1217,7 +1217,10 @@ UBOOL UNSDLViewport::TickInput()
 		GPadsOn = On;
 	}
 
-	// The on-screen pad's state (Android), read by SDL when it updates its joysticks in the poll below.
+	// The on-screen pad (Android): the pad the overlay last asked for, then its state, read by SDL when it updates
+	// its joysticks in the poll below.
+	if( Client->SwitchTouchPad() )
+		ReleasePad();
 	Client->FeedTouchPad();
 
 	while( SDL_PollEvent( &Ev ) )
