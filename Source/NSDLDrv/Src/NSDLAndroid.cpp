@@ -14,6 +14,10 @@
 	confirm exiting the game (GameActivity.showExitDialog); everywhere else Back is Escape
 	(NSDLViewport.cpp).
 
+	Gyro aiming (GyroAim.java, the launcher's switch and sensitivities) sends the view's turn in degrees; in play
+	ApplyGyro makes it the player's turn and look-up axes in rotation units, apart from the mouse's sensitivity and
+	smoothing, slowed by the zoom as the mouse is, and while a menu is up drops it.
+
 	Off Android the client's functions here do nothing.
 =============================================================================*/
 
@@ -50,6 +54,17 @@ enum
 };
 static std::atomic<INT>		GTouchPadWant( TOUCHPAD_WantNone );
 
+// Gyro aiming's turn in view degrees, to the right and up: the UI thread adds, the engine's thread takes and clears it
+// each tick.
+static std::atomic<FLOAT>	GGyroYaw( 0.f );
+static std::atomic<FLOAT>	GGyroPitch( 0.f );
+
+static void AtomicAdd( std::atomic<FLOAT>& Value, FLOAT Delta )
+{
+	FLOAT Old = Value.load();
+	while( !Value.compare_exchange_weak( Old, Old + Delta ) ) {}
+}
+
 extern "C"
 {
 
@@ -78,6 +93,12 @@ JNIEXPORT jint JNICALL Java_com_unreal1_android_GameActivity_nativeTouchPadState
 JNIEXPORT void JNICALL Java_com_unreal1_android_GameActivity_nativeTouchPadWant( JNIEnv*, jclass, jboolean Touch )
 {
 	GTouchPadWant.store( Touch ? TOUCHPAD_WantTouch : TOUCHPAD_WantReal );
+}
+
+JNIEXPORT void JNICALL Java_com_unreal1_android_GameActivity_nativeGyroLook( JNIEnv*, jclass, jfloat YawDegrees, jfloat PitchDegrees )
+{
+	AtomicAdd( GGyroYaw, YawDegrees );
+	AtomicAdd( GGyroPitch, PitchDegrees );
 }
 
 } // extern "C"
@@ -215,6 +236,83 @@ UBOOL UNSDLClient::SwitchTouchPad()
 	unguard;
 }
 
+// The gyro's fractions of a rotation unit not applied yet (yaw, pitch), and with -UFRONTLOG its totals in play and the
+// zoom of its last turn.
+static FLOAT	GGyroCarry[2] = { 0.f, 0.f };
+static DOUBLE	GGyroDegrees[2] = { 0.0, 0.0 };
+static INT		GGyroUnits[2] = { 0, 0 };
+static FLOAT	GGyroZoom = 1.f;
+static DOUBLE	GGyroLastTime = 0.0;
+static UBOOL	GGyroUnlogged = 0;
+// The last tick's time: the turn sent while the game did not tick for half a second (a load) is not aim.
+static DOUBLE	GGyroTickTime = 0.0;
+
+// Degrees as whole rotation units (65536 a turn, toward zero), the fraction carried to the next tick.
+static INT GyroUnits( FLOAT Degrees, FLOAT& Carry )
+{
+	const FLOAT Units = Degrees * ( 65536.f / 360.f ) + Carry;
+	const INT Whole = (INT)Units;
+	Carry = Units - (FLOAT)Whole;
+	return Whole;
+}
+
+// The axis value that turns exactly Units when the script turns UnitsPerAxis times the axis, cut to whole units: half
+// a unit past it, so the cut lands on it.
+static FLOAT GyroAxis( INT Units, FLOAT UnitsPerAxis )
+{
+	if( Units == 0 )
+		return 0.f;
+	return ( (FLOAT)Units + ( Units > 0 ? 0.5f : -0.5f ) ) / UnitsPerAxis;
+}
+
+//
+// Gyro aiming, in play: whole rotation units as the player's turn and look-up axes, which no mouse setting scales.
+// The player turns 32 * DeltaTime * aTurn units a tick after ReadInput's 20 / DeltaTime and the player state's 0.24,
+// aLookUp the same: 153.6 units per unit of the axis. The zoom slows it as PlayerInput's MouseScale slows the mouse:
+// times DesiredFOV over the class's default, the field of view the rifle's zoom returns to. While a menu is up, or
+// what came while the game did not tick for half a second (a load), the turn is dropped. With -UFRONTLOG the totals
+// are logged once the gyro has rested for a quarter of a second.
+//
+void UNSDLClient::ApplyGyro( UViewport* Viewport )
+{
+	guard(UNSDLClient::ApplyGyro);
+	const FLOAT Yaw = GGyroYaw.exchange( 0.f ), Pitch = GGyroPitch.exchange( 0.f );
+	APlayerPawn* Actor = Viewport ? Viewport->Actor : NULL;
+	const DOUBLE Now = appSeconds();
+	const UBOOL Ticking = Now - GGyroTickTime < 0.5;
+	GGyroTickTime = Now;
+	const UBOOL InPlay = Ticking && Actor && !Actor->bShowMenu && !MenuActive();
+	if( !InPlay )
+	{
+		GGyroCarry[0] = GGyroCarry[1] = 0.f;
+	}
+	else if( Yaw != 0.f || Pitch != 0.f )
+	{
+		const FLOAT UnitsPerAxis = 32.f * 20.f * 0.24f;
+		const FLOAT UnzoomedFOV = ((APlayerPawn*)Actor->GetClass()->GetDefaultActor())->DesiredFOV;
+		const FLOAT Zoom = UnzoomedFOV > 0.f && Actor->DesiredFOV > 0.f ? Actor->DesiredFOV / UnzoomedFOV : 1.f;
+		const INT YawUnits = GyroUnits( Yaw * Zoom, GGyroCarry[0] ), PitchUnits = GyroUnits( Pitch * Zoom, GGyroCarry[1] );
+		Actor->aTurn += GyroAxis( YawUnits, UnitsPerAxis );
+		Actor->aLookUp += GyroAxis( PitchUnits, UnitsPerAxis );
+		GGyroDegrees[0] += Yaw;
+		GGyroDegrees[1] += Pitch;
+		GGyroUnits[0] += YawUnits;
+		GGyroUnits[1] += PitchUnits;
+		GGyroZoom = Zoom;
+		GGyroLastTime = Now;
+		GGyroUnlogged = 1;
+		return;
+	}
+	if( GGyroUnlogged && Now - GGyroLastTime >= 0.25 )
+	{
+		GGyroUnlogged = 0;
+		if( GUfrontLog )
+			debugf( NAME_Log, "Gyro: %.3f degrees right and %.3f up in play in all, %i yaw and %i pitch units (zoom %.4f)",
+				GGyroDegrees[0], GGyroDegrees[1], GGyroUnits[0], GGyroUnits[1], GGyroZoom );
+	}
+	unguard;
+}
+
 //
 // Whether Back has nothing left to go back to: no game running (the intro map, [URL] LocalMap, or the entry level)
 // with the menu up on its first page (the HUD's main menu with no parent menu). At the flyby with the menu closed,
@@ -274,6 +372,7 @@ void UNSDLClient::FeedTouchPad() {}
 UBOOL UNSDLClient::IsTouchPad( INT InstanceId ) { return 0; }
 void UNSDLClient::PublishTouchPadState() {}
 UBOOL UNSDLClient::SwitchTouchPad() { return 0; }
+void UNSDLClient::ApplyGyro( UViewport* Viewport ) {}
 UBOOL UNSDLClient::BackLeavesGame() { return 0; }
 void UNSDLClient::AskToExit() {}
 
