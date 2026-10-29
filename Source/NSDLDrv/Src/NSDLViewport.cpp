@@ -247,6 +247,7 @@ UNSDLViewport::UNSDLViewport( ULevel* InLevel, UNSDLClient* InClient )
 
 	Destroyed = false;
 	QuitRequested = false;
+	SoftwareFallback = 0;
 	InputTest = NULL;
 	char InputTestFile[256];
 	if( Parse( appCmdLine(), "INPUTTEST=", InputTestFile, ARRAY_COUNT(InputTestFile) ) )
@@ -357,7 +358,7 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 	INT AASamples = 0;		// the multisampling asked of the window's GL surface
 	NewX = Align(NewX,4);
 
-	if( !Temporary && !GIsEditor && !NoHard )
+	if( !Temporary && !GIsEditor && !NoHard && !SoftwareFallback )
 	{
 		// HACK: Just check if we're about to load OpenGLDrv. Not sure how else you would know to add the GL flag.
 		char Temp[256] = "";
@@ -486,6 +487,8 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				Flags &= ~SDL_WINDOW_OPENGL;
 				DoOpenGL = 0;
 				hWnd = SDL_CreateWindow( "", OpenX, OpenY, NewX, NewY, Flags );
+				// The configured device needs GL, which this window does not have.
+				FallBackToSoftware();
 			}
 			if( !hWnd )
 			{
@@ -548,7 +551,12 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				}
 				if( WebGLCtx <= 0 )
 				{
-					appErrorf( "Could not create WebGL context on the worker (handle %i)", (INT)WebGLCtx );
+					// No WebGL for the configured device: SoftDrv draws through the canvas's 2D context instead.
+					debugf( NAME_Warning, "Could not create WebGL context on the worker (handle %i)", (INT)WebGLCtx );
+					if( !FallBackToSoftware() )
+						appErrorf( "Could not create WebGL context on the worker (handle %i)", (INT)WebGLCtx );
+					OpenWindow( InParentWindow, Temporary, NewX, NewY, OpenX, OpenY );
+					return;
 				}
 				if( emscripten_webgl_make_context_current( WebGLCtx ) != EMSCRIPTEN_RESULT_SUCCESS )
 				{
@@ -561,7 +569,12 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 				GLCtx = SDL_GL_CreateContext( hWnd );
 				if( !GLCtx )
 				{
-					appErrorf( "Could not create GL context: %s", SDL_GetError() );
+					// No GL context for the configured device: SoftDrv, in a window without GL.
+					debugf( NAME_Warning, "Could not create GL context: %s", SDL_GetError() );
+					if( !FallBackToSoftware() )
+						appErrorf( "Could not create GL context: %s", SDL_GetError() );
+					OpenWindow( InParentWindow, Temporary, NewX, NewY, OpenX, OpenY );
+					return;
 				}
 #endif
 			}
@@ -684,21 +697,17 @@ void UNSDLViewport::OpenWindow( void* InParentWindow, UBOOL Temporary, INT NewX,
 	}
 #endif
 
-	if( !RenDev && Temporary )
+	if( !RenDev && ( Temporary || SoftwareFallback ) )
 		Client->TryRenderDevice( this, "SoftDrv.SoftwareRenderDevice", 0 );
-	if( !RenDev && !GIsEditor && !NoHard )
+	if( !RenDev && !SoftwareFallback && !GIsEditor && !NoHard )
 		Client->TryRenderDevice( this, "ini:Engine.Engine.GameRenderDevice", Client->StartupFullscreen );
-	if( !RenDev )
+	if( !RenDev && !SoftwareFallback )
 		Client->TryRenderDevice( this, "ini:Engine.Engine.WindowedRenderDevice", 0 );
-	// GameRenderDevice and WindowedRenderDevice name the same device, so one that cannot start here (no GL driver,
-	// no GLES library) leaves none: the software renderer is the last resort. GameRenderDevice then names it, so
-	// the device that failed is not kept as the player's choice.
-	if( !RenDev )
+	// The configured device failed its Init in the window made for it: SoftDrv, in a window without GL.
+	if( !RenDev && !Temporary && FallBackToSoftware() )
 	{
-		debugf( NAME_Warning, "No configured render device started: falling back to SoftDrv.SoftwareRenderDevice" );
-		Client->TryRenderDevice( this, "SoftDrv.SoftwareRenderDevice", 0 );
-		if( RenDev )
-			SetConfigString( "Engine.Engine", "GameRenderDevice", "SoftDrv.SoftwareRenderDevice" );
+		OpenWindow( InParentWindow, Temporary, NewX, NewY, OpenX, OpenY );
+		return;
 	}
 	check(RenDev);
 
@@ -745,6 +754,34 @@ void UNSDLViewport::CloseWindow()
 		SDL_DestroyWindow( hWnd );
 		hWnd = NULL;
 	}
+
+	unguard;
+}
+
+//
+// The configured render device cannot start: SoftDrv takes its place for the rest of the run, and OpenWindow then
+// gives it a window without GL. Nothing is written to the ini, so the next start tries the configured device again.
+// False when SoftDrv is not in this build or is already the fallback.
+//
+UBOOL UNSDLViewport::FallBackToSoftware()
+{
+	guard(UNSDLViewport::FallBackToSoftware);
+
+	if( SoftwareFallback || !GObj.LoadClass( URenderDevice::StaticClass, NULL, "SoftDrv.SoftwareRenderDevice", NULL, LOAD_NoWarn | LOAD_KeepImports, NULL ) )
+		return 0;
+	char Device[256] = "";
+	GetConfigString( "Engine.Engine", "GameRenderDevice", Device, ARRAY_COUNT(Device) );
+	debugf( NAME_Warning, "Render device %s cannot start: falling back to SoftDrv.SoftwareRenderDevice for this run", Device );
+	SoftwareFallback = 1;
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+	// The worker's window has no GL flag, so it stays; the WebGL context goes with the device.
+	if( GLCtx )
+	{
+		emscripten_webgl_destroy_context( (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE)(intptr_t)GLCtx );
+		GLCtx = NULL;
+	}
+#endif
+	return 1;
 
 	unguard;
 }
@@ -1501,10 +1538,11 @@ UBOOL UNSDLViewport::Exec( const char* Cmd, FOutputDevice* Out )
 	else if( ParseCommand(&Cmd, "ToggleFullscreen") )
 	{
 		// Toggle fullscreen.
+		// The software fallback keeps SoftDrv: the window has no GL for the configured devices.
 		if( Client->FullscreenViewport )
 			Client->EndFullscreen();
 		else if( !(Actor->ShowFlags & SHOW_ChildWindow) )
-			Client->TryRenderDevice( this, "ini:Engine.Engine.GameRenderDevice", 1 );
+			Client->TryRenderDevice( this, SoftwareFallback ? "SoftDrv.SoftwareRenderDevice" : "ini:Engine.Engine.GameRenderDevice", 1 );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd, "GetCurrentRes") )
