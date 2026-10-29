@@ -23,7 +23,8 @@ void UNSDLClient::InternalClassInitializer( UClass* Class )
 	{
 		new(Class, "DefaultDisplay",    RF_Public)UIntProperty(CPP_PROPERTY(DefaultDisplay),     "Display",  CPF_Config );
 		new(Class, "StartupFullscreen", RF_Public)UBoolProperty(CPP_PROPERTY(StartupFullscreen), "Display",  CPF_Config );
-		new(Class, "UseJoystick",       RF_Public)UBoolProperty(CPP_PROPERTY(UseJoystick),       "Joystick", CPF_Config );
+		new(Class, "BorderlessFullscreen", RF_Public)UBoolProperty(CPP_PROPERTY(BorderlessFullscreen), "Display", CPF_Config );
+		new(Class, "UseJoystick",      RF_Public)UBoolProperty(CPP_PROPERTY(UseJoystick),       "Joystick", CPF_Config );
 		new(Class, "UseMouse",          RF_Public)UBoolProperty(CPP_PROPERTY(UseMouse),          "Display",  CPF_Config );
 		new(Class, "TouchPad",          RF_Public)UBoolProperty(CPP_PROPERTY(TouchPad),          "Joystick", CPF_Config );
 		new(Class, "DeadZoneXYZ",       RF_Public)UFloatProperty(CPP_PROPERTY(DeadZoneXYZ),      "Joystick", CPF_Config );
@@ -72,6 +73,7 @@ UNSDLClient::UNSDLClient()
 	ScreenFlashes     = 1;
 	NoLighting        = 0;
 	StartupFullscreen = 0;
+	BorderlessFullscreen = 1;
 	InvertY           = 0;
 	InvertV           = 0;
 	unguard;

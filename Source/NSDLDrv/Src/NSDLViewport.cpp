@@ -36,6 +36,14 @@ static UBOOL ufrontCanvasDevicePixelSize( INT& OutW, INT& OutH )
 #endif
 #endif
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+// Whether the window is in SDL's desktop fullscreen: borderless, over its display at the display's own mode.
+static UBOOL DesktopFullscreen( SDL_Window* Window )
+{
+	return Window && ( SDL_GetWindowFlags( Window ) & SDL_WINDOW_FULLSCREEN_DESKTOP ) == SDL_WINDOW_FULLSCREEN_DESKTOP;
+}
+#endif
+
 IMPLEMENT_CLASS( UNSDLViewport );
 
 /*-----------------------------------------------------------------------------
@@ -917,6 +925,11 @@ void UNSDLViewport::SetClientSize( INT NewX, INT NewY, UBOOL UpdateProfile )
 
 	if( hWnd )
 	{
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+		// A borderless fullscreen window keeps the display's size; SDL would keep a size given now as the one the
+		// window returns to.
+		if( !DesktopFullscreen( hWnd ) )
+#endif
 		SDL_SetWindowSize( hWnd, NewX, NewY );
 #if defined(__ANDROID__)
 		// The surface's size is the frame's: a requested size is not one the window can take.
@@ -966,6 +979,30 @@ void UNSDLViewport::MakeFullscreen( INT NewX, INT NewY, UBOOL UpdateProfile )
 {
 	guard(UNSDLViewport::MakeFullscreen);
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	if( Client->BorderlessFullscreen )
+	{
+		// SDL's desktop fullscreen: the display keeps its mode and the viewport takes the window's size. The size
+		// asked for and the profile's ViewportX/Y are left as they are.
+		if( !DesktopFullscreen( hWnd ) )
+		{
+			if( Client->FullscreenViewport )
+				Client->EndFullscreen();
+			SavedX = SizeX;
+			SavedY = SizeY;
+			Client->FullscreenViewport = this;
+			SDL_SetWindowFullscreen( hWnd, SDL_WINDOW_FULLSCREEN_DESKTOP );
+		}
+		INT W = 0, H = 0;
+		SDL_GetWindowSize( hWnd, &W, &H );
+		if( W > 0 && H > 0 )
+			SetClientSize( Align( W, 4 ), H, false );
+		debugf( NAME_Log, "NSDLViewport: borderless fullscreen at %ix%i", SizeX, SizeY );
+		SetMouseCapture(1, 1, 0);
+		return;
+	}
+#endif
+
 	// If someone else is fullscreen, stop them.
 	if( Client->FullscreenViewport )
 		Client->EndFullscreen();
@@ -974,7 +1011,7 @@ void UNSDLViewport::MakeFullscreen( INT NewX, INT NewY, UBOOL UpdateProfile )
 	SavedX = SizeX;
 	SavedY = SizeY;
 
-	// Fullscreen rendering. For now no borderless.
+	// Exclusive fullscreen: the display changes to the mode nearest the window's size.
 	Client->FullscreenViewport = this;
 	SetClientSize( NewX, NewY, false );
 	SDL_SetWindowFullscreen( hWnd, SDL_WINDOW_FULLSCREEN );
@@ -1477,6 +1514,12 @@ UBOOL UNSDLViewport::Exec( const char* Cmd, FOutputDevice* Out )
 		INT X=appAtoi(Cmd), Y=appAtoi(appStrchr(Cmd,'x') ? appStrchr(Cmd,'x')+1 : appStrchr(Cmd,'X') ? appStrchr(Cmd,'X')+1 : "");
 		if( X && Y )
 		{
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+			// Borderless fullscreen keeps the display's size.
+			if( Client->BorderlessFullscreen && DesktopFullscreen( hWnd ) )
+				debugf( NAME_Log, "SetRes %ix%i not applied: borderless fullscreen stays at %ix%i", X, Y, SizeX, SizeY );
+			else
+#endif
 			if( Client->FullscreenViewport )
 				MakeFullscreen( X, Y, 1 );
 			else

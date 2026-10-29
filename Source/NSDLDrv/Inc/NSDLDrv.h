@@ -115,6 +115,7 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	// Configuration.
 	INT DefaultDisplay;
 	UBOOL StartupFullscreen;
+	UBOOL BorderlessFullscreen;	// fullscreen is the display's own mode at its size; off: a mode change to ViewportX/Y
 	UBOOL UseJoystick;
 	UBOOL UseMouse;		// mouse events reach the game (False: ignored, never captured; the compiled default on Android)
 	UBOOL TouchPad;		// Android: the on-screen pad, a virtual SDL controller fed by the app (NSDLAndroid.cpp)
