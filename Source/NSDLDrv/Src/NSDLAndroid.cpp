@@ -16,7 +16,7 @@
 
 	Gyro aiming (GyroAim.java, the launcher's switch and sensitivities) sends the view's turn in degrees; in play
 	ApplyGyro makes it the player's turn and look-up axes in rotation units, apart from the mouse's sensitivity and
-	smoothing, and while a menu is up drops it.
+	smoothing, slowed by the zoom as the mouse is, and while a menu is up drops it.
 
 	Off Android the client's functions here do nothing.
 =============================================================================*/
@@ -236,10 +236,12 @@ UBOOL UNSDLClient::SwitchTouchPad()
 	unguard;
 }
 
-// The gyro's fractions of a rotation unit not applied yet (yaw, pitch), and with -UFRONTLOG its totals in play.
+// The gyro's fractions of a rotation unit not applied yet (yaw, pitch), and with -UFRONTLOG its totals in play and the
+// zoom of its last turn.
 static FLOAT	GGyroCarry[2] = { 0.f, 0.f };
 static DOUBLE	GGyroDegrees[2] = { 0.0, 0.0 };
 static INT		GGyroUnits[2] = { 0, 0 };
+static FLOAT	GGyroZoom = 1.f;
 static DOUBLE	GGyroLastTime = 0.0;
 static UBOOL	GGyroUnlogged = 0;
 // The last tick's time: the turn sent while the game did not tick for half a second (a load) is not aim.
@@ -266,9 +268,10 @@ static FLOAT GyroAxis( INT Units, FLOAT UnitsPerAxis )
 //
 // Gyro aiming, in play: whole rotation units as the player's turn and look-up axes, which no mouse setting scales.
 // The player turns 32 * DeltaTime * aTurn units a tick after ReadInput's 20 / DeltaTime and the player state's 0.24,
-// aLookUp the same: 153.6 units per unit of the axis. While a menu is up, or what came while the game did not tick
-// for half a second (a load), the turn is dropped. With -UFRONTLOG the totals are logged once the gyro has rested for
-// a quarter of a second.
+// aLookUp the same: 153.6 units per unit of the axis. The zoom slows it as PlayerInput's MouseScale slows the mouse:
+// times DesiredFOV over the class's default, the field of view the rifle's zoom returns to. While a menu is up, or
+// what came while the game did not tick for half a second (a load), the turn is dropped. With -UFRONTLOG the totals
+// are logged once the gyro has rested for a quarter of a second.
 //
 void UNSDLClient::ApplyGyro( UViewport* Viewport )
 {
@@ -286,13 +289,16 @@ void UNSDLClient::ApplyGyro( UViewport* Viewport )
 	else if( Yaw != 0.f || Pitch != 0.f )
 	{
 		const FLOAT UnitsPerAxis = 32.f * 20.f * 0.24f;
-		const INT YawUnits = GyroUnits( Yaw, GGyroCarry[0] ), PitchUnits = GyroUnits( Pitch, GGyroCarry[1] );
+		const FLOAT UnzoomedFOV = ((APlayerPawn*)Actor->GetClass()->GetDefaultActor())->DesiredFOV;
+		const FLOAT Zoom = UnzoomedFOV > 0.f && Actor->DesiredFOV > 0.f ? Actor->DesiredFOV / UnzoomedFOV : 1.f;
+		const INT YawUnits = GyroUnits( Yaw * Zoom, GGyroCarry[0] ), PitchUnits = GyroUnits( Pitch * Zoom, GGyroCarry[1] );
 		Actor->aTurn += GyroAxis( YawUnits, UnitsPerAxis );
 		Actor->aLookUp += GyroAxis( PitchUnits, UnitsPerAxis );
 		GGyroDegrees[0] += Yaw;
 		GGyroDegrees[1] += Pitch;
 		GGyroUnits[0] += YawUnits;
 		GGyroUnits[1] += PitchUnits;
+		GGyroZoom = Zoom;
 		GGyroLastTime = Now;
 		GGyroUnlogged = 1;
 		return;
@@ -301,8 +307,8 @@ void UNSDLClient::ApplyGyro( UViewport* Viewport )
 	{
 		GGyroUnlogged = 0;
 		if( GUfrontLog )
-			debugf( NAME_Log, "Gyro: %.3f degrees right and %.3f up in play in all, %i yaw and %i pitch units",
-				GGyroDegrees[0], GGyroDegrees[1], GGyroUnits[0], GGyroUnits[1] );
+			debugf( NAME_Log, "Gyro: %.3f degrees right and %.3f up in play in all, %i yaw and %i pitch units (zoom %.4f)",
+				GGyroDegrees[0], GGyroDegrees[1], GGyroUnits[0], GGyroUnits[1], GGyroZoom );
 	}
 	unguard;
 }

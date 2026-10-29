@@ -316,10 +316,12 @@ landscape: tilting the device's top edge towards the player looks up; left and r
 vertical ("player space": turning the device, and twisting it like a wheel once it is tilted back), never more than
 the device's own turn and twist. In play `UNSDLClient::ApplyGyro` (`NSDLAndroid.cpp`) adds the turn to the player's
 `aTurn` and `aLookUp` in whole rotation units (65536 a turn, the rest carried to the next tick), past ReadInput's and
-the player state's scales, so the mouse's sensitivity and smoothing do not change it; while a menu is up, or over a
+the player state's scales, so the mouse's sensitivity and smoothing do not change it. The zoom slows it as it slows the
+mouse: the turn is times `DesiredFOV` over the player class's default `DesiredFOV`, the field of view the rifle's zoom
+returns to (1 unzoomed, at any aspect ratio, since AutoFOV widens only the drawn view). While a menu is up, or over a
 load (the game not ticking for half a second), it is dropped. There is no smoothing, acceleration or dead zone. With
 `-UFRONTLOG` the log has the totals once the gyro rests (`Gyro: <yaw> degrees right and <pitch> up in play in all, <n>
-yaw and <n> pitch units`).
+yaw and <n> pitch units (zoom <z>)`: the degrees before the zoom, the units after it, the zoom of the last turn).
 
 In the background (the home screen, the recent apps, another app on top) the game is suspended. SDL's activity
 pauses on `onStop`, and its event pump then blocks the game thread until the app returns, so nothing ticks;
