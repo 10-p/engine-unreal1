@@ -43,7 +43,7 @@ time, and SoftDrv and NullDrv beside the GL renderers.
 | `UE_ALLOW_64BIT` | OFF | build x86_64 as a 64-bit engine; OFF demotes an x86_64 compiler to -m32 (an arm64 compiler always builds 64-bit; 64-bit MSVC is refused) |
 | `BUILD_STATIC` | OFF (ON in every preset) | one binary |
 | `BUILD_EDITOR` | ON | the Editor package |
-| `BUILD_NOPENGLDRV`, `BUILD_NOPENGLESDRV`, `BUILD_SOFTDRV`, `BUILD_NULLDRV` | OFF, ON, OFF, OFF (ON in every preset but `BUILD_NOPENGLDRV` on the web) | render devices |
+| `BUILD_NOPENGLDRV`, `BUILD_NOPENGLESDRV`, `BUILD_SOFTDRV`, `BUILD_NULLDRV` | OFF, ON, OFF, OFF (ON in every preset but `BUILD_NOPENGLDRV` on the web and `BUILD_NOPENGLESDRV` on Windows) | render devices |
 | `BUILD_NOPENALDRV`, `BUILD_NULLSOUNDDRV` | ON, ON | audio devices (OpenAL, silent) |
 | `BUILD_WINDRV` | OFF | the original Windows client (no preset builds it) |
 | `SOFTDRV_MAX_SCREEN` | 4096 (8192 on the web presets) | the bound of SoftDrv's screen-sized tables |
@@ -183,8 +183,10 @@ unshare -rn <repo>/tools/dev/census/play.sh <tree> -NOPENGLESRENDERER "DmDeck16?
 - The GCC runtime and winpthread link statically, so the exe imports only system DLLs and `OpenAL32.dll`, which
   the build copies beside it.
 - `Source/Unreal/Src/Res/LaunchRes.rc` finds its icon beside itself (the build passes that directory to windres).
-- Renderers: NOpenGLDrv (first in the default order), NOpenGLESDrv (needs ANGLE's `libEGL.dll`/`libGLESv2.dll`
-  beside the exe), SoftDrv and NullDrv.
+- Renderers: NOpenGLDrv (the default), SoftDrv and NullDrv. NOpenGLESDrv is not built (`BUILD_NOPENGLESDRV` is
+  off in both presets): a GLES2 context on Windows needs ANGLE's `libEGL.dll`/`libGLESv2.dll` beside the exe. An ini
+  or a saved choice that names it starts on NOpenGLDrv (`persisted render device ... -> preference order` in the
+  log).
 - The exe is a GUI program: read `System/Unreal.log`. In a console, Ctrl-C, Ctrl-Break or closing it requests a
   clean exit.
 
@@ -333,13 +335,13 @@ was (`NOpenALDrv: output paused (the app is in the background)` / `output resume
 
 ## Run-time behaviour shared with the other engines
 
-- **Render devices.** `-NOPENGLRENDERER` (native and Windows), `-NOPENGLESRENDERER`, `-SOFTWARERENDERER`,
-  `-NULLRENDERER` pick the device before `Engine->Init`; a switch whose device initializes is saved as the
-  player's choice (`[Engine.Engine] ufrontUserRenderDevice`). Without a switch the saved device is used when it is
-  a hardware default or the player's choice, else the preference order: NOpenGLDrv first on Windows, NOpenGLESDrv
-  first elsewhere. A device that cannot start (no GL driver; NOpenGLESDrv on Windows without ANGLE's DLLs) gives way
-  to SoftDrv (`No configured render device started: falling back to SoftDrv.SoftwareRenderDevice`) and is not
-  saved.
+- **Render devices.** `-NOPENGLRENDERER` (native and Windows), `-NOPENGLESRENDERER` (Linux, the web and Android),
+  `-SOFTWARERENDERER`, `-NULLRENDERER` pick the device before `Engine->Init`; a switch whose device initializes is
+  saved as the player's choice (`[Engine.Engine] ufrontUserRenderDevice`). Without a switch the saved device is used
+  when it is in the build and is a hardware default or the player's choice, else the preference order: NOpenGLDrv on
+  Windows; NOpenGLESDrv, then NOpenGLDrv on native Linux; NOpenGLESDrv on the web and Android. A device that cannot
+  start (no GL driver) gives way to SoftDrv (`No configured render device started: falling back to
+  SoftDrv.SoftwareRenderDevice`) and is not saved.
 - **Subsystems.** Before `Engine->Init`, a configured `ViewportManager`, `AudioDevice` or `NetworkDevice` the build
   does not contain (a retail ini names `Galaxy.GalaxyAudioSubsystem`) is replaced by the best one it has
   (NSDLClient; NOpenALDrv, then SoundDrv; TcpNetDriver, or WebRTCNetDriver on the web) and logged.

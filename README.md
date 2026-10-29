@@ -8,7 +8,7 @@ Based on [fgsfdsfgs/UE1](https://github.com/fgsfdsfgs/UE1). Build details, optio
 
 * **WebAssembly build:** every package in one static wasm that runs on a browser worker thread, with WebGL 2, a file system served by the host page and a frame loop that returns to the browser every frame.
 * **SDL2 client driver (NSDLDrv):** a resizable window that follows its real drawable size, pointer capture in play, game pads with hot-plug.
-* **OpenGL ES renderer (NOpenGLESDrv):** the default hardware renderer on the web and on Linux, with antialiasing and anisotropic filtering.
+* **OpenGL ES renderer (NOpenGLESDrv):** the default hardware renderer on the web, Linux and Android (the Windows builds leave it out), with antialiasing and anisotropic filtering.
 * **OpenGL renderer (NOpenGLDrv):** desktop GL in the native and Windows builds, with antialiasing and anisotropic filtering.
 * **Software renderer (SoftDrv):** its portable C path on every target, with volumetric fog, mesh fog and texture smoothing matched to the original MMX kernels.
 * **Null renderer (NullDrv):** a render device that draws nothing, for headless runs.
