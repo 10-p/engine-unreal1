@@ -337,9 +337,11 @@ was (`NOpenALDrv: output paused (the app is in the background)` / `output resume
   `-NULLRENDERER` pick the device before `Engine->Init`; a switch whose device initializes is saved as the
   player's choice (`[Engine.Engine] ufrontUserRenderDevice`). Without a switch the saved device is used when it is
   a hardware default or the player's choice, else the preference order: NOpenGLDrv first on Windows, NOpenGLESDrv
-  first elsewhere. A device that cannot start (no GL driver; NOpenGLESDrv on Windows without ANGLE's DLLs) gives way
-  to SoftDrv (`No configured render device started: falling back to SoftDrv.SoftwareRenderDevice`) and is not
-  saved.
+  first elsewhere. A device that cannot start (a window or GL context the driver cannot give, as with NOpenGLESDrv on
+  Windows without ANGLE's DLLs; no WebGL context in the browser; a failed Init) gives way to SoftDrv for the rest of
+  the run, in a window without GL (`Render device <device> cannot start: falling back to SoftDrv.SoftwareRenderDevice
+  for this run`, once), and `ToggleFullscreen` keeps SoftDrv. Nothing is written to the ini, so the next start tries
+  the chosen device again.
 - **Subsystems.** Before `Engine->Init`, a configured `ViewportManager`, `AudioDevice` or `NetworkDevice` the build
   does not contain (a retail ini names `Galaxy.GalaxyAudioSubsystem`) is replaced by the best one it has
   (NSDLClient; NOpenALDrv, then SoundDrv; TcpNetDriver, or WebRTCNetDriver on the web) and logged.
