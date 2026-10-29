@@ -1439,6 +1439,9 @@ UBOOL UNSDLViewport::TickInput()
 
 	InputUpdateTime = CurTime;
 
+	// Gyro aiming (Android).
+	Client->ApplyGyro( this );
+
 	// What the on-screen pad draws (menus or game) and whether it is in use, for the app's UI thread (Android).
 	Client->PublishTouchPadState();
 

@@ -165,6 +165,9 @@ class NSDLDRV_API UNSDLClient : public UClient, public FNotifyHook
 	void PublishTouchPadState();
 	UBOOL SwitchTouchPad();
 
+	// Gyro aiming's turn into the viewport's player, once a tick (NSDLAndroid.cpp; nothing off Android).
+	void ApplyGyro( UViewport* Viewport );
+
 	// Android's Back with nothing left to go back to (NSDLAndroid.cpp; nothing off Android).
 	UBOOL BackLeavesGame();
 	void AskToExit();
