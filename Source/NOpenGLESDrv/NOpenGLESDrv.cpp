@@ -603,6 +603,9 @@ void UNOpenGLESRenderDevice::ReadPixels( FColor* Pixels )
 {
 	guard(UNOpenGLESRenderDevice::ReadPixels);
 
+	// The frame drawn so far, batched triangles included.
+	FlushTriangles();
+
 	// A read packs rows (GL_PACK_ALIGNMENT); RGBA rows are 4-byte aligned already, 1 just says so.
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	glReadPixels( 0, 0, Viewport->SizeX, Viewport->SizeY, GL_RGBA, GL_UNSIGNED_BYTE, (void*)Pixels );
@@ -617,6 +620,10 @@ void UNOpenGLESRenderDevice::ReadPixels( FColor* Pixels )
 			Exchange( Pixels[j+i*Viewport->SizeX].B, Pixels[j+(Viewport->SizeY-1-i)*Viewport->SizeX].R );
 		}
 	}
+	// An odd height's middle row stays where it is: only its R and B swap.
+	if( Viewport->SizeY & 1 )
+		for( INT j=0; j<Viewport->SizeX; j++ )
+			Exchange( Pixels[j+(Viewport->SizeY/2)*Viewport->SizeX].R, Pixels[j+(Viewport->SizeY/2)*Viewport->SizeX].B );
 
 	unguard;
 }
