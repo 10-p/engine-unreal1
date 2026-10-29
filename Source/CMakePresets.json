@@ -73,7 +73,7 @@
     {
       "name": "windows",
       "displayName": "Windows x86 (MinGW-w64) -- one .exe + OpenAL32.dll",
-      "description": "32-bit Windows build. Cross-compiles from Linux via the toolchain file (i686-w64-mingw32 + a fetched SDL2); the same preset works from an MSYS2 MINGW32 prompt, where pacman's SDL2 answers instead. BUILD_STATIC links every package into the exe — no Core.dll/Engine.dll, and appGetDllHandle resolves through the internal registry, not LoadLibrary. Renderers are NOpenGL (desktop GL via opengl32) + NOpenGLES (GLES2 — needs ANGLE's libEGL.dll/libGLESv2.dll beside the exe) + SoftDrv + NullDrv, the last two CPU-only so it still verifies headless under wine+Xvfb. Builds in build-windows/.",
+      "description": "32-bit Windows build. Cross-compiles from Linux via the toolchain file (i686-w64-mingw32 + a fetched SDL2); the same preset works from an MSYS2 MINGW32 prompt, where pacman's SDL2 answers instead. BUILD_STATIC links every package into the exe — no Core.dll/Engine.dll, and appGetDllHandle resolves through the internal registry, not LoadLibrary. Renderers are NOpenGL (desktop GL via opengl32) + SoftDrv + NullDrv, the last two CPU-only so it still verifies headless under wine+Xvfb; no NOpenGLES (a GLES2 context on Windows needs ANGLE's libEGL.dll/libGLESv2.dll beside the exe). Builds in build-windows/.",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/../build-windows",
       "toolchainFile": "${sourceDir}/cmake/toolchain-mingw-w64.cmake",
@@ -85,7 +85,7 @@
         "BUILD_EDITOR": "ON",
         "BUILD_WINDRV": "OFF",
         "BUILD_NOPENGLDRV": "ON",
-        "BUILD_NOPENGLESDRV": "ON",
+        "BUILD_NOPENGLESDRV": "OFF",
         "BUILD_SOFTDRV": "ON",
         "BUILD_NULLDRV": "ON",
         "BUILD_NULLSOUNDDRV": "ON",

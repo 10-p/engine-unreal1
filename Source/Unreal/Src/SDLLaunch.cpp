@@ -189,9 +189,9 @@ static const FRenderSwitch GRenderSwitches[] =
 static const char* GRenderPreference[] =
 {
 #if defined(UE_HAS_NOPENGLDRV) && defined(PLATFORM_WIN32)
-	// On Windows desktop GL leads: a GLES2 context there needs a driver that exposes ES contexts through WGL
-	// or ANGLE's libEGL/libGLESv2 beside the exe, whereas opengl32 is always present. The shipped ini's SoftDrv
-	// is not hardware-eligible, so this list is what a fresh Windows install lands on.
+	// On Windows desktop GL leads: opengl32 is always present, whereas a GLES2 context needs a driver with WGL ES
+	// contexts or ANGLE's libEGL/libGLESv2 beside the exe, and the Windows presets leave NOpenGLESDrv out. The
+	// shipped ini's SoftDrv is not hardware-eligible, so this list is what a fresh Windows install lands on.
 	"NOpenGLDrv.NOpenGLRenderDevice",
 	"NOpenGLESDrv.NOpenGLESRenderDevice",
 #else
