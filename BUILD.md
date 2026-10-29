@@ -343,6 +343,14 @@ was (`NOpenALDrv: output paused (the app is in the background)` / `output resume
 - **Subsystems.** Before `Engine->Init`, a configured `ViewportManager`, `AudioDevice` or `NetworkDevice` the build
   does not contain (a retail ini names `Galaxy.GalaxyAudioSubsystem`) is replaced by the best one it has
   (NSDLClient; NOpenALDrv, then SoundDrv; TcpNetDriver, or WebRTCNetDriver on the web) and logged.
+- **Fullscreen.** Alt+Enter and `ToggleFullscreen` switch between the window and fullscreen, and
+  `[NSDLDrv.NSDLClient] StartupFullscreen` starts in fullscreen. On the native desktop, with `BorderlessFullscreen`
+  (True) fullscreen is SDL's desktop fullscreen: the window covers its display at the display's own resolution, the game renders at that
+  size (`NSDLViewport: borderless fullscreen at <w>x<h>`), `ViewportX/Y` are left as they are, and `SetRes` (the
+  menus' resolution) is not applied there (`SetRes <w>x<h> not applied: borderless fullscreen stays at <w>x<h>`).
+  With `False` fullscreen is exclusive: the display changes to the mode nearest `ViewportX/Y`, and `SetRes` changes
+  the mode and keeps its size in `ViewportX/Y`. Leaving fullscreen gives the window back its size. The web and Android
+  builds do not read the key.
 - **Antialiasing and anisotropic filtering.** NOpenGLESDrv and NOpenGLDrv have `NumAASamples` (default 4; 0 or 1 is
   off) and `MaxAnisotropy` (default 16, clamped to the driver's maximum). Natively NSDLViewport asks for the
   device's sample count when it creates the window. Log lines: `GLES2:`/`OpenGL: antialiasing <n>x
