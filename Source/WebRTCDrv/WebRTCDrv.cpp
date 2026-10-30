@@ -160,6 +160,17 @@ class DLL_EXPORT UWebRTCNetDriver : public UNetDriver
 };
 IMPLEMENT_CLASS(UWebRTCNetDriver);
 
+// Read and drop every datagram queued on the client slot (glue conn 0).
+static void DiscardQueuedClientData()
+{
+	BYTE Data[UNetConnection::MAX_PACKET_SIZE];
+	INT Discarded = 0;
+	while( ue_net_recv( 0, Data, sizeof(Data) ) > 0 )
+		Discarded++;
+	if( Discarded )
+		debugf( NAME_DevNet, "[WebRTC] Init(connect): discarded %i datagram(s) queued for the previous client connection", Discarded );
+}
+
 /*-----------------------------------------------------------------------------
 	UWebRTCNetDriver::Init.
 -----------------------------------------------------------------------------*/
@@ -217,6 +228,9 @@ UBOOL UWebRTCNetDriver::Init( UBOOL Connect, FNetworkNotify* InNotify, FURL& URL
 		}
 		GClientDriver = this;
 		ue_net_connect( *ServerPeerId );
+		// The new session's pipe opens later, so every datagram already queued on the client slot belongs to an
+		// earlier connection; the pending connection must not parse it as its own.
+		DiscardQueuedClientData();
 
 		// Pending server connection + control channel (channel 0) — UE1's UTcpNetDriver creates it here
 		// too (IpDrv.cpp: GetServerConnection()->CreateChannel(CHTYPE_Control,1,0)).
