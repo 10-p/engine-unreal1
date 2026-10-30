@@ -374,6 +374,11 @@ was (`NOpenALDrv: output paused (the app is in the background)` / `output resume
   `[Engine.GameEngine] AllowNetCheats=True`; each use logs a `Cheat:` line. `[Engine.GameEngine]
   FpsLogSeconds=<s>` or `FPSLOG <s>` logs an `FPS:` line every `<s>` seconds.
 - **Config.** `SaveConfig` writes the file at once; `FLUSHCONFIG` writes the whole config cache.
+- **Relaunch.** `RELAUNCH <arguments>` (Epic's command; the multiplayer server menu's dedicated start sends
+  `<url> -server`): the game exits and its running executable starts again with the arguments. On Windows it starts
+  at the command, as Epic's did; on Linux once the old process has ended. With `-server` the game binary is the
+  dedicated server. An Android app closes; on the web it is a fatal error, `Failed to launch process. Relaunch:
+  <arguments>`.
 - **Language.** `[Engine.Engine] Language` (`Init: Language: <ext>` in the log); localized properties are read from
   `<Package>.<lang>`, falling back to `<Package>.int` per key.
 - **Game pads.** `[NSDLDrv.NSDLClient] UseJoystick` (on by default) is read every tick, so the game's own option
