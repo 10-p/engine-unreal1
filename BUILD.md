@@ -391,10 +391,35 @@ was (`NOpenALDrv: output paused (the app is in the background)` / `output resume
 - **Saves** sort their name, import and export tables with a stable sort, so the same save gives the same file on
   every platform.
 
+## Release archives
+
+`vendor/release/package.py` makes the release archives, the same way in CI and for a versioned release. It is
+vendored from the frontend (`packages/build/engine-release/package.py`, written and checked by its
+`packages/build/bin/vendor-release.mjs`): re-vendor it, never edit it here. This game's data is
+`release/release.json`: each platform's files in its build tree, the default ini the archives ship, and the text of
+their `README.txt`.
+
+```bash
+python3 vendor/release/package.py check                     # release.json names files that exist
+python3 vendor/release/package.py version                   # 1.2.0 at a release tag, else git describe
+python3 vendor/release/package.py archive linux-x86_64 --version 1.2.0 --out <dir> --kind release
+python3 vendor/release/package.py notes --version 1.2.0 --kind release   # the release text's install part
+```
+
+`archive <platform>` writes `unreal-<version>-<platform>`: `linux-x86` and `linux-x86_64` (`.tar.gz`, from
+`build-native` and `build-native64`: `Unreal.bin` and `libopenal.so.1`), `windows-x86` and `windows-x86_64` (`.zip`,
+from `build-windows` and `build-windows64`: `Unreal.exe` and `OpenAL32.dll`). Each holds `System/` with those files
+and `Engine/Config/Default.ini`, and a `README.txt` for its platform. `archive android` copies the APK Gradle's
+`assembleRelease` wrote as `unreal-<version>-android-test.apk`, or `-android-release.apk` with `--kind release`.
+
 ## CI
 
-`.github/workflows/build.yml` builds `native` (in an `ubuntu:24.04` container), `windows`, `wasm` and the Android
-APK on every push and pull request, checks that the Linux build is one engine binary, that the Windows exe imports
-only system DLLs, that `meta.json` names the commit built and that the APK packages both ABIs, and uploads each
-build for 7 days. A push to `main` also replaces the rolling `latest` release with one zip per build. CI does not
-run the game.
+`.github/workflows/build.yml` runs on every push and pull request. It checks the generated inis
+(`tools/dev/sync-android-ini.py --check`) and `release/release.json`; builds `native` and `native64` (in an
+`ubuntu:24.04` container), `windows` and `windows64`, `wasm` and the Android APK; checks that each Linux build is one
+engine binary, that each Windows exe imports only system DLLs, that `meta.json` names the commit built and that the
+APK packages all three ABIs and is signed with the key the job made; and uploads each platform's release archive,
+the APK (`unreal-<version>-android-test.apk`, `assembleRelease` signed with that throwaway key: it cannot update an
+installed release) and the web build for 7 days. The version is `package.py version`'s. A push to `main` also
+replaces the rolling `latest` release with those files and the packer's notes. CI does not run the game, and it makes
+no versioned release.

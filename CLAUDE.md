@@ -34,6 +34,9 @@ the browser glue behind a thin ABI. Building, options and test tools: `BUILD.md`
   version 2. Only these thin forwarders and `Source/Unreal/msaa-backbuffer.js` are baked into the wasm; the
   transport, the file system and storage are injected by the host at run time. A change to the ABI is a
   cross-engine change owned by the frontend: re-vendor, never edit here.
+- **Release archives:** `vendor/release/package.py` packs them, in CI and for a versioned release, from this
+  game's data in `release/release.json` (BUILD.md, "Release archives"). It is vendored from the frontend
+  (`packages/build/engine-release/`): re-vendor, never edit here.
 - **The log reaches stdout on every build** (`FGlobalPlatform::WriteBinary`, the same lines as `Unreal.log`); the
   frontend's E2E reads engine milestones from the browser console. Do not remove it, and do not reword a log line
   the frontend matches (grep `packages/e2e` and `targets/` in the frontend first).
