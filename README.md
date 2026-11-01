@@ -93,7 +93,8 @@ The Android build runs on a Retroid Pocket 6 (Android 13, Adreno 740): the menus
 
 1. Install the original retail v200 release of Unreal or the v205 demo.
 2. Copy the files you built (see each platform above) to `Unreal/System`. Overwrite everything.
-3. Copy the contents of `Engine/Config` (the `.ini` files, not `web/`) to `Unreal/System`. Overwrite everything.
+3. Copy `Engine/Config/Default.ini` to `Unreal/System`. The game makes `Unreal.ini` from it when that is missing; an
+   existing `Unreal.ini` keeps its settings until it is deleted.
 4. Run `System/Unreal.bin` (Linux) or `System/Unreal.exe` (Windows).
 
 Use real copies of the game files, not symlinked folders: the engine does not find packages through symlinked directories (`Can't find file for package ...`).
