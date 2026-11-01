@@ -339,7 +339,8 @@ was (`NOpenALDrv: output paused (the app is in the background)` / `output resume
   `-SOFTWARERENDERER`, `-NULLRENDERER` pick the device before `Engine->Init`; a switch whose device initializes is
   saved as the player's choice (`[Engine.Engine] ufrontUserRenderDevice`). Without a switch the saved device is used
   when it is in the build and is a hardware default or the player's choice, else the preference order: NOpenGLDrv on
-  Windows; NOpenGLESDrv, then NOpenGLDrv on native Linux; NOpenGLESDrv on the web and Android. A device that cannot
+  Windows; NOpenGLESDrv, then NOpenGLDrv on native Linux; NOpenGLESDrv on the web and Android. The web, native and
+  Android `Default.ini` name NOpenGLESDrv. A device that cannot
   start (a window or GL context the driver cannot give; no WebGL context in the browser; a failed Init) gives way to
   SoftDrv for the rest of the run, in a window without GL (`Render device <device> cannot start: falling back to
   SoftDrv.SoftwareRenderDevice for this run`, once), and `ToggleFullscreen` keeps SoftDrv. Nothing is written to the
