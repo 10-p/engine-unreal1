@@ -87,9 +87,10 @@ fetched libraries, the main link flags and the files' checksums. The frontend's 
   host-injected `Module.UE.fs.backend`, which serves game files on demand. `Engine/Config/web/Default.ini` is
   preloaded as `/System/Default.ini`; `main()` changes to `/System`, and `appBaseDir` is the working directory.
 - **Glue ABI.** `vendor/glue/` is vendored from the frontend's `@ufront/glue` at ABI version 2: `ue_abi.h` (the C
-  declarations), `net-shim.js` (the `ue_net_*` imports WebRTCDrv calls, forwarded to `Module.UE.net`) and
-  `wasmfs-shim.js`. They are `--js-library` inputs of the link, with `Source/Unreal/msaa-backbuffer.js`. The
-  engine exports `ue_exec_command`, which runs a console command and returns its output.
+  declarations), `net-shim.js` (the `ue_net_*` imports WebRTCDrv calls, forwarded to `Module.UE.net`),
+  `wasmfs-shim.js`, and `webgl-shim.js` (Emscripten's canvas resize, made to survive a lost WebGL context). They are
+  `--js-library` inputs of the link, with `Source/Unreal/msaa-backbuffer.js`. The engine exports
+  `ue_exec_command`, which runs a console command and returns its output.
 - **Rendering.** NOpenGLESDrv runs its GLES2 calls on WebGL 2. Its antialiasing (`NumAASamples`) is a
   multisampled replacement for Emscripten's emulated back buffer (`msaa-backbuffer.js`), resolved at the present
   and before any read of framebuffer 0; WebGL 1 has none. `Source/Unreal/offscreen-depth24.sh` rewrites the
