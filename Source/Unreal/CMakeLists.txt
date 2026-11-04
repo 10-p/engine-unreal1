@@ -125,6 +125,8 @@ if(EMSCRIPTEN)
     # the host-injected Module.UE.net.*; wasmfs-shim.js is the WasmFS backend's forwarder (above).
     "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/net-shim.js"
     "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
+    # Emscripten's canvas resize with the viewport read guarded: a lost WebGL context answers it with null.
+    "SHELL:--js-library ${CMAKE_SOURCE_DIR}/../vendor/glue/webgl-shim.js"
     # WebGL 2 (NOpenGLESDrv's GLES2 calls run on it unchanged), for the multisampled emulated back buffer
     # (msaa-backbuffer.js: ufront_backbuffer_samples) that is NOpenGLESDrv's antialiasing; WebGL 1 stays the fallback
     # of a browser without WebGL 2 (NSDLViewport.cpp).
@@ -157,6 +159,7 @@ if(EMSCRIPTEN)
   set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_SOURCE_DIR}/../vendor/glue/net-shim.js"
     "${CMAKE_SOURCE_DIR}/../vendor/glue/wasmfs-shim.js"
+    "${CMAKE_SOURCE_DIR}/../vendor/glue/webgl-shim.js"
     "${CMAKE_CURRENT_SOURCE_DIR}/msaa-backbuffer.js")
   # Bare loader: SDLLaunch.js (+ .wasm/.data), no .html, in build-<cfg>/SDLLaunch/, the artifact path the
   # host's build derives per target.

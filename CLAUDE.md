@@ -30,8 +30,8 @@ the browser glue behind a thin ABI. Building, options and test tools: `BUILD.md`
   `-TIMERFRAMES`), never `emscripten_set_main_loop`, whose unwind collides with `main()`'s try/catch.
 - **Files:** the engine uses libc `fopen`/`opendir`; on the web WasmFS's JSImpl backend (`vendor/glue/wasmfs-shim.js`)
   serves them from the host. Do not write an engine-side web file manager.
-- **Glue ABI:** `vendor/glue/` (ue_abi.h, net-shim.js, wasmfs-shim.js) is vendored from the frontend at ABI
-  version 2. Only these thin forwarders and `Source/Unreal/msaa-backbuffer.js` are baked into the wasm; the
+- **Glue ABI:** `vendor/glue/` (ue_abi.h, net-shim.js, wasmfs-shim.js, webgl-shim.js) is vendored from the frontend
+  at ABI version 2. Only these thin shims and `Source/Unreal/msaa-backbuffer.js` are baked into the wasm; the
   transport, the file system and storage are injected by the host at run time. A change to the ABI is a
   cross-engine change owned by the frontend: re-vendor, never edit here.
 - **Release archives:** `vendor/release/package.py` packs them, in CI and for a versioned release, from this
