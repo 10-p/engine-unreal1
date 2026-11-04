@@ -165,6 +165,9 @@ unshare -rn <repo>/tools/dev/census/play.sh <tree> -NOPENGLESRENDERER "DmDeck16?
 
 - `tools/test/U64Test` holds the script VM checks; it is compiled by the 32-bit `Unreal.bin -MAKE`
   (`EditPackages[n]=U64Test` in Unreal.ini, the folder beside `System`), and must pass on 32-bit before 64-bit.
+- `tools/test/MemCacheTest` holds checks of the memory cache (`FMemCache`) that need only Core. The native
+  presets build it as `build-<preset>/MemCacheTest.bin`; it needs no run tree, prints one line per check and
+  exits 1 when one fails.
 - Run the layout sweep in both hosts: some reflected layouts exist in only one of them.
 - `tools/dev/census/` (`census.py`, `gcovdump.c`) reports which engine functions a `--coverage` build ran. Keep
   the preset's `-DASM=0` in the coverage flags.

@@ -435,6 +435,15 @@ endif()
 
 add_subdirectory(Unreal)
 
+# Checks that need only Core (tools/test/MemCacheTest): a native binary, build-<preset>/MemCacheTest.bin, that exits 1
+# when a check fails.
+if(NOT EMSCRIPTEN AND NOT ANDROID AND NOT TARGET_IS_WINDOWS AND BUILD_STATIC)
+  add_executable(MemCacheTest ${CMAKE_SOURCE_DIR}/../tools/test/MemCacheTest/MemCacheTest.cpp)
+  target_link_libraries(MemCacheTest Core)
+  target_compile_definitions(MemCacheTest PRIVATE UPACKAGE_NAME=MemCacheTest)
+  set_target_properties(MemCacheTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+endif()
+
 # The Android app's process set-up (Android/app/src/main/cpp/android_bridge.cpp): a small JNI library that
 # GameActivity calls before SDL starts, to give the engine its game folder (UNREAL_ANDROID_BASEDIR, the working
 # directory, $HOME).
