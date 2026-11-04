@@ -100,7 +100,9 @@ fetched libraries, the main link flags and the files' checksums. The frontend's 
   caught: package and map loading fail soft there instead (a failed load resolves to NULL, a bad startup map
   falls back to the menu), and `appThrowf` prints `[appThrowf] <message>` before it throws. openal-soft throws
   internally, so its objects use `-fexceptions` and the link enables catching for them
-  (`-sNO_DISABLE_EXCEPTION_CATCHING`).
+  (`-sNO_DISABLE_EXCEPTION_CATCHING`). The link also has `-sEXCEPTION_STACK_TRACES`: a throw nothing catches (an
+  `appError`'s `throw(1)`, an `appThrowf`) reaches the page as an Error named after the thrown type, with `what()`
+  as its message and the stack from the throw site, which the page's crash record keeps.
 - **Network.** WebRTCDrv (web only) is the net driver: a configured `IpDrv.TcpNetDriver` is replaced with
   `WebRTCDrv.WebRTCNetDriver` at startup. A `<room>?connect` startup URL joins a room; the stock "Find Local
   Servers" menu lists rooms through a synthetic LAN (`Source/WebRTCDrv/WebRTCLan.cpp`). The listen peer's

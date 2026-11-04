@@ -117,6 +117,10 @@ if(EMSCRIPTEN)
     # openal-soft reports every AL error by throwing and catching it, so catching is on (the first AL error
     # would otherwise abort). Only its objects are -fexceptions; see Source/CMakeLists.txt.
     -sNO_DISABLE_EXCEPTION_CATCHING
+    # A C++ exception nothing catches (an appThrowf, an appError's throw) reaches the page as an Error named after
+    # the thrown type, with what() as its message and the stack from the throw site, so the crash report says what
+    # was thrown where. The stack is captured at a throw only.
+    -sEXCEPTION_STACK_TRACES
     "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_close','_ue_exec_command','_wasmfs_create_jsimpl_backend','_wasmfs_create_file','_ufront_wasmfs_register','_ufront_wasmfs_set_pending']"
     # PThread: the host needs the worker list to hand the file system's sync channel to the engine thread.
     # Runtime methods are on Module only when exported.
