@@ -2776,6 +2776,7 @@ class FArchiveTagUsed : public FArchive
 public:
 	FArchiveTagUsed()
 	: Context( NULL )
+	, Walking( 0 )
 	{
 		guard(FArchiveTagUsed::FArchiveTagUsed);
 
@@ -2807,6 +2808,12 @@ public:
 		unguard;
 	}
 private:
+	// A reference still to visit, and the object whose Serialize found it.
+	struct FPendingRef
+	{
+		UObject* Obj;
+		UObject* Referencer;
+	};
 	FArchive& operator<<( UObject*& Obj )
 	{
 		guard(FArchiveTagUsed<<Obj);
@@ -2816,8 +2823,34 @@ private:
 			check(Obj->IsValid());
 		unguard;
 
+		// The visit is deferred to Walk, which keeps the stack flat however long the reference chains are.
 		if( Obj && (Obj->GetFlags() & RF_Unreachable) )
 		{
+			FPendingRef& Ref = Pending(Pending.Add());
+			Ref.Obj        = Obj;
+			Ref.Referencer = Context;
+			if( !Walking )
+				Walk();
+		}
+
+		return *this;
+		unguard;
+	}
+	// Depth-first walk with an explicit stack: the references an object's Serialize finds are visited next, the
+	// first one found first, so objects are claimed, serialized and reported in the order of a recursive walk.
+	void Walk()
+	{
+		guard(FArchiveTagUsed::Walk);
+		Walking = 1;
+		UObject* OriginalContext = Context;
+		while( Pending.Num() )
+		{
+			FPendingRef Ref = Pending(Pending.Num()-1);
+			Pending.Remove( Pending.Num()-1 );
+			UObject* Obj = Ref.Obj;
+			if( !(Obj->GetFlags() & RF_Unreachable) )
+				continue;
+
 			// Only recurse the first time object is claimed.
 			guard(TestReach);
 			Obj->ClearFlags( RF_Unreachable | RF_DebugSerialize );
@@ -2826,22 +2859,23 @@ private:
 			if( Obj->GetFlags() & RF_TagGarbage )
 			{
 				// Recurse down the object graph.
-				UObject* OriginalContext=Context;
+				INT First = Pending.Num();
 				Context = Obj;
 				Obj->Serialize( *this );
 				if( !(Obj->GetFlags() & RF_DebugSerialize) )
 					appErrorf( "%s failed to route Serialize", Obj->GetFullName() );
-				Context = OriginalContext;
+				for( INT i=First, j=Pending.Num()-1; i<j; i++, j-- )
+					Exchange( Pending(i), Pending(j) );
 			}
 			else
 			{
 				// For debugging.
-				debugf( NAME_Log, "%s is referenced by %s", Obj->GetFullName(), Context ? Context->GetFullName() : NULL );
+				debugf( NAME_Log, "%s is referenced by %s", Obj->GetFullName(), Ref.Referencer ? Ref.Referencer->GetFullName() : NULL );
 			}
 			unguardf(( "(%s)", Obj->GetFullName() ));
 		}
-
-		return *this;
+		Context = OriginalContext;
+		Walking = 0;
 		unguard;
 	}
 	FArchive& operator<<( FName& Name )
@@ -2854,6 +2888,8 @@ private:
 		unguard;
 	}
 	UObject* Context;
+	TArray<FPendingRef> Pending;
+	UBOOL Walking;
 };
 
 //
