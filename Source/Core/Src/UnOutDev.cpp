@@ -34,6 +34,34 @@ void FOutputDevice::Log( EName Event, const char* Text )
 };
 
 //
+// Format a message and write it whole: in a stack buffer when it fits, else in a heap buffer grown until it does.
+// A C library's vsnprintf returns the length it needed, or -1 when the text was cut.
+//
+static void WriteFormatted( FOutputDevice* Out, EName Event, const char* Fmt, va_list Args )
+{
+	char TempStr[4096];
+	char* Text = TempStr;
+	INT Size = ARRAY_COUNT(TempStr);
+	for( ;; )
+	{
+		va_list ArgsCopy;
+		va_copy( ArgsCopy, Args );
+		INT Len = vsnprintf( Text, Size, Fmt, ArgsCopy );
+		va_end( ArgsCopy );
+		Text[Size-1] = 0;
+		if( (Len>=0 && Len<Size) || Size>=(1<<24) )
+			break;
+		Size = Max( Len+1, Size*2 );
+		if( Text != TempStr )
+			appFree( Text );
+		Text = (char*)appMalloc( Size, "Logf" );
+	}
+	Out->WriteBinary( Text, appStrlen(Text), Event );
+	if( Text != TempStr )
+		appFree( Text );
+}
+
+//
 // Print a message on the output device, variable parameters.
 //
 void VARARGS FOutputDevice::Logf( EName Event, const char* Fmt, ... )
@@ -41,9 +69,10 @@ void VARARGS FOutputDevice::Logf( EName Event, const char* Fmt, ... )
 	guardSlow(FOutputDevice::Logf);
 	if( !(FName(Event).GetFlags() & RF_Suppress) )
 	{
-		char TempStr[4096];
-		GET_VARARGS( TempStr, Fmt );
-		WriteBinary( TempStr, appStrlen(TempStr), Event );
+		va_list Args;
+		va_start( Args, Fmt );
+		WriteFormatted( this, Event, Fmt, Args );
+		va_end( Args );
 	}
 	unguardSlow;
 }
@@ -53,9 +82,10 @@ void VARARGS FOutputDevice::Logf( EName Event, const char* Fmt, ... )
 //
 void VARARGS FOutputDevice::Logf( const char* Fmt, ... )
 {
-	char TempStr[4096];
-	GET_VARARGS( TempStr, Fmt );
-	WriteBinary( TempStr, appStrlen(TempStr), NAME_Log );
+	va_list Args;
+	va_start( Args, Fmt );
+	WriteFormatted( this, NAME_Log, Fmt, Args );
+	va_end( Args );
 }
 
 /*-----------------------------------------------------------------------------
