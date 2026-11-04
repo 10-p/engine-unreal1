@@ -563,7 +563,8 @@ BYTE* FMemCache::Create
 	}
 
 	// Set the resulting Item.
-	Item = BestFirst;
+	MruItem = Item = BestFirst;
+	MruId          = Id;
 
 	ConditionalCheckState();
 	uunclock(CreateCycles);
