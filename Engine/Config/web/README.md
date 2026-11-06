@@ -21,12 +21,16 @@ Every default ini this repo ships opens with a section of its own:
 Version=1
 ```
 
-`appInit` makes a player's `Unreal.ini` as a byte copy of `Default.ini` on the first run and never refreshes it, so
-the `Version` it keeps says which defaults it was copied from; an `Unreal.ini` without the section was made before the
-number and is version 0. No class owns the section, so no `SaveConfig` or `ResetConfig` touches it and the config
-cache writes it back as it is. Nothing reads the number to change anything: a player's ini is never migrated.
-`Default.ini` here, `../Default.ini` and the generated `../android/Default.ini` (the generator keeps the section first)
-carry the same number; `../Unreal.ini` ships nowhere and has none.
+`appInit` makes a player's `Unreal.ini` as a byte copy of `Default.ini` on the first run and never refreshes it, so the
+`Version` it keeps says which defaults it was copied from. A live ini without the section was made before the number.
+Right after the config cache starts, before the `-ini:` overrides, `appInit` adds `Version=0` to the live ini
+(`Unreal.ini`, or the file `INI=` names) when it has no `[ConfigVersion] Version` key and writes that file alone, as any
+save writes it (comment lines left out), logging `Config: <file> has no [ConfigVersion]: Version=0 added`; the section
+then comes last in the file, and a `Version` that is there is never changed. That marker is the only thing the engine
+writes into a player's ini for the config version: nothing reads the number to change anything, and a player's ini is
+never migrated. No class owns the section, so no `SaveConfig` or `ResetConfig` touches it and the config cache writes it
+back as it is. `Default.ini` here, `../Default.ini` and the generated `../android/Default.ini` (the generator keeps the
+section first) carry the same number; `../Unreal.ini` ships nowhere and has none.
 
 The rule: a commit that adds a default, changes a default value or removes a key in one of these inis, or adds or
 changes a compiled or script default of a setting the engine saves to the ini, bumps `Version` by one in all of them

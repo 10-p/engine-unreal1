@@ -561,6 +561,21 @@ static char* CmdLine=NULL;
 static char CmdLineBuf[4096] = "";
 static UBOOL GCmdLineCut = 0;	// a token did not fit; appInit says so once the log is up
 
+// A live ini without a [ConfigVersion] Version key was made before the config version: it gets Version=0, written to
+// that file alone. An existing Version and every other key stay as they are.
+static void appMarkConfigVersion( const char* Filename )
+{
+	guard(appMarkConfigVersion);
+	char Version[64];
+	FConfigFile* Cfg = GConfigCache.FindConfig( Filename, 0 );
+	if( !Cfg || Cfg->GetString( "ConfigVersion", "Version", Version, ARRAY_COUNT(Version) ) )
+		return;
+	Cfg->SetString( "ConfigVersion", "Version", "0" );
+	Cfg->Write();
+	debugf( NAME_Init, "Config: %s has no [ConfigVersion]: Version=0 added", Filename );
+	unguard;
+}
+
 void appInit()
 {
 	// Init.
@@ -609,6 +624,7 @@ void appInit()
 
 	// Init config cache.
 	GConfigCache.Init( Ini );
+	appMarkConfigVersion( Ini );
 	appApplyIniOverrides();
 
 	// Language.
