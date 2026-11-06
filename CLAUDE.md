@@ -59,6 +59,8 @@ the browser glue behind a thin ABI. Building, options and test tools: `BUILD.md`
 - **Names** follow behaviour. Shared CMake options take the `UE_` prefix. Do not rename ini sections or keys
   players may have saved (e.g. `ufrontUserRenderDevice`), exported ABI symbols, or log lines the frontend
   matches. "ufront" as a namespace stays (`[ufront.AutoFOV]`, `UfrontStableSort`, `[ufront/travel]`).
+- **Ini config version:** a commit that adds, changes or removes a default the engine keeps in the ini bumps
+  `[ConfigVersion] Version` in every default ini and adds its row (`Engine/Config/web/README.md`, "Config version").
 - Commit subjects name the feature (Conventional Commits), never a stage number or a date.
 - Never commit game assets or build trees (`build-*/`, gitignored). Do not push to fgsfdsfgs/UE1.
 - Before a commit, `node <frontend>/.ufront/hygiene/scan.mjs --all --repo .` must report no hard findings.
