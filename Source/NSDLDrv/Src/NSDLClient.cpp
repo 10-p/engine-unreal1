@@ -33,6 +33,7 @@ void UNSDLClient::InternalClassInitializer( UClass* Class )
 		new(Class, "ScaleRUV",          RF_Public)UFloatProperty(CPP_PROPERTY(ScaleRUV),         "Joystick", CPF_Config );
 		new(Class, "InvertY",           RF_Public)UBoolProperty(CPP_PROPERTY(InvertY),           "Joystick", CPF_Config );
 		new(Class, "InvertV",           RF_Public)UBoolProperty(CPP_PROPERTY(InvertV),           "Joystick", CPF_Config );
+		new(Class, "PadTiltSpeed",      RF_Public)UBoolProperty(CPP_PROPERTY(PadTiltSpeed),      "Joystick", CPF_Config );
 		new(Class, "PadWalkTilt",       RF_Public)UFloatProperty(CPP_PROPERTY(PadWalkTilt),      "Joystick", CPF_Config );
 	}
 	unguard;
@@ -58,7 +59,8 @@ UNSDLClient::UNSDLClient()
 	ScaleRUV = 100.f;
 	DeadZoneXYZ = 0.1f;
 	DeadZoneRUV = 0.1f;
-	PadWalkTilt = 0.5f;	// the move stick walks below half its travel
+	PadTiltSpeed = 1;	// the move stick's tilt sets the player's speed
+	PadWalkTilt = 0.5f;	// with PadTiltSpeed off, the move stick walks below half its travel
 
 	// Compiled defaults for the inherited UClient settings, for an ini with no [NSDLDrv.NSDLClient] section (a
 	// retail Unreal .ini has none): UClient::InternalClassInitializer (Engine/Src/UnCamMgr.cpp) registers its
