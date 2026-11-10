@@ -391,10 +391,11 @@ was (`NOpenALDrv: output paused (the app is in the background)` / `output resume
 - **Game pads.** `[NSDLDrv.NSDLClient] UseJoystick` (on by default) is read every tick, so the game's own option
   opens or closes the first pad at once; pads hot-plug; sticks and triggers are read from the pad's state. The left
   stick is the move stick: its dead zone (`DeadZoneXYZ`, 0.1) is radial, so every direction between the axes keeps
-  both of its parts, and a tilt out of it but below `[NSDLDrv.NSDLClient] PadWalkTilt` (0.5 of the stick's travel;
-  0 never) walks, as the Walking button does, on any pad but the touch pad: the stick keeps a bit of its own set in the player's `bRun` (the
-  Walking key writes the whole byte; the stick sets its bit again the next tick), and the moves a client sends to its
-  server carry `bRun`. The right stick keeps a dead zone per axis (`DeadZoneRUV`).
+  both of its parts. Out of it, on any pad but the touch pad, a player with physics gets the direction at full length on
+  the bindings, so it sets off at once as on a key, and, with `[NSDLDrv.NSDLClient] PadTiltSpeed` (on unless the ini says False), the tilt past the dead zone is that share of full speed (`GMoveStickPawn`, `GMoveStickSpeed`, read in `APawn::calcVelocity`). On a client of a server the server moves the player at its own speed and corrects the client. With the switch off, a tilt below `[NSDLDrv.NSDLClient] PadWalkTilt` (0.5 of the stick's travel; 0 never) walks, as the
+  Walking button does: the stick keeps a bit of its own set in the player's `bRun` (the Walking key writes the whole
+  byte; the stick sets its bit again the next tick), and the moves a client sends to its server carry `bRun`. A
+  spectator, moved directly by its input, gets X and Y as they are. The right stick keeps a dead zone per axis (`DeadZoneRUV`).
 - **Saves** sort their name, import and export tables with a stable sort, so the same save gives the same file on
   every platform.
 
